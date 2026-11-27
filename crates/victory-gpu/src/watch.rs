@@ -3751,8 +3751,8 @@ mod tests {
         assert_eq!(guard(p, p + 3 * BLOCK).map(|w| w.len()), Some(3));
         // Not told of what comes: the view goes, code is there; and private
         // memory in the holes.
-        // SAFETY: our view.
         assert_ne!(
+            // SAFETY: our view.
             unsafe { UnmapViewOfFile2(GetCurrentProcess(), view, MEM_PRESERVE_PLACEHOLDER) },
             0
         );
@@ -4388,14 +4388,16 @@ mod tests {
         for view in [one, two] {
             assert_eq!(guard(view, view + BLOCK), Some(vec![page(view)]));
         }
-        // SAFETY (all): a view, opened by the handler.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(1) };
         assert!(writable(two) && !writable(one));
+        // SAFETY: a view, opened by the handler.
         unsafe { ((one + 8) as *mut u8).write(1) };
         assert!(writable(two) && writable(one));
         assert_eq!(guard(one, one + BLOCK), Some(vec![page(one)]));
         assert_eq!(guard(two, two + BLOCK), Some(vec![page(two)]));
         // Written at the view that was left as it was, after the other.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(1) };
         assert_eq!(
             guard(one, one + BLOCK),
@@ -4407,6 +4409,7 @@ mod tests {
         assert_eq!(guard(one, one + BLOCK), Some(Vec::new()));
         // Of a page that was told at one view, a kernel write to the other
         // finds it open.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(1) };
         assert!(!writable(one));
         writing(one, 8);
@@ -4427,7 +4430,7 @@ mod tests {
         assert_eq!(guard(one, one + BLOCK), Some(Vec::new()));
         rests(true);
         assert_eq!(guard(one, one + BLOCK), Some(Vec::new()), "nothing written: as it was");
-        // SAFETY (all): a view, opened by the handler.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(1) };
         for _ in 0..3 {
             assert_eq!(guard(one, one + BLOCK), Some(vec![page]));
@@ -4437,6 +4440,7 @@ mod tests {
                     && !published(two, two + BLOCK)
                     && !published(one, one + BLOCK)
             );
+            // SAFETY: a view, opened by the handler.
             unsafe { ((two + 8) as *mut u8).write(1) };
         }
         rests(false);
@@ -4462,12 +4466,13 @@ mod tests {
         // (Not opened lately as far as the guards know: another test's
         // memory may have been at the address.)
         guards().opened.remove(&(two / BLOCK));
-        // SAFETY (all): a view, opened by the handler.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(1) };
         // The first time: guarded again at the next asking (no rest here).
         assert_eq!(guard(two, two + BLOCK), Some(vec![page(two)]));
         assert!(!writable(two));
         // Written again: it rests.
+        // SAFETY: a view, opened by the handler.
         unsafe { ((two + 8) as *mut u8).write(2) };
         for _ in 0..3 {
             assert_eq!(guard(two, two + BLOCK), Some(vec![page(two)]));
@@ -4477,6 +4482,7 @@ mod tests {
                 "the other view is not clean while it rests"
             );
             assert!(writable(two) && !writable(one), "no fault for the next write");
+            // SAFETY: a view, opened by the handler.
             unsafe { ((two + 8) as *mut u8).write(3) };
         }
         std::thread::sleep(KEEP + std::time::Duration::from_millis(50));
@@ -4582,26 +4588,31 @@ mod tests {
         };
         for round in 1..200u32 {
             quiet();
-            // SAFETY (all): words of the view.
+            // SAFETY: words of the view.
             unsafe { ((one + 64) as *mut u32).write_volatile(round) };
+            // SAFETY: words of the view.
             let was = unsafe { AtomicU32::from_ptr((two + 64) as *mut u32) }
                 .fetch_sub(1, Ordering::SeqCst);
             assert_eq!(
+                // SAFETY: words of the view.
                 (was, unsafe { ((one + 64) as *const u32).read_volatile() }),
                 (round, round - 1)
             );
             let bytes = vec![round as u8; 3000 + round as usize];
             // Over the end of the first block.
             assert_eq!(
+                // SAFETY: words of the view.
                 unsafe { copy((one + BLOCK - 1000) as *mut u8, bytes.as_ptr(), bytes.len()) }
                     as usize,
                 one + BLOCK - 1000
             );
+            // SAFETY: words of the view.
             let there = unsafe {
                 std::slice::from_raw_parts((two + BLOCK - 1000) as *const u8, bytes.len())
             };
             assert!(
                 there == bytes
+                    // SAFETY: words of the view.
                     && unsafe {
                         ((two + BLOCK + 2000 + round as usize) as *const u8).read_volatile()
                     } != round as u8
@@ -4615,11 +4626,13 @@ mod tests {
         assert!(kept > 10, "the guard stayed {kept} times: {:?}", crate::titlewrite::DONE);
         // What is there already is not written: nothing to tell.
         for k in 0..10 {
-            // SAFETY (all): as above.
+            // SAFETY: as above.
             unsafe { ((one + 64) as *mut u32).write_volatile(198) };
             let same =
+                // SAFETY: as above.
                 unsafe { std::slice::from_raw_parts((one + BLOCK - 900) as *const u8, 1500) }
                     .to_vec();
+            // SAFETY: as above.
             unsafe { copy((one + BLOCK - 900) as *mut u8, same.as_ptr(), same.len()) };
             assert!(!writable(one) && !writable(two), "{k}");
         }
@@ -4627,6 +4640,7 @@ mod tests {
         // Many stores to a block: it is opened.
         quiet();
         for k in 0..20 {
+            // SAFETY: as above.
             unsafe { ((one + 128 + k * 4) as *mut u32).write_volatile(7) };
         }
         assert!(writable(one));
@@ -5225,7 +5239,7 @@ mod many_askers_tests {
                     let mut last = [0u64; VIEWS];
                     for round in 0..300usize {
                         let (page, asked) = (round * 5 % PAGES, round % VIEWS);
-                        // SAFETY (all): a view of one page of the section,
+                        // SAFETY: a view of one page of the section,
                         // this thread's alone.
                         let one = unsafe {
                             MapViewOfFile(
@@ -5240,6 +5254,7 @@ mod many_askers_tests {
                         assert_ne!(one, 0);
                         super::title_memory_remapped(one, PAGE);
                         crate::title_memory_view(one, PAGE, section, (page * PAGE) as u64);
+                        // SAFETY: a view of one page of the section, this thread's alone.
                         unsafe { ((one + THREADS * 8) as *mut u64).write_volatile(round as u64) };
                         let (now, written) =
                             writes(all[asked] + page * PAGE, all[asked] + (page + 1) * PAGE, true)
@@ -5254,6 +5269,7 @@ mod many_askers_tests {
                         {
                             let _changing = super::title_memory_remapping();
                             super::title_memory_unmapping(one, PAGE);
+                            // SAFETY: a view of one page of the section, this thread's alone.
                             unsafe {
                                 UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS { Value: one as *mut _ })
                             };
@@ -5290,6 +5306,8 @@ mod many_askers_tests {
                             // (Waited for: other tests hold changes of mapping.)
                             // (Some as a copy of the title's, or a store of it, does.)
                             if next(3) == 0
+                                // SAFETY: a view of one page of the section, this thread's alone;
+                                // other tests' changes of mapping are waited for.
                                 && super::put_beside(word / PAGE, 1, |delta| unsafe {
                                     (word.wrapping_add(delta) as *mut u64).write_volatile(3);
                                 }) == super::Beside::Done
@@ -5307,9 +5325,13 @@ mod many_askers_tests {
                             how = usize::from(reading.is_some());
                             let beside = reading.as_ref().and_then(|_| crate::inplace::beside(word, 8));
                             if let Some(to) = beside {
+                                // SAFETY: a view of one page of the section, this thread's alone;
+                                // other tests' changes of mapping are waited for.
                                 unsafe { (to as *mut u64).write_volatile(2) };
                                 super::landed_beside(&[word / 4096], &[(word, 8)]);
                                 past.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                // SAFETY: a view of one page of the section, this thread's alone;
+                                // other tests' changes of mapping are waited for.
                                 assert_eq!(unsafe { (word as *const u64).read_volatile() }, 2, "put elsewhere");
                             } else {
                                 how += 2;
@@ -5317,6 +5339,8 @@ mod many_askers_tests {
                                     super::writing(word, 8);
                                     how += 4;
                                 }
+                                // SAFETY: a view of one page of the section, this thread's alone;
+                                // other tests' changes of mapping are waited for.
                                 unsafe { (word as *mut u64).write_volatile(1) };
                             }
                         } else {
@@ -5364,7 +5388,7 @@ mod many_askers_tests {
     fn holes_are_known_until_the_runtime_tells() {
         use windows_sys::Win32::System::Threading::GetCurrentProcess;
         const BLOCKS: usize = 8;
-        // SAFETY (all): a placeholder and a section of our own, which stay.
+        // SAFETY: a placeholder and a section of our own, which stay.
         let (at, section) = unsafe {
             let at = VirtualAlloc2(
                 GetCurrentProcess(),
@@ -5385,6 +5409,7 @@ mod many_askers_tests {
             );
             (at, section)
         };
+        // SAFETY: a placeholder and a section of our own, which stay.
         let map = |block: usize| unsafe {
             let to = at + block * PAGE;
             VirtualFree(to as *mut _, PAGE, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
@@ -5418,6 +5443,7 @@ mod many_askers_tests {
         assert_eq!(all, (0..BLOCKS).collect::<Vec<_>>());
         assert!(super::published(at, end), "with its holes");
         // Written; mapped into; unmapped.
+        // SAFETY: a placeholder and a section of our own, which stay.
         unsafe { ((at + 5 * PAGE) as *mut u8).write_volatile(1) };
         assert!(!super::published(at, end));
         let (second, all) = ask(first);
@@ -5426,10 +5452,12 @@ mod many_askers_tests {
         assert!(!super::published(at, end));
         let (third, all) = ask(second);
         assert_eq!(all, [2]);
+        // SAFETY: a placeholder and a section of our own, which stay.
         unsafe { ((at + 2 * PAGE) as *mut u8).write_volatile(1) };
         let (fourth, all) = ask(third);
         assert_eq!(all, [2]);
         super::title_memory_unmapping(at + 5 * PAGE, PAGE);
+        // SAFETY: a placeholder and a section of our own, which stay.
         unsafe {
             let view = MEMORY_MAPPED_VIEW_ADDRESS { Value: (at + 5 * PAGE) as *mut _ };
             UnmapViewOfFile2(GetCurrentProcess(), view, MEM_PRESERVE_PLACEHOLDER);
@@ -5444,6 +5472,7 @@ mod many_askers_tests {
         assert_eq!(all, []);
         // A reservation of the ordinary kind is no placeholder.
         let plain =
+            // SAFETY: a placeholder and a section of our own, which stay.
             unsafe { VirtualAlloc(std::ptr::null(), PAGE, MEM_RESERVE, PAGE_NOACCESS) } as usize;
         assert!(!super::placeholder(plain / PAGE));
         super::look_at_holes();
@@ -5461,7 +5490,7 @@ mod many_askers_tests {
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use windows_sys::Win32::System::Threading::GetCurrentProcess;
         const BLOCKS: usize = 12;
-        // SAFETY (all): a placeholder and a section of our own, which stay.
+        // SAFETY: a placeholder and a section of our own, which stay.
         let (at, section) = unsafe {
             let at = VirtualAlloc2(
                 GetCurrentProcess(),
@@ -5503,6 +5532,7 @@ mod many_askers_tests {
                             let block = t * 3 + round % 3;
                             let to = at + block * PAGE;
                             let (before, _) = writes(at, end, true).expect("a view");
+                            // SAFETY: a placeholder and a section of our own, which stay.
                             unsafe {
                                 let view = MapViewOfFile3(
                                     section as _,
@@ -5524,10 +5554,12 @@ mod many_askers_tests {
                                 number(&written, block) > before,
                                 "mapped and written: not told"
                             );
+                            // SAFETY: a placeholder and a section of our own, which stay.
                             unsafe { ((to + 9) as *mut u8).write_volatile(round as u8) };
                             let (again, written) = writes(to, to + PAGE, true).expect("a view");
                             assert!(number(&written, block) > mapped, "written again: not told");
                             super::title_memory_unmapping(to, PAGE);
+                            // SAFETY: a placeholder and a section of our own, which stay.
                             unsafe {
                                 let view = MEMORY_MAPPED_VIEW_ADDRESS { Value: to as *mut _ };
                                 assert_ne!(

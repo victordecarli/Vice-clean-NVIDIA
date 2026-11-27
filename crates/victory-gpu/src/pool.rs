@@ -720,6 +720,7 @@ pub(crate) unsafe fn texture(
     let mut info = unsafe { device.GetResourceAllocationInfo(0, &[d]) };
     if info.SizeInBytes == u64::MAX || info.Alignment != d.Alignment {
         d.Alignment = 0;
+        // SAFETY: plain queries.
         info = unsafe { device.GetResourceAllocationInfo(0, &[d]) };
     }
     if info.SizeInBytes == u64::MAX {

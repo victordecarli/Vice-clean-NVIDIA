@@ -505,14 +505,6 @@ fn record_clamp_as(
     };
     let constants =
         [kind, stride, records, args_offset, has_count | (u32::from(ahead) << 1), count_offset];
-    // SAFETY: an open list; our root signature and pipeline; live source,
-    // count, scratch destination, and budget buffers. `src` and `count` stay
-    // in `COMMON` / `GENERIC_READ` via implicit buffer promotion while `dst`
-    // transitions `before -> UNORDERED_ACCESS -> INDIRECT_ARGUMENT`. Moving
-    // it out of `INDIRECT_ARGUMENT` orders this clamp's writes after every
-    // earlier execution's reads of the scratch buffer; nothing else writes it.
-    // Diagnostics: counted; `VICTORY_BARRIER_TEST=indirect` leaves the two
-    // waits for every earlier shader write out (the state changes stay).
     #[cfg(feature = "diagnostics")]
     crate::copystat::add(crate::copystat::C::IndirectBounded, 1);
     #[cfg(feature = "diagnostics")]
@@ -529,6 +521,14 @@ fn record_clamp_as(
         ),
     ];
     let skip = usize::from(!waits);
+    // SAFETY: an open list; our root signature and pipeline; live source,
+    // count, scratch destination, and budget buffers. `src` and `count` stay
+    // in `COMMON` / `GENERIC_READ` via implicit buffer promotion while `dst`
+    // transitions `before -> UNORDERED_ACCESS -> INDIRECT_ARGUMENT`. Moving
+    // it out of `INDIRECT_ARGUMENT` orders this clamp's writes after every
+    // earlier execution's reads of the scratch buffer; nothing else writes it.
+    // Diagnostics: counted; `VICTORY_BARRIER_TEST=indirect` leaves the two
+    // waits for every earlier shader write out (the state changes stay).
     unsafe {
         // Earlier shader writes (the title's argument and count passes) first.
         l.ResourceBarrier(&first[skip..]);
@@ -929,7 +929,7 @@ void main() {
             found.map(|d| d & 1)
         };
         let at = PIECE + 1234;
-        // SAFETY (each): inside the mapping.
+        // SAFETY: inside the mapping.
         let set = |value: u8| unsafe { now_ptr.add(at).write_volatile(value) };
         // 0: the hashes are stored, nothing is flagged.
         assert_eq!(run(&mut warp, 0), [7, 7, 7]);
@@ -1976,8 +1976,8 @@ void main(uint3 g : SV_GroupID, uint i : SV_GroupIndex) {
 }
 "#;
         let pass = compile_cs(&gpu.device, SOURCE).expect("the pass must compile");
-        // SAFETY: plain heap creation.
         let heap = |visible: bool, n: u32| -> ID3D12DescriptorHeap {
+            // SAFETY: plain heap creation.
             unsafe {
                 gpu.device.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
                     Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,

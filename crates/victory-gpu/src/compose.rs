@@ -120,6 +120,7 @@ impl Composer {
         (width, height): (u32, u32),
     ) -> windows::core::Result<()> {
         while self.views.len() <= slot {
+            // SAFETY: plain heap creation on a live device.
             let heap = unsafe {
                 host.device.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
                     Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -224,6 +225,7 @@ mod tests {
                 Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
                 ..Default::default()
             };
+            // SAFETY: plain creation on a live device; the description lives through the call.
             unsafe {
                 host.device
                     .CreateCommittedResource(
@@ -249,6 +251,7 @@ mod tests {
         let target = D3D12_RESOURCE_STATE_RENDER_TARGET;
         let read = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         let cmds = &list.list;
+        // SAFETY: an open list of the test's; the textures above live until it has run.
         unsafe {
             cmds.ClearRenderTargetView(host.rtv(Some(&base), None), &[0.5, 0.0, 0.0, 1.0], None);
             let overlay_rtv = host.rtv(Some(&overlay), None);

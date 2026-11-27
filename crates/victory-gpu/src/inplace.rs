@@ -1051,7 +1051,7 @@ fn describe(heap: &ID3D12Heap) -> String {
 /// (committed, read-write, write-watched): a part of it opened.
 unsafe fn private(p: &mut Probe, rig: &mut Rig) {
     const SIZE: usize = 64 * K64;
-    // SAFETY (the whole function): the allocation below, `SIZE` bytes.
+    // SAFETY: the allocation below, `SIZE` bytes.
     unsafe {
         let base = mem::VirtualAlloc(
             std::ptr::null(),
@@ -1142,7 +1142,7 @@ unsafe fn private(p: &mut Probe, rig: &mut Rig) {
 /// pages: reserved (as it is made today) and committed.
 unsafe fn section(p: &mut Probe, rig: &mut Rig) {
     const SIZE: usize = 32 * K64;
-    // SAFETY (the whole function): the sections, placeholder and views
+    // SAFETY: the sections, placeholder and views
     // made below.
     unsafe {
         let process = windows_sys::Win32::System::Threading::GetCurrentProcess();
@@ -1260,7 +1260,7 @@ unsafe fn cost(p: &mut Probe, rig: &mut Rig, memory: &dyn Fn() -> Option<[u64; 4
     let bytes = mb << 20;
     let shared = || memory().map_or(0, |m| m[3] >> 20);
     let ms = |speed: Option<f64>| speed.map_or("?".to_owned(), |ms| format!("{ms:.1}"));
-    // SAFETY (the whole function): the allocation and the section below.
+    // SAFETY: the allocation and the section below.
     unsafe {
         let base = mem::VirtualAlloc(
             std::ptr::null(),

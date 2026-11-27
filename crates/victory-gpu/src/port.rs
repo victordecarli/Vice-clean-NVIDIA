@@ -371,7 +371,7 @@ mod tests {
             return;
         }
         const K: usize = 64 << 10;
-        // SAFETY (the whole test): the section, placeholder and views made
+        // SAFETY: the section, placeholder and views made
         // here.
         unsafe {
             let process = windows_sys::Win32::System::Threading::GetCurrentProcess();

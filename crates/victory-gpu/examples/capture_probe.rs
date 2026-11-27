@@ -39,6 +39,8 @@ fn half(h: u16) -> f32 {
 }
 
 fn samplers(blob: &[u8]) {
+    // SAFETY: `blob` lives through the calls; the description read from the
+    // deserializer, and its sampler array, are read while `d` holds them.
     unsafe {
         let mut d: Option<ID3D12VersionedRootSignatureDeserializer> = None;
         let r = D3D12CreateVersionedRootSignatureDeserializer(

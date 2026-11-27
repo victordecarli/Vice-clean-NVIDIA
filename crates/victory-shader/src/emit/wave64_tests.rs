@@ -1020,6 +1020,7 @@ fn the_console_threads_of_a_two_dimensional_group_are_each_given_once() {
         // SAFETY: tests that read this switch hold ONE_AT_A_TIME
         unsafe { std::env::set_var("VICTORY_THREAD_TICKET", if ticket { "1" } else { "0" }) };
         let shader = lowered_on(&native, &p, &HashSet::new(), 32);
+        // SAFETY: tests that read this switch hold ONE_AT_A_TIME
         unsafe { std::env::remove_var("VICTORY_THREAD_TICKET") };
         shader.expect("lower")
     };

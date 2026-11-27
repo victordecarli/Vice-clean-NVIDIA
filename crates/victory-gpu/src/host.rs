@@ -9336,6 +9336,7 @@ fn read_sparse(src: *const u8, dst: *mut u8, len: usize) {
         }
         // SAFETY: the query inspects an address and fills a local structure.
         let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: the query inspects an address and fills a local structure.
         let size = unsafe { VirtualQuery(at.cast(), &mut info, size_of_val(&info)) };
         let n = (info.BaseAddress as usize)
             .saturating_add(info.RegionSize)
@@ -11384,6 +11385,8 @@ mod refresh_tests {
                 ));
             }
         }
+        // SAFETY: title memory and copies of the test's own, written by this thread and, in
+        // `Batch::flush`, by the threads that refresh, which are done when it returns.
         let byte = |at: usize| unsafe { (at as *const u8).read_volatile() };
         for round in 0..600 {
             for _ in 0..random.below(4) {
@@ -11401,6 +11404,9 @@ mod refresh_tests {
                     continue;
                 }
                 for i in 0..n {
+                    // SAFETY: title memory and copies of the test's own, written by this thread
+                    // and, in `Batch::flush`, by the threads that refresh, which are done when it
+                    // returns.
                     unsafe { ((at + i) as *mut u8).write_volatile(random.below(256) as u8) };
                 }
             }
@@ -11425,6 +11431,8 @@ mod refresh_tests {
             for (shadow, at, n) in &ranges {
                 let data = copies.iter().find(|c| Arc::ptr_eq(&c.0, shadow)).unwrap().1;
                 let start = shadow.span().0 as usize;
+                // SAFETY: title memory and copies of the test's own, written by this thread and, in
+                // `Batch::flush`, by the threads that refresh, which are done when it returns.
                 let same = unsafe {
                     std::slice::from_raw_parts(*at as *const u8, *n)
                         == std::slice::from_raw_parts(data.add(at - start), *n)
@@ -11513,6 +11521,8 @@ mod refresh_tests {
         let rounds: usize =
             std::env::var("VICTORY_TEST_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
         let region = title(LEN, true);
+        // SAFETY: `region` is the test's LEN bytes of title memory, page aligned and
+        // mapped until it returns; every `at` is 4-aligned and below LEN.
         let dword = |at: usize| unsafe { &*((region + at) as *const AtomicU32) };
         let carded = [
             Carded::new(region, LEN, 3),
@@ -11741,7 +11751,7 @@ mod refresh_tests {
     fn bytes_under_overlapping_ranges() {
         const BIG: usize = 174 << 20;
         let big = title(BIG, true);
-        // SAFETY (both): the test's own memory.
+        // SAFETY: the test's own memory.
         unsafe { std::ptr::write_bytes(big as *mut u8, 1, BIG) };
         let copy = Shadow::unbacked(big as u64, memory(BIG), BIG as u64, true);
         copy.update(big, BIG);
@@ -11752,6 +11762,7 @@ mod refresh_tests {
         let mut best = f64::MAX;
         for round in 0..30 {
             for i in 0..12 {
+                // SAFETY: the test's own memory.
                 unsafe {
                     ((big + (i * 211 + round) % 2700 * PAGE + 64) as *mut u8)
                         .write_volatile(round as u8)

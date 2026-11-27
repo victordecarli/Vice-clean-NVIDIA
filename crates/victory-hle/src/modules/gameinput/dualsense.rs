@@ -240,6 +240,7 @@ mod host {
             let mut caps = HIDP_CAPS::default();
             // SAFETY: `data` was obtained above and is released after its last use.
             let status = unsafe { HidP_GetCaps(data, &mut caps) };
+            // SAFETY: `data` was obtained above and is released after its last use.
             unsafe { HidD_FreePreparsedData(data) };
             if status != HIDP_STATUS_SUCCESS
                 || caps.InputReportByteLength == 0

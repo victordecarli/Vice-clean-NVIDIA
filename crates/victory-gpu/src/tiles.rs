@@ -170,8 +170,8 @@ fn take(device: &ID3D12Device, count: u32) -> Option<(ID3D12Heap, usize, Vec<(u3
                 Flags: D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES,
             };
             let mut made: Option<ID3D12Heap> = None;
-            // SAFETY: plain creation; the out pointer is ours.
             if let Err(e) =
+                // SAFETY: plain creation; the out pointer is ours.
                 unsafe { device.CreateHeap::<ID3D12Heap>(&raw const desc, &raw mut made) }
             {
                 tracing::warn!(error = %e, "no heap for texture levels given on demand: those levels stay empty");

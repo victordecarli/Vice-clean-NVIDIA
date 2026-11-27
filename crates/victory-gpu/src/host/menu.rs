@@ -160,6 +160,7 @@ fn new_console(command_line: &str) -> std::io::Result<()> {
     // SAFETY: plain structs, zero is their empty value.
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
     startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    // SAFETY: plain structs, zero is their empty value.
     let mut process: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: `line` is a writable, terminated UTF-16 string; no handles inherited; this
     // process's environment and folder.

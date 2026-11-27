@@ -218,7 +218,7 @@ impl HostList {
         let at = to.offset(dst as u64);
         // What the title's CPU wrote around and under it so far goes first.
         to.refresh(self, dst as u64, len as u64);
-        // SAFETY (both): an open list; live buffers (the list holds the
+        // SAFETY: an open list; live buffers (the list holds the
         // copies and its scratch memory), ranges inside them.
         unsafe { wait_for_all(host, &self.list) };
         match (&own, &scratch) {
@@ -229,6 +229,8 @@ impl HostList {
                     let Some(between) = self.between(host, len as u64) else {
                         return false;
                     };
+                    // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+                    // memory), ranges inside them.
                     unsafe {
                         self.list.CopyBufferRegion(&between, 0, &from.buffer, offset, len as u64);
                         self.list.ResourceBarrier(&[transition(
@@ -240,17 +242,23 @@ impl HostList {
                         self.list.CopyBufferRegion(&to.buffer, at, &between, 0, len as u64);
                     }
                 } else {
+                    // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+                    // memory), ranges inside them.
                     unsafe {
                         self.list.CopyBufferRegion(&to.buffer, at, &from.buffer, offset, len as u64)
                     };
                 }
                 STATS[2].fetch_add(1, Ordering::Relaxed);
             }
+            // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+            // memory), ranges inside them.
             (None, Some((from, offset, _))) => unsafe {
                 self.list.CopyBufferRegion(&to.buffer, at, from, *offset, len as u64);
             },
             (None, None) => return false,
         }
+        // SAFETY: an open list; live buffers (the list holds the copies and its scratch memory),
+        // ranges inside them.
         unsafe { wait_for_all(host, &self.list) };
         STATS[0].fetch_add(1, Ordering::Relaxed);
         STATS[1].fetch_add(len as u64, Ordering::Relaxed);

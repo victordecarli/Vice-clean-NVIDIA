@@ -3532,7 +3532,7 @@ mod tests {
             std::thread::scope(|s| {
                 let title = s.spawn(|| {
                     let mut n = 0u64;
-                    // SAFETY (the block): the first page is the title's all
+                    // SAFETY: the first page is the title's all
                     // the time; a fault would end the process.
                     unsafe {
                         while !stop.load(Ordering::Relaxed) {

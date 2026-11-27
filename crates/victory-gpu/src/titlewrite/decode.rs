@@ -415,9 +415,10 @@ fn arithmetic(alu: Alu, a: u64, b: u64, size: usize, keeps: bool, flags: u32) ->
 unsafe fn change(at: usize, size: usize, locked: bool, f: impl Fn(u64) -> u64) -> Option<u64> {
     if !locked {
         let mut bytes = [0u8; 8];
-        // SAFETY (both): by the caller.
+        // SAFETY: by the caller.
         unsafe { std::ptr::copy_nonoverlapping(at as *const u8, bytes.as_mut_ptr(), size) };
         let was = u64::from_le_bytes(bytes);
+        // SAFETY: by the caller.
         unsafe {
             std::ptr::copy_nonoverlapping(f(was).to_le_bytes().as_ptr(), at as *mut u8, size)
         };
@@ -426,7 +427,7 @@ unsafe fn change(at: usize, size: usize, locked: bool, f: impl Fn(u64) -> u64) -
     if !at.is_multiple_of(size) {
         return None;
     }
-    // SAFETY (all): by the caller, and aligned.
+    // SAFETY: by the caller, and aligned.
     Some(unsafe {
         match size {
             1 => u64::from(
@@ -508,7 +509,7 @@ impl Store {
         match self.op {
             Op::Put(bytes) => {
                 // As one, for those the processor stores as one.
-                // SAFETY (all): by the caller, aligned where it must be.
+                // SAFETY: by the caller, aligned where it must be.
                 unsafe {
                     let low = u64::from_le_bytes([
                         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
@@ -525,6 +526,7 @@ impl Store {
             }
             Op::Alu { alu, with, keeps } => {
                 let flags = c.EFlags;
+                // SAFETY: by the caller, aligned where it must be.
                 let Some(was) = (unsafe {
                     change(to, size, locked, |v| arithmetic(alu, v, with, size, keeps, flags).0)
                 }) else {
@@ -534,6 +536,7 @@ impl Store {
             }
             Op::Xchg(register) => {
                 let value = register.get(c) & m;
+                // SAFETY: by the caller, aligned where it must be.
                 let Some(was) = (unsafe { change(to, size, true, |_| value) }) else {
                     return false;
                 };
@@ -542,6 +545,7 @@ impl Store {
             Op::Xadd(register) => {
                 let value = register.get(c);
                 let Some(was) =
+                    // SAFETY: by the caller, aligned where it must be.
                     (unsafe { change(to, size, locked, |v| v.wrapping_add(value) & m) })
                 else {
                     return false;
@@ -551,6 +555,7 @@ impl Store {
             }
             Op::Cmpxchg(register) => {
                 let (value, expected) = (register.get(c) & m, c.Rax & m);
+                // SAFETY: by the caller, aligned where it must be.
                 let Some(was) = (unsafe {
                     change(to, size, locked, |v| if v & m == expected { value } else { v })
                 }) else {

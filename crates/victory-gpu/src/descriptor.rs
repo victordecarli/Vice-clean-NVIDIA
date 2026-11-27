@@ -1884,6 +1884,7 @@ mod tests {
             MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc, VirtualFree,
         };
         const MEM_WRITE_WATCH: u32 = 0x20_0000;
+        // SAFETY: a fresh page of our own, released at the end of the test.
         let memory = unsafe {
             VirtualAlloc(
                 std::ptr::null(),

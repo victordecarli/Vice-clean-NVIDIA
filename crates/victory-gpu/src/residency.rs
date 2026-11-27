@@ -12,6 +12,7 @@ fn memory_status() -> Option<MEMORYSTATUSEX> {
     // SAFETY: the API initializes the fields of a correctly sized structure.
     let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
     status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    // SAFETY: the API initializes the fields of a correctly sized structure.
     (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status)
 }
 

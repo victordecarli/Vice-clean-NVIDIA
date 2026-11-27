@@ -54,9 +54,9 @@ pub(super) trait Keep {
 /// # Safety
 /// `at` points at a value of `size` bytes.
 unsafe fn plain(kind: i32, at: *const c_void, size: usize) -> Part {
-    // SAFETY: the caller's.
     Part::Plain {
         kind,
+        // SAFETY: the caller's.
         data: Blob(unsafe { std::slice::from_raw_parts(at.cast::<u8>(), size) }.to_vec()),
     }
 }

@@ -1219,13 +1219,10 @@ mod host {
             let buttons = if menu_open {
                 0
             } else {
-                [0x01, 0x02, 0x04, 0x05, 0x06]
-                    .into_iter()
-                    .enumerate()
+                [0x01, 0x02, 0x04, 0x05, 0x06].into_iter().enumerate().fold(0, |bits, (i, vk)| {
                     // SAFETY: virtual-key state query.
-                    .fold(0, |bits, (i, vk)| {
-                        bits | ((unsafe { GetAsyncKeyState(vk) } < 0) as u32) << i
-                    })
+                    bits | ((unsafe { GetAsyncKeyState(vk) } < 0) as u32) << i
+                })
             };
             Some(super::apply_mouse_sample(&mut self.mouse, delta, buttons, menu_open))
         }

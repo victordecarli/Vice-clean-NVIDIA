@@ -101,6 +101,8 @@ fn dxc(source: &str) -> Vec<u8> {
 fn compile(entry: PCSTR) -> Vec<u8> {
     let mut code: Option<ID3DBlob> = None;
     let mut errors: Option<ID3DBlob> = None;
+    // SAFETY: the source and names live through the call; the out blobs are ours,
+    // read within the sizes they give.
     unsafe {
         let r = D3DCompile(
             SRC.as_ptr().cast(),
@@ -131,6 +133,8 @@ fn compile(entry: PCSTR) -> Vec<u8> {
 }
 
 fn main() -> windows::core::Result<()> {
+    // SAFETY: D3D12 and DXGI calls on objects made here and held to the end; the
+    // mapped read-back buffer is read within the 64 samples it holds.
     unsafe {
         let factory: IDXGIFactory4 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))?;
         let mut device: Option<ID3D12Device> = None;
