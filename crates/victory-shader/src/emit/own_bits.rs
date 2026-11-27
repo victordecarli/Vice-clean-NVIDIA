@@ -595,36 +595,7 @@ impl Ctx<'_> {
             }
         }
         // ---- the lane's test of its own bit ----
-        // (the atom of the compare, its block, its index)
-        let mut tests: Vec<(Atom, usize, usize)> = Vec::new();
-        for u in self.readers(bit) {
-            let i = self.inst(u);
-            if i.name() != "v_and_b32"
-                || other(i, bit) != Some(Arg::Val(x))
-                || st.guards[u.0][u.1].is_some()
-            {
-                continue;
-            }
-            let Some(y) = result(i) else { continue };
-            for c in self.readers(y) {
-                let ci = self.inst(c);
-                if matches!(
-                    ci.name(),
-                    "v_cmp_ne_u32"
-                        | "v_cmpx_ne_u32"
-                        | "v_cmp_lg_u32"
-                        | "v_cmpx_lg_u32"
-                        | "v_cmp_ne_i32"
-                        | "v_cmpx_ne_i32"
-                        | "v_cmp_lg_i32"
-                        | "v_cmpx_lg_i32"
-                ) && other(ci, y) == Some(Arg::K(0))
-                    && lp[c.0]
-                {
-                    tests.extend(ci.writes.iter().map(|w| (Atom::Lane(w.1), c.0, c.1)));
-                }
-            }
-        }
+        let tests = self.bit_tests(bit, x, &lp);
         if tests.is_empty() {
             return Err((head, TEST));
         }
@@ -705,6 +676,57 @@ impl Ctx<'_> {
             }
         }
         // ---- no mask that depends on the test outlives its round ----
+        self.no_stale_masks(&tests, &lp, head)?;
+        Ok(alike)
+    }
+
+    /// The lane's tests of its own bit (`bit` AND `x`, compared with zero, in the loop `lp`):
+    /// the atom of each compare, its block and its index.
+    fn bit_tests(&self, bit: Value, x: Value, lp: &[bool]) -> Vec<(Atom, usize, usize)> {
+        let st = self.st;
+        let mut tests: Vec<(Atom, usize, usize)> = Vec::new();
+        for u in self.readers(bit) {
+            let i = self.inst(u);
+            if i.name() != "v_and_b32"
+                || other(i, bit) != Some(Arg::Val(x))
+                || st.guards[u.0][u.1].is_some()
+            {
+                continue;
+            }
+            let Some(y) = result(i) else { continue };
+            for c in self.readers(y) {
+                let ci = self.inst(c);
+                if matches!(
+                    ci.name(),
+                    "v_cmp_ne_u32"
+                        | "v_cmpx_ne_u32"
+                        | "v_cmp_lg_u32"
+                        | "v_cmpx_lg_u32"
+                        | "v_cmp_ne_i32"
+                        | "v_cmpx_ne_i32"
+                        | "v_cmp_lg_i32"
+                        | "v_cmpx_lg_i32"
+                ) && other(ci, y) == Some(Arg::K(0))
+                    && lp[c.0]
+                {
+                    tests.extend(ci.writes.iter().map(|w| (Atom::Lane(w.1), c.0, c.1)));
+                }
+            }
+        }
+        tests
+    }
+
+    /// No mask that depends on one of the loop's `tests` outlives its round: none guards or
+    /// steers a block outside the round (the loop `lp`), and none is used outside the loop.
+    fn no_stale_masks(
+        &self,
+        tests: &[(Atom, usize, usize)],
+        lp: &[bool],
+        head: usize,
+    ) -> Result<(), (usize, Why)> {
+        let p = self.p;
+        let st = self.st;
+        let n = p.blocks.len();
         let mut dep: HashSet<Atom> = tests.iter().map(|t| t.0).collect();
         let mut changed = true;
         while changed {
@@ -752,7 +774,7 @@ impl Ctx<'_> {
                 }
             }
         }
-        Ok(alike)
+        Ok(())
     }
 }
 
