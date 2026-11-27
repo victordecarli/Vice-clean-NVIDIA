@@ -205,7 +205,7 @@ fn seeds() -> [[u32; 4]; 64] {
 }
 
 fn tail(parts: &mut [[u32; 4]; 64], bytes: &[u8]) {
-    for (thread, chunk) in bytes.chunks_exact(16).enumerate() {
+    for (thread, chunk) in bytes.as_chunks::<16>().0.iter().enumerate() {
         let with = std::array::from_fn(|i| {
             u32::from_le_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]])
         });
@@ -226,8 +226,8 @@ fn hash_plain(bytes: &[u8]) -> u32 {
 fn hash_avx2(bytes: &[u8]) -> u32 {
     use std::arch::x86_64::*;
     let mut parts = seeds();
-    let rows = bytes.chunks_exact(1024);
-    let rest = rows.remainder();
+    let (rows, rest) = bytes.as_chunks::<1024>();
+    let rows = rows.iter();
     let mul = _mm256_setr_epi32(
         MUL[0] as i32,
         MUL[1] as i32,

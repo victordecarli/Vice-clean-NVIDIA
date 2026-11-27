@@ -948,7 +948,7 @@ mod tests {
 
     /// The bytes at `at` of the pattern the test below writes.
     fn pattern(at: usize, out: &mut [u8]) {
-        for (i, word) in out.chunks_exact_mut(4).enumerate() {
+        for (i, word) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let v = ((at / 4 + i) as u32).wrapping_mul(2_654_435_761).wrapping_add(1);
             word.copy_from_slice(&v.to_le_bytes());
         }

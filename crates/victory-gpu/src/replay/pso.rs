@@ -274,10 +274,8 @@ pub(super) fn make(
     }
     bytes.resize(bytes.len().next_multiple_of(8), 0);
     // Aligned for the pointers in it.
-    let mut words: Vec<u64> = bytes
-        .chunks_exact(8)
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap_or_default()))
-        .collect();
+    let mut words: Vec<u64> =
+        bytes.as_chunks::<8>().0.iter().map(|c| u64::from_le_bytes(*c)).collect();
     let desc = D3D12_PIPELINE_STATE_STREAM_DESC {
         SizeInBytes: words.len() * 8,
         pPipelineStateSubobjectStream: words.as_mut_ptr().cast(),

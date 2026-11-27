@@ -412,7 +412,7 @@ impl GraphicsState {
             let (numbers, after) = after.split_first_chunk::<24>()?;
             rest = after;
             let mut v = [0u32; 6];
-            for (v, b) in v.iter_mut().zip(numbers.chunks_exact(4)) {
+            for (v, b) in v.iter_mut().zip(numbers.as_chunks::<4>().0.iter()) {
                 *v = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
             }
             elements.push((CString::new(name).ok()?, v));

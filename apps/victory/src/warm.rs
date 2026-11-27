@@ -294,10 +294,15 @@ fn make(dir: &Path, these: &str) -> Result<()> {
         };
         if told.and_then(|()| out.flush()).is_err() {
             // Whoever asked is gone.
+            #[allow(clippy::exit, reason = "the caller reads our stdout and is gone")]
             std::process::exit(1);
         }
     });
     // Without what a run's end does (nothing to save, the host's threads).
     let _ = out.flush();
-    std::process::exit(0)
+    #[allow(
+        clippy::exit,
+        reason = "leaves before the host's threads and a run's end, which have nothing to do"
+    )]
+    std::process::exit(0);
 }

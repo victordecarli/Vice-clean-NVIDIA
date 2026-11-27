@@ -961,7 +961,7 @@ mod card_tests {
     fn shader_piece(span: &CardSpan, i: u32) -> (u32, u32) {
         let piece = span.first + i;
         let lo = piece * 65536;
-        let lo = if lo > span.skew { lo - span.skew } else { 0 };
+        let lo = lo.saturating_sub(span.skew);
         let hi = (piece + 1) * 65536 - span.skew;
         (lo.max(span.from), hi.min(span.to))
     }

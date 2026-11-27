@@ -360,7 +360,7 @@ impl Player {
             *cmds = out;
         }
         let bytes = self.probed(o, &made, asked.len() as u64 * 4)?;
-        for (key, n) in asked.iter().zip(bytes.chunks_exact(4)) {
+        for (key, n) in asked.iter().zip(bytes.as_chunks::<4>().0.iter()) {
             if let Some(most) = counts.get_mut(key) {
                 *most = (*most).min(u32::from_le_bytes([n[0], n[1], n[2], n[3]]));
             }

@@ -437,11 +437,8 @@ impl Module {
         let held = |b: f32| (b < 126.0).then_some(b);
         match &self.insts[i as usize].op {
             Op::Cast(Cast::UiToFp | Cast::SiToFp, _) => Some(32.0),
-            Op::Cast(Cast::Bitcast, x) => match *x {
-                V::Inst(j) => match self.insts[j as usize].op {
-                    Op::Cast(Cast::Bitcast, y) if self.type_of(y) == self.type_of(v) => of(y),
-                    _ => None,
-                },
+            Op::Cast(Cast::Bitcast, V::Inst(j)) => match self.insts[*j as usize].op {
+                Op::Cast(Cast::Bitcast, y) if self.type_of(y) == self.type_of(v) => of(y),
                 _ => None,
             },
             Op::Bin(Bin::Mul, a, b) => held(of(*a)? + of(*b)?),

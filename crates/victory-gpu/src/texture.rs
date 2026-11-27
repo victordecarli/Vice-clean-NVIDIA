@@ -732,11 +732,10 @@ pub(crate) fn digest(bytes: &[u8]) -> Digest {
                 ^ b;
         }
     };
-    let mut blocks = bytes.chunks_exact(64);
-    for block in &mut blocks {
-        step(block.try_into().unwrap_or(&[0; 64]));
+    let (blocks, rest) = bytes.as_chunks::<64>();
+    for block in blocks {
+        step(block);
     }
-    let rest = blocks.remainder();
     let mut last = [0u8; 64];
     last[..rest.len()].copy_from_slice(rest);
     step(&last);

@@ -401,6 +401,7 @@ mod tests {
             if ended { "ENDED" } else { "STILL RUNNING" },
             if still_running { "KEPT" } else { "NOT KEPT" }
         );
+        #[allow(clippy::exit, reason = "a child test process; the parent reads what it printed")]
         std::process::exit(0);
     }
 

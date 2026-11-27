@@ -924,7 +924,7 @@ fn merge(title: &[u8; PIECE], ours: &mut [u8], never: bool) -> usize {
         return 0;
     }
     let mut changed = 0;
-    for (t, o) in title.chunks_exact(4).zip(ours.chunks_exact_mut(4)) {
+    for (t, o) in title.as_chunks::<4>().0.iter().zip(ours.as_chunks_mut::<4>().0.iter_mut()) {
         if t != o {
             o.copy_from_slice(t);
             changed += 1;

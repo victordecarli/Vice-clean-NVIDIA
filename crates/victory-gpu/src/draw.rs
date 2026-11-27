@@ -646,7 +646,7 @@ fn mesh_kept(pipeline: usize) -> bool {
     let Some(at) = p.name.find("mesh ") else {
         return true;
     };
-    let hash = p.name[at + 5..].as_bytes();
+    let hash = &p.name.as_bytes()[at + 5..];
     if hash.len() < 16 {
         return true;
     }
@@ -2626,7 +2626,11 @@ impl State {
             let mut bytes = vec![0u8; (len.min(MOST_BYTES) as usize) & !3];
             if !bytes.is_empty() && crate::host::read_into(address as *const u8, &mut bytes) {
                 words.extend(
-                    bytes.chunks_exact(4).map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]])),
+                    bytes
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]])),
                 );
             }
         };
@@ -4398,8 +4402,12 @@ impl State {
             let _ = write!(text, "\n    ~raw {label} at {address:#x} bytes {len}: unreadable");
             return;
         }
-        let words: Vec<u32> =
-            bytes.chunks_exact(4).map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]])).collect();
+        let words: Vec<u32> = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+            .collect();
         let _ = write!(text, "\n    ~raw {label} at {address:#x} bytes {len}:");
         for w in &words {
             let _ = write!(text, " {w:08x}");

@@ -250,8 +250,10 @@ fn differ(a: &[u8], b: &[u8]) -> Vec<f32> {
             let at = (y * WIDE + bx) * 3;
             let (ra, rb) = (&a[at..at + BLOCK * 3], &b[at..at + BLOCK * 3]);
             total += ra
-                .chunks_exact(3)
-                .zip(rb.chunks_exact(3))
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .zip(rb.as_chunks::<3>().0.iter())
                 .map(|(p, q)| {
                     p.iter().zip(q).map(|(x, y)| u32::from(x.abs_diff(*y))).max().unwrap_or(0)
                 })

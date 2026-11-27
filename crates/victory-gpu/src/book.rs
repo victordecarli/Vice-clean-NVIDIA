@@ -542,8 +542,8 @@ fn walk() {
             std::thread::sleep(std::time::Duration::from_millis(500));
             continue;
         };
-        for (i, d) in bytes.chunks_exact(32).enumerate() {
-            let d: [u8; 32] = d.try_into().unwrap_or([0; 32]);
+        for (i, d) in bytes.as_chunks::<32>().0.iter().enumerate() {
+            let d: [u8; 32] = *d;
             let names = decode(&d);
             FOUND[0].fetch_add(1, Relaxed);
             FOUND[match names {
@@ -672,9 +672,9 @@ pub(crate) fn at_loss(va: u64) -> String {
     let mut at = 0;
     let began = std::time::Instant::now();
     while let Some((first, bytes, end)) = crate::descriptor::host::shown_bytes(at, 16_384) {
-        for (i, d) in bytes.chunks_exact(32).enumerate() {
+        for (i, d) in bytes.as_chunks::<32>().0.iter().enumerate() {
             let slot = first + i as u32;
-            let names = decode(&d.try_into().unwrap_or([0; 32]));
+            let names = decode(d);
             let (base, len) = match names {
                 Names::Nothing => continue,
                 Names::Texture { base, meta, .. } => {

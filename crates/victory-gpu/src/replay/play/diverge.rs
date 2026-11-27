@@ -721,10 +721,7 @@ impl Player {
                 .iter()
                 .map(|&(id, at, len)| {
                     let bytes = p.slice(id, at, len)?;
-                    Ok(bytes
-                        .chunks_exact(4)
-                        .map(|c| u32::from_le_bytes(c.try_into().unwrap_or_default()))
-                        .collect())
+                    Ok(bytes.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect())
                 })
                 .collect()
         };
@@ -919,10 +916,7 @@ impl Player {
         let count = u64::from(u32::from_le_bytes([s.desc[24], s.desc[25], s.desc[26], s.desc[27]]));
         let n = n.min(count.saturating_sub(first));
         let bytes = self.slice(s.res, (at + first) * 4, n * 4)?;
-        Ok(bytes
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap_or_default()))
-            .collect())
+        Ok(bytes.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect())
     }
 
     /// What a mesh draw of the title's (with its usual constants) reads.
@@ -1132,11 +1126,8 @@ impl Player {
             && let Some((p, part)) = reader.parts.iter().enumerate().find(|(_, p)| p.id == *args)
         {
             let bytes = &reader.bytes(part)[*at as usize..];
-            let words: Vec<u32> = bytes
-                .chunks_exact(4)
-                .take(8)
-                .map(|c| u32::from_le_bytes(c.try_into().unwrap_or_default()))
-                .collect();
+            let words: Vec<u32> =
+                bytes.as_chunks::<4>().0.iter().take(8).map(|c| u32::from_le_bytes(*c)).collect();
             let each: HashSet<&Vec<u64>> = seen.iter().map(|s| &s.0[p]).collect();
             out.push(format!("arguments {words:x?} (the same in all runs: {})", each.len() == 1));
         }
@@ -1162,7 +1153,12 @@ impl Player {
             let sub = part.sub.map_or(0, |s| s.0);
             let _ = std::fs::write(to.join(format!("{}-{sub}-0.bin", part.id)), &without[k]);
             let changed = |v: &[u8]| {
-                v.chunks_exact(4).zip(without[k].chunks_exact(4)).filter(|(x, y)| x != y).count()
+                v.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(without[k].as_chunks::<4>().0.iter())
+                    .filter(|(x, y)| x != y)
+                    .count()
             };
             out.push(format!(
                 "it changes {} dwords in one run, {} in another",
@@ -1172,9 +1168,7 @@ impl Player {
             let _ = std::fs::write(to.join(format!("{}-{sub}-a.bin", part.id)), &a[k]);
             let _ = std::fs::write(to.join(format!("{}-{sub}-b.bin", part.id)), &b[k]);
             let words = |v: &[u8]| -> Vec<u32> {
-                v.chunks_exact(4)
-                    .map(|c| u32::from_le_bytes(c.try_into().unwrap_or_default()))
-                    .collect()
+                v.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect()
             };
             let (x, y) = (words(&a[k]), words(&b[k]));
             let differ: Vec<usize> = (0..x.len().min(y.len())).filter(|&i| x[i] != y[i]).collect();

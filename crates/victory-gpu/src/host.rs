@@ -8982,10 +8982,8 @@ impl Batch {
                     Step::GpuWrite(shadow, ..) => {
                         self.touches.push(Touch::Write(std::sync::Arc::as_ptr(shadow) as usize))
                     }
-                    Step::Texture(staging) if wide_textures() => {
-                        if self.texture_due(staging) {
-                            due.push(staging.clone());
-                        }
+                    Step::Texture(staging) if wide_textures() && self.texture_due(staging) => {
+                        due.push(staging.clone());
                     }
                     _ => {}
                 }

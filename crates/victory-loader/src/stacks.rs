@@ -215,7 +215,7 @@ mod tests {
         let parked = std::thread::spawn(move || {
             // SAFETY: plain query.
             tx.send(unsafe { GetCurrentThreadId() }).unwrap();
-            stop_rx.recv().ok();
+            let _ = stop_rx.recv();
         });
         let id = rx.recv().unwrap();
         // SAFETY: a thread of this process.
