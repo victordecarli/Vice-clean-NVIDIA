@@ -632,7 +632,8 @@ mod absent_tests {
     }
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use std::sync::{Arc, Mutex};
 

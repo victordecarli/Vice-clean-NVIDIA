@@ -197,7 +197,8 @@ pub(crate) fn view(d: &D3D12_RESOURCE_DESC) -> Option<DXGI_FORMAT> {
     }
 }
 
-#[cfg(all(test, feature = "diagnostics"))]
+#[cfg(test)]
+#[cfg(feature = "diagnostics")]
 mod tests {
     use super::*;
 

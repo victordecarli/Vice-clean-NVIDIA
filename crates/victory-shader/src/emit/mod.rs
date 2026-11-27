@@ -82,36 +82,46 @@
 
 mod bitcode;
 mod container;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod cube_lod_tests;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod diff_tests;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod filter3d_tests;
 #[cfg(all(windows, any(test, feature = "host")))]
 pub mod host;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod intersect_tests;
 mod lower;
 mod own_bits;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod permlane_tests;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod probe_tests;
 mod rect;
 mod sampler;
 mod shader;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod size_tests;
 mod threading;
 #[cfg(windows)]
 pub mod validator;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod valu_tests;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod waterfall_tests;
 mod wave;
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod wave64_tests;
 
 use crate::dxbc::{Container, FourCC};
