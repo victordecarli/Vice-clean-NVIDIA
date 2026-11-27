@@ -1,4 +1,9 @@
 //! Repository maintenance. Run with `cargo xtask <command>`.
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "a command-line tool: its reports are its output"
+)]
 
 mod policy;
 

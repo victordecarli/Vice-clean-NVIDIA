@@ -2,6 +2,11 @@
 //!
 //! Every command reads the user's own files and writes only to stdout or to
 //! the user's cache directory (outside the repository).
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "a command-line tool: its reports are its output"
+)]
 
 mod census;
 mod inspect;
