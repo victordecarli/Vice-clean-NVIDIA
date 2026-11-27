@@ -192,10 +192,7 @@ pub(super) struct Own {
 const RUNS_AT_A_TIME: usize = 4096;
 
 /// Takes what `dirty` sends up out of the CPU sides.
-pub(super) fn take(
-    host: &Host,
-    dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)],
-) -> Option<Own> {
+pub(super) fn take(host: &Host, dirty: &[crate::shadow::Dirty]) -> Option<Own> {
     let began = std::time::Instant::now();
     pass(host)?;
     // Runs of whole words of the copy: only those are pairs. (A byte beside
@@ -218,6 +215,7 @@ pub(super) fn take(
     }
     let memory = memory(host, at)?;
     let mut moves: Vec<(usize, usize, usize)> = Vec::new();
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let mut work: Vec<(usize, &[(usize, usize)], usize)> = Vec::new();
     for ((shadow, ranges), copy) in dirty.iter().zip(&copies) {
         let from = shadow.card_data() as usize;
@@ -269,7 +267,7 @@ impl Own {
         &self,
         host: &Host,
         list: &ID3D12GraphicsCommandList,
-        dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)],
+        dirty: &[crate::shadow::Dirty],
         looked: impl Fn(&Shadow) -> bool,
     ) {
         let read = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;

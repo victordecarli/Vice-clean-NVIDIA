@@ -302,6 +302,7 @@ struct Live {
     /// The context and what it was made for: display and largest render size,
     /// back buffer format, flags, and the format of the colour without the
     /// interface (unknown: none was known).
+    #[allow(clippy::type_complexity, reason = "a field this type alone reads, as it was filled")]
     framegen: Option<(Box<Context>, [u32; 2], [u32; 2], DXGI_FORMAT, u32, DXGI_FORMAT)>,
     frame_id: u64,
     /// The frame generation context could not be made for these sizes.

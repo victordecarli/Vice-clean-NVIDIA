@@ -336,9 +336,9 @@ pub(crate) fn log(frames: f64) {
 
 /// Declared writes, per copy, and those of `picked`.
 pub(crate) fn with(
-    mut back: Vec<(Arc<Shadow>, Vec<(usize, usize)>)>,
+    mut back: Vec<crate::shadow::Dirty>,
     picked: &[Range],
-) -> Vec<(Arc<Shadow>, Vec<(usize, usize)>)> {
+) -> Vec<crate::shadow::Dirty> {
     for (copy, at, len) in picked {
         let range = (*at, *at + *len);
         match back.iter_mut().find(|b| Arc::ptr_eq(&b.0, copy)) {

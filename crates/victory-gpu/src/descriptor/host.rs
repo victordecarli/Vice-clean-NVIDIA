@@ -398,6 +398,7 @@ static LATE: [std::sync::atomic::AtomicU64; 5] =
 /// What a texture slot showed before its last write: its record (0: null or
 /// the neutral texture), when (ms), and the submissions begun and finished.
 #[cfg(feature = "diagnostics")]
+#[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
 static BEFORE: Mutex<std::collections::BTreeMap<u32, (u64, u64, (u64, u64), &'static str)>> =
     Mutex::new(std::collections::BTreeMap::new());
 
@@ -2383,6 +2384,10 @@ impl HostHeap {
     /// [`TextureQueue::checked`] said of it then, read in the same take of
     /// the lock (the pass asked it slot by slot, under the lock each time);
     /// and the queue's counts ([`TextureQueue::census`]).
+    #[allow(
+        clippy::type_complexity,
+        reason = "the type is written once; callers take its parts apart"
+    )]
     pub(crate) fn texture_slots_due_known(
         &self,
         frame: u64,

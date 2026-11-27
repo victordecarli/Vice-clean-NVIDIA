@@ -689,8 +689,11 @@ impl SentRuns {
 /// that send knows the card did not hold these bytes yet
 /// ([`Shadow::card_merge_relay`]). Notes of sends that every fetch still to
 /// be merged came after are dropped.
-pub(crate) fn card_dirty(sent_as: u64) -> Vec<(Arc<Shadow>, Vec<(usize, usize)>)> {
-    let mut out: Vec<(Arc<Shadow>, Vec<(usize, usize)>)> = Vec::new();
+/// A copy and the byte ranges of it that are dirty.
+pub(crate) type Dirty = (Arc<Shadow>, Vec<(usize, usize)>);
+
+pub(crate) fn card_dirty(sent_as: u64) -> Vec<Dirty> {
+    let mut out: Vec<Dirty> = Vec::new();
     let mut touched = std::mem::take(&mut *TOUCHED.lock().unwrap_or_else(|e| e.into_inner()));
     touched.sort_unstable_by_key(|weak| weak.as_ptr() as usize);
     touched.dedup_by(|a, b| a.ptr_eq(b));
@@ -727,6 +730,7 @@ pub(crate) fn card_dirty(sent_as: u64) -> Vec<(Arc<Shadow>, Vec<(usize, usize)>)
 /// the copy, the title address of a page that is not the same, the words that
 /// differ and the first of them (its address, the copy's value, title
 /// memory's). Returns the bytes compared.
+#[allow(clippy::type_complexity, reason = "the callback's arguments, written once")]
 pub(crate) fn stale_pages(
     most: usize,
     say: &mut dyn FnMut(&Shadow, usize, usize, (usize, u32, u32)),
@@ -4789,6 +4793,7 @@ impl Shadow {
         if !crate::host::walls_trace() {
             return;
         }
+        #[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
         static SEEN: Mutex<(u64, BTreeMap<u64, (u64, u32, u64, u64)>)> =
             Mutex::new((0, BTreeMap::new()));
         let frame = crate::frame::current();

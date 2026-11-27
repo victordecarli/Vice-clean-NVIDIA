@@ -155,7 +155,7 @@ static STALE: Mutex<BTreeMap<(u64, u64), Stale>> = Mutex::new(BTreeMap::new());
 pub(super) fn record(
     host: &Host,
     list: &ID3D12GraphicsCommandList,
-    dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)],
+    dirty: &[crate::shadow::Dirty],
 ) -> Option<Looks> {
     let mut noted = std::mem::take(&mut *NOTED.lock().unwrap_or_else(|e| e.into_inner()));
     let mut all: Vec<(std::sync::Arc<Shadow>, Taken)> = Vec::new();
@@ -405,6 +405,7 @@ static MISPLACED: Mutex<(u64, Misplaced)> = Mutex::new((0, BTreeMap::new()));
 /// destination, or shaders of it write there, or an earlier copy of it put
 /// there for what lies between; and a source that shaders of it write first.
 pub(super) fn order(runs: &[&HostList]) {
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let (mut read, mut written, mut copied): (
         Vec<(usize, usize)>,
         Vec<(usize, usize)>,
@@ -494,6 +495,7 @@ pub(super) fn at_rest(host: &Host) {
 /// refresh will not bring them up to date.
 fn look_for_stale() {
     const MOST: usize = 1 << 30;
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let mut by: BTreeMap<(u64, u64), (bool, u64, usize, Vec<String>)> = BTreeMap::new();
     let compared = crate::shadow::stale_pages(
         MOST,

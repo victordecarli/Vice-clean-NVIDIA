@@ -254,6 +254,10 @@ fn half_shift(width: u32) -> u32 {
     if width == 16 { 0 } else { 15 - width }
 }
 
+/// Per IR block, whether every lane runs it, and whether the host waves
+/// meet at its start and before its exit ([`lds_meetings`]).
+type LdsMeet = (Vec<bool>, Vec<(bool, bool)>);
+
 struct Lower<'a> {
     s: Shader,
     x: &'a Parts<'a>,
@@ -295,6 +299,7 @@ struct Lower<'a> {
     scalar: HashMap<Site, Address>,
     exports: HashMap<Site, &'a Export>,
     interps: HashMap<Site, &'a Interp>,
+    #[allow(clippy::type_complexity, reason = "a field this type alone reads, as it was filled")]
     handles: HashMap<(usize, Site, u8, bool, (u32, u32)), V>,
     /// Element strides read from the host's table by heap slot
     /// ([`super::shader::SLOT_STRIDES`]), by block and descriptor load.
@@ -327,7 +332,7 @@ struct Lower<'a> {
     split_lds: bool,
     /// With `split_lds`, LDS accesses in lane branches: per IR block whether every lane runs
     /// it, and whether the host waves meet at its start and before its exit ([`lds_meetings`]).
-    lds_meet: Option<(Vec<bool>, Vec<(bool, bool)>)>,
+    lds_meet: Option<LdsMeet>,
     /// A console wave64 program run as two host waves of 32 that exchange through LDS: the first
     /// of two exchange dwords, whether the group has no upper half (32 threads or fewer), and per
     /// IR block whether every lane runs it (exchanges need both halves there).
@@ -1509,6 +1514,7 @@ fn packed_layout(elements: &[SigElement], packs: &[(u8, Option<u8>)]) -> PackedL
     packs.sort_unstable();
     packs.dedup_by_key(|p| p.0);
     // Per parameter: its first row, the dwords used, the elements.
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let mut layout: Vec<(u8, u8, Vec<(u8, u8, u8, u8)>)> = Vec::new();
     let mut behind = Vec::new();
     for &(a, b) in &packs {
@@ -1666,7 +1672,7 @@ impl<'a> Lower<'a> {
         let mut split_lds = false;
         // with `split_lds`, LDS accesses in lane branches: the blocks every lane runs, and
         // where the host waves meet around those branches (`lds_meetings`)
-        let mut lds_meet: Option<(Vec<bool>, Vec<(bool, bool)>)> = None;
+        let mut lds_meet: Option<LdsMeet> = None;
         // a console wave64 program in two host waves of 32 (`exchange`)
         let mut exchange: Option<(u32, bool, Vec<bool>)> = None;
         // a console wave64 program in host waves of 32: the LDS dword of `wave_base`'s counter

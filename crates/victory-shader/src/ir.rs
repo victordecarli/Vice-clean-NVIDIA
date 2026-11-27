@@ -500,6 +500,7 @@ fn unspill(
     };
     // The stores that move as pairs (lower, upper) and every store's code;
     // none if the spare codes do not suffice.
+    #[allow(clippy::type_complexity, reason = "a closure's result, written once")]
     let plan = |split: bool| -> Option<(Vec<usize>, Vec<(usize, usize)>, Vec<u8>)> {
         let (mut of, stores) = stores_of(split);
         let mut pairs: Vec<(usize, usize)> = Vec::new();
@@ -598,6 +599,7 @@ fn unspill(
         0xBE80_0000 | field(dst) << 16 | (3 + u32::from(wide)) << 8 | field(src)
     };
     const NOP: u32 = 0xBF80_0000;
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let mut edits: Vec<(usize, Option<(bool, u8, u8)>)> = Vec::new();
     for i in 0..list.len() {
         let Some((save, _, code, _)) = parks[i] else {

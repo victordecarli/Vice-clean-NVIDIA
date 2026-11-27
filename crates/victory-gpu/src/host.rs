@@ -3007,6 +3007,7 @@ fn fill_is_titles(src: usize, len: usize) -> bool {
 type Blamed = (&'static str, &'static str, usize, usize, usize);
 /// How often and how long, and the address the last one read.
 #[cfg(feature = "diagnostics")]
+#[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
 static BLAME: Mutex<Option<std::collections::HashMap<Blamed, (u64, u64, usize)>>> =
     Mutex::new(None);
 /// What the wait that comes next is for, and why not on the card.
@@ -3017,6 +3018,7 @@ static BLAMED: Mutex<(Option<(Blamed, usize)>, &'static str)> = Mutex::new((None
 /// (from, to) and what declares it ([`wide_write`]): how often, and its
 /// shaders.
 #[cfg(feature = "diagnostics")]
+#[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
 static WIDE_WRITES: Mutex<Option<std::collections::HashMap<(usize, usize, usize), (u64, String)>>> =
     Mutex::new(None);
 

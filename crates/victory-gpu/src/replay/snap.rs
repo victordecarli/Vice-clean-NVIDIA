@@ -271,6 +271,7 @@ struct Capture {
     frame: u32,
     states: States,
     idle: HashSet<u32>,
+    #[allow(clippy::type_complexity, reason = "a field this type alone reads, as it was filled")]
     heaps: Vec<(Arc<Heap>, Vec<(u32, u32, Slot)>)>,
     contents: Vec<Content>,
     buffers: Vec<CpuBuffer>,

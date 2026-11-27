@@ -253,6 +253,7 @@ impl Player {
             p.points
         ));
         report.notes.drain(..).for_each(&mut *say);
+        #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
         let mut last: HashMap<(u32, u32, (u32, u32), usize), Vec<u8>> = HashMap::new();
         let mut said = None;
         for (i, s) in samples.iter().enumerate() {

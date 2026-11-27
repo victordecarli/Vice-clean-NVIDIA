@@ -1104,6 +1104,7 @@ impl Player {
     ) -> Result<Vec<String>> {
         let after = self.after(unit, states);
         let parts: std::collections::BTreeSet<usize> = pieces.iter().map(|p| p.0).collect();
+        #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
         let mut seen: Vec<(Vec<Vec<u64>>, Vec<Vec<u8>>)> = Vec::new();
         for run in 0..8 {
             if run > 0 {

@@ -30,6 +30,9 @@ use super::{gpu, pso, snap};
 type Ptr = *mut c_void;
 type Out = *mut *mut c_void;
 
+/// What a closed recording keeps: its bytes, if any, and its state changes.
+pub(super) type Closed = (Option<Arc<Vec<u8>>>, Arc<Vec<Change>>);
+
 /// What to record.
 #[derive(Clone, Debug)]
 pub struct Settings {
@@ -265,7 +268,7 @@ struct ListInner {
     whole: bool,
     bytes: Vec<u8>,
     changes: Vec<Change>,
-    closed: Option<(Option<Arc<Vec<u8>>>, Arc<Vec<Change>>)>,
+    closed: Option<Closed>,
 }
 
 impl ListState {
@@ -279,7 +282,7 @@ impl ListState {
     /// The recording closed last: its commands if it was recorded whole,
     /// and the states it changes. None if it was not seen closed since its
     /// reset.
-    pub(super) fn closed(&self) -> Option<(Option<Arc<Vec<u8>>>, Arc<Vec<Change>>)> {
+    pub(super) fn closed(&self) -> Option<Closed> {
         lock(&self.inner).closed.clone()
     }
 }

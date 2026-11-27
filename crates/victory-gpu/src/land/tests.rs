@@ -51,6 +51,10 @@ impl Title {
     }
 }
 
+/// One piece landed: its start, and the addresses of the card's bytes and of
+/// what the CPU's side held ([`crate::shadow::land_as_before`]).
+type Landing = (usize, usize, usize);
+
 /// Every number once, whatever the count and the threads, batch after batch
 /// and from several callers.
 #[test]
@@ -463,10 +467,7 @@ fn what_landing_costs() {
         let mut round = 0u32;
         // `guarded`: 2 as a refresh leaves them, 1 opened again before (that
         // is timed beside), 0 not at all, as they were after the last.
-        let mut frame = |label: &str,
-                         dense: bool,
-                         guarded: u8,
-                         land: &dyn Fn(&[(usize, usize, usize)])| {
+        let mut frame = |label: &str, dense: bool, guarded: u8, land: &dyn Fn(&[Landing])| {
             let mut best = f64::MAX;
             let (mut guards, mut opening) = (f64::MAX, f64::MAX);
             for _ in 0..5 {
@@ -533,7 +534,7 @@ fn what_landing_costs() {
                     "every sixteenth dword of them new"
                 }
             );
-            let before: &dyn Fn(&[(usize, usize, usize)]) = &|landing| {
+            let before: &dyn Fn(&[Landing]) = &|landing| {
                 let mut scratch: Vec<u8> = Vec::new();
                 for &(at, now, held) in landing {
                     crate::shadow::land_as_before(at, now, held, BLOCK, &mut scratch);

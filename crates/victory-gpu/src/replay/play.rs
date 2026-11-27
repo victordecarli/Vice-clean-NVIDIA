@@ -2889,6 +2889,10 @@ impl Player {
 
     /// The presented picture as it is now: dB against the recorded one,
     /// whether its bytes are the same, its hash, and its pixels.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the type is written once; callers take its parts apart"
+    )]
     fn picture_now(&mut self) -> Result<Option<(f64, bool, String, Vec<u8>)>> {
         let Some(p) = self.frame.presents.last().cloned() else {
             return Ok(None);

@@ -52,6 +52,7 @@ pub(crate) struct Job {
     copy: Arc<HostTexture>,
     asked: std::time::Instant,
     /// What to do when it has run; `None`: it has.
+    #[allow(clippy::type_complexity, reason = "a field this type alone reads, as it was filled")]
     then: Mutex<Option<Vec<Box<dyn FnOnce() + Send>>>>,
 }
 

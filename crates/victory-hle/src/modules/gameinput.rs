@@ -1314,6 +1314,7 @@ mod host {
     /// stand-in pad's table maps them to buttons). Also the keys of
     /// [`live`] (`VICTORY_KEYS_FILE`).
     fn scripted() -> Vec<u8> {
+        #[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
         static SCRIPT: LazyLock<(Instant, Vec<(Duration, Duration, u8)>)> = LazyLock::new(|| {
             let list = std::env::var("VICTORY_KEYS").unwrap_or_default();
             let keys = list.split(',').filter_map(|entry| {

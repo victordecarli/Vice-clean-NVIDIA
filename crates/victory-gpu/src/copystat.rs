@@ -188,9 +188,12 @@ pub(crate) fn mode() -> u8 {
 type Ranges = HashMap<(usize, usize), (u64, u64, u64, u32)>;
 static RANGES: Mutex<Option<Ranges>> = Mutex::new(None);
 
+/// Counts by a pair of keys.
+type Pairs = HashMap<(usize, usize), (u64, u64)>;
+
 /// Per range copied whole because its memory is not watched (start,
 /// length): copies and microseconds.
-static WHOLE: Mutex<Option<HashMap<(usize, usize), (u64, u64)>>> = Mutex::new(None);
+static WHOLE: Mutex<Option<Pairs>> = Mutex::new(None);
 
 /// `len` bytes at `src`, memory that is not watched, were copied whole in
 /// `us`.
@@ -213,6 +216,7 @@ static WAITS_BY_WORK: Mutex<Option<HashMap<String, (u64, u64)>>> = Mutex::new(No
 /// With `VICTORY_GPU_TIMING`: the commands' time on the card since the last
 /// line by what they ran (a pipeline, or the kind of command): how many,
 /// their microseconds, and the longest one's.
+#[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
 static COMMANDS_BY_WORK: Mutex<Option<HashMap<String, (u64, u64, u64)>>> = Mutex::new(None);
 
 /// A command took `ms` on the card (timing run). `op` is its note: the
@@ -283,7 +287,7 @@ pub(crate) fn barrier_test() -> u8 {
 
 /// Per range compared after a submission (start, length): times, and the
 /// bytes of it written back to the title.
-static COMPARED: Mutex<Option<HashMap<(usize, usize), (u64, u64)>>> = Mutex::new(None);
+static COMPARED: Mutex<Option<Pairs>> = Mutex::new(None);
 
 /// `len` bytes at `src` were compared after a submission and `written` of
 /// them put back into title memory.

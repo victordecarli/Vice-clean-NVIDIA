@@ -447,6 +447,7 @@ pub(crate) fn jobs(pieces: &[(usize, usize)]) -> Vec<std::ops::Range<usize>> {
 /// (Bytes left out of that merge, the title's that went up behind the
 /// fetch, went up behind that flight too, and stand over what it wrote.)
 #[derive(Default)]
+#[allow(clippy::type_complexity, reason = "the one field is the whole of what it keeps")]
 pub(crate) struct Had(Vec<(u64, std::collections::HashMap<(u64, usize), (usize, usize)>)>);
 
 impl Had {
