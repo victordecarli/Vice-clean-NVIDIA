@@ -97,12 +97,13 @@ pub(crate) fn other_threads() -> Vec<u32> {
     ids
 }
 
-/// Prints every other thread's stack to stderr. Each thread is suspended
+/// Logs every other thread's stack, as one event. Each thread is suspended
 /// only while its context is read and unwound into a buffer allocated
 /// beforehand (it may hold the heap lock).
 pub fn dump_stacks() {
+    use std::fmt::Write as _;
     let ids = other_threads();
-    eprintln!("VIctory: stacks of {} threads", ids.len());
+    let mut text = format!("stacks of {} threads", ids.len());
     for id in ids {
         // SAFETY: opens a thread of our own process.
         let thread = unsafe {
@@ -112,17 +113,25 @@ pub fn dump_stacks() {
             continue;
         }
         let (frames, (priority, base, affinity)) = frames_of(thread);
-        eprintln!(
-            "  thread {id} \"{}\" start {} priority {priority} (base {base}) affinity {affinity:#x}",
+        let _ = write!(
+            text,
+            "
+  thread {id} \"{}\" start {} priority {priority} (base {base}) affinity {affinity:#x}",
             name_of(thread),
             locate(start_of(thread))
         );
         for (i, pc) in frames.into_iter().enumerate() {
-            eprintln!("    #{i:<2} {}", locate(pc as usize));
+            let _ = write!(
+                text,
+                "
+    #{i:<2} {}",
+                locate(pc as usize)
+            );
         }
         // SAFETY: we opened it.
         unsafe { CloseHandle(thread) };
     }
+    tracing::warn!("{text}");
 }
 
 /// The thread's frames and its current and base scheduling priority (0-31).

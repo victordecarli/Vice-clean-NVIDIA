@@ -80,7 +80,7 @@ fn profile(
     phase: fn() -> u32,
 ) {
     std::thread::sleep(from.saturating_sub(start.elapsed()));
-    eprintln!("VIctory: the profile begins");
+    tracing::info!("the profile begins");
     let mut threads: HashMap<u32, Thread> = HashMap::new();
     let mut chosen: Vec<u32> = Vec::new();
     let mut counts: HashMap<(u32, u32, Vec<u64>), u64> = HashMap::new();
@@ -109,9 +109,9 @@ fn profile(
     }
     choose(&mut threads, &mut chosen);
     if let Err(e) = write(&file, &threads, &counts, &phases, rounds) {
-        eprintln!("VIctory: the profile was not written: {e}");
+        tracing::warn!("the profile was not written: {e}");
     } else {
-        eprintln!("VIctory: the profile is in {file}");
+        tracing::info!("the profile is in {file}");
     }
 }
 

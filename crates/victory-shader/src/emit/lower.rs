@@ -1810,7 +1810,7 @@ impl<'a> Lower<'a> {
                         }
                     }
                     why.sort_unstable();
-                    eprintln!(
+                    tracing::info!(
                         "WAVE64-WHY group={group} lds={} [{}]",
                         s.lds_dwords > 0,
                         why.join(", ")
@@ -6712,7 +6712,7 @@ impl<'a> Lower<'a> {
                     return Ok(());
                 }
                 if std::env::var_os("VICTORY_DESC_WHY").is_some() {
-                    eprintln!(
+                    tracing::info!(
                         "DESC-WHY {:#x} {} scalar={:?} lane_copied={}",
                         inst.machine.offset,
                         inst.name(),

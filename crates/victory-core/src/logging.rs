@@ -35,9 +35,15 @@ pub fn init(default_level: &str) {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 }
                 Err(e) => {
-                    eprintln!(
-                        "VICTORY_LOG_FILE: no log file ({e}); this run logs to this window only"
-                    );
+                    #[allow(
+                        clippy::print_stderr,
+                        reason = "logging is not up yet: the console is all there is"
+                    )]
+                    {
+                        eprintln!(
+                            "VICTORY_LOG_FILE: no log file ({e}); this run logs to this window only"
+                        );
+                    }
                     return None;
                 }
             }

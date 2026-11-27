@@ -849,7 +849,10 @@ pub(crate) fn fail(what: std::fmt::Arguments) -> ! {
     tracing::error!("{text}");
     // Tests have no log: the reason goes to their output.
     #[cfg(test)]
-    eprintln!("host GPU failure: {text}");
+    #[allow(clippy::print_stderr, reason = "tests have no log: the reason goes to their output")]
+    {
+        eprintln!("host GPU failure: {text}");
+    }
     match ON_FAILURE.get() {
         Some(report) => report(&text),
         None => std::process::abort(),

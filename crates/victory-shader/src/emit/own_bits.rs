@@ -783,7 +783,7 @@ pub(super) fn find(p: &Program, st: &Structured, why: bool) -> OwnBits {
                     }
                     Err((offset, what)) => {
                         if why {
-                            eprintln!(
+                            tracing::info!(
                                 "WAVE64-OWN-BITS the wave OR at {:#x}: not a loop over the lanes' own bits at {offset:#x}: {what}",
                                 p.blocks[b].insts[s].machine.offset
                             );

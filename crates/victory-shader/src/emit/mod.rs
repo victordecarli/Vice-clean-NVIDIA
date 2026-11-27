@@ -541,8 +541,8 @@ pub fn emit(
         let report = |what: &str, r: &Result<(HostShader, Option<u32>), ShaderError>| {
             if why {
                 match r {
-                    Ok((_, wave)) => eprintln!("WAVE64-RETRY {what}: wave {wave:?}"),
-                    Err(e) => eprintln!("WAVE64-RETRY {what}: {e}"),
+                    Ok((_, wave)) => tracing::info!("WAVE64-RETRY {what}: wave {wave:?}"),
+                    Err(e) => tracing::info!("WAVE64-RETRY {what}: {e}"),
                 }
             }
         };
@@ -560,7 +560,7 @@ pub fn emit(
             Ok(()) => true,
             Err((offset, what)) => {
                 if why {
-                    eprintln!(
+                    tracing::info!(
                         "WAVE64-RETRY local waves: not the allocation idiom at {offset:#x}: {what}"
                     );
                 }
@@ -572,7 +572,7 @@ pub fn emit(
         let form = |label: &str, p: Option<ir::Program>| {
             let Some(p) = p else {
                 if why {
-                    eprintln!("WAVE64-FORM {label}: ir returned None");
+                    tracing::info!("WAVE64-FORM {label}: ir returned None");
                 }
                 return None;
             };
@@ -580,7 +580,7 @@ pub fn emit(
                 Ok(st) => st,
                 Err(e) => {
                     if why {
-                        eprintln!("WAVE64-FORM {label}: structure failed: {e}");
+                        tracing::info!("WAVE64-FORM {label}: structure failed: {e}");
                     }
                     return None;
                 }
@@ -589,7 +589,7 @@ pub fn emit(
                 Ok(io) => io,
                 Err(e) => {
                     if why {
-                        eprintln!("WAVE64-FORM {label}: io::raise failed: {e}");
+                        tracing::info!("WAVE64-FORM {label}: io::raise failed: {e}");
                     }
                     return None;
                 }
@@ -598,7 +598,7 @@ pub fn emit(
                 Ok(res) => res,
                 Err(e) => {
                     if why {
-                        eprintln!("WAVE64-FORM {label}: resource::track failed: {e}");
+                        tracing::info!("WAVE64-FORM {label}: resource::track failed: {e}");
                     }
                     return None;
                 }
@@ -841,7 +841,7 @@ fn widen(
             if groups && cs.threads.iter().product::<u32>() % 64 == 0 => {}
         crate::native::StageIo::Cs(cs) => {
             if why {
-                eprintln!("WAVE64-WIDE not tried: thread groups of {:?}", cs.threads);
+                tracing::info!("WAVE64-WIDE not tried: thread groups of {:?}", cs.threads);
             }
             return Err(NOT);
         }
@@ -885,7 +885,7 @@ fn widen(
                         format!("B{b}({nm}{})", if back { ",BACK" } else { "" })
                     })
                     .collect();
-                eprintln!(
+                tracing::info!(
                     "WAVE64-WIDE {} branches taken wave-wide: [{}]",
                     wide.len(),
                     desc.join(", ")
@@ -901,7 +901,7 @@ fn widen(
             .collect();
         if more.is_empty() {
             if why {
-                eprintln!(
+                tracing::info!(
                     "WAVE64-WIDE stopped with {} branches wave-wide: a branch around it cannot be",
                     wide.len()
                 );

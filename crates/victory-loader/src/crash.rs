@@ -9,6 +9,10 @@
 //! (`report_unhandled`, which the runtime calls ahead of the title's own)
 //! and appended to the crash log, with the title's last debug output, which
 //! often states the reason. Panics of ours go to the crash log too.
+#![allow(
+    clippy::print_stderr,
+    reason = "mid-crash, the subscriber may be held by the faulting thread; the console is the last resort"
+)]
 
 use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::{
