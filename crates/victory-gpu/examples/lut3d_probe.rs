@@ -25,6 +25,12 @@
 //! loaded from a library in a process that made other static samplers first
 //! (`SM66=1 LIB66_STORE=a.lib`, then `SM66=1 SHIFT=10 LIB66_LOAD=a.lib`): every
 //! sample is a table entry. See `pipeline::library::with_static_samplers`.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "a tool run by hand: what it prints is its output, and a failure stops it"
+)]
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::{D3D_FEATURE_LEVEL_12_0, ID3DBlob};
 use windows::Win32::Graphics::Direct3D12::*;

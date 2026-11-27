@@ -1,4 +1,10 @@
 //! Time structurisation only; the synthetic programs need no title files or GPU.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "a tool run by hand: what it prints is its output, and a failure stops it"
+)]
 
 use std::hint::black_box;
 use std::time::Instant;

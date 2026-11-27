@@ -5,6 +5,12 @@
 //!
 //! `BIG_TEXTURES` (17000), `BIG_CARD` (600 buffers of 1 MB in the card's
 //! memory) and `BIG_FOLDER` (a temporary one) change it.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "test code: a failure panics, and what a test measured is printed"
+)]
 #![cfg(all(windows, feature = "diagnostics"))]
 
 use std::mem::ManuallyDrop;

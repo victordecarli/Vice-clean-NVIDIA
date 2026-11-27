@@ -6,6 +6,12 @@
 //! picture and buffer must be the same.
 //!
 //! `VICTORY_TEST_D3D_DEBUG=1` runs it under the debug layer.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "test code: a failure panics, and what a test measured is printed"
+)]
 #![cfg(all(windows, feature = "diagnostics"))]
 
 use std::mem::ManuallyDrop;
@@ -1469,7 +1475,7 @@ fn a_frame_is_recorded_and_replayed() {
     }
     assert_eq!(without.still.iter().map(|s| s.subs.len()).collect::<Vec<_>>(), [15, 3, 2]);
     let colors: std::collections::HashSet<[u8; 4]> =
-        without.picture.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
+        without.picture.as_chunks::<4>().0.iter().map(|c| [c[0], c[1], c[2], c[3]]).collect();
     assert!(colors.len() > 30, "{}", colors.len());
 
     // With it: armed at the first present, the fourth frame is captured (a

@@ -13,6 +13,12 @@
 //! textures shown (along x and z through the middle). Resource ids after the
 //! text: their contents too (R32_FLOAT rows, RGBA32F texels; `STEP=<n>`).
 //! Written to find why PS_CompositeNMB's colour tables posterized.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "a tool run by hand: what it prints is its output, and a failure stops it"
+)]
 #![allow(dead_code)]
 #[path = "../src/replay/wire.rs"]
 mod wire;

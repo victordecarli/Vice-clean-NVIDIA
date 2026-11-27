@@ -1,5 +1,11 @@
 //! End-to-end: prepare, load, bind and call into a stand-in title
 //! (tests/fixtures/hle-probe), without any game data.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "test code: a failure panics, and what a test measured is printed"
+)]
 #![cfg(windows)]
 
 use std::ffi::CString;
