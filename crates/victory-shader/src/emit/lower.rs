@@ -1640,6 +1640,11 @@ fn unsupported(offset: usize, what: Why) -> Stop {
     Stop::Fail(ShaderError::Unsupported { offset, what })
 }
 
+/// A broken invariant of the lowering itself: the shader is rejected.
+fn internal(what: String) -> Stop {
+    Stop::Fail(ShaderError::Internal(what))
+}
+
 impl<'a> Lower<'a> {
     fn new(x: &'a Parts<'a>, bad: &'a HashMap<Value, Why>) -> Self {
         let p = x.p;
@@ -2603,7 +2608,9 @@ impl<'a> Lower<'a> {
             // Before anything else, so that wave counts, reads of the first
             // lane and stores know only the lanes that run.
             let original = self.s.entry;
-            let width = self.s.threads.expect("compute thread count")[0];
+            let Some([width, ..]) = self.s.threads else {
+                return Err(internal("a counted program without a thread count".into()));
+            };
             let limit =
                 self.host_word(RootType::Other(super::shader::USER_DISPATCH_THREADS_X), 0, width);
             let Val::I32(group) = self.compute_id("groupId.i32", 94, 0) else { unreachable!() };
@@ -2635,7 +2642,7 @@ impl<'a> Lower<'a> {
                 .iter()
                 .any(|&q| self.block[q].is_some() && self.rpo[b] <= self.rpo[q]);
             if header {
-                let blk = self.block[b].expect("reachable");
+                let blk = self.dxil_block(b)?;
                 let phi = self.s.m.phi(blk, self.s.t.i32);
                 self.counters.insert(b, (phi, Vec::new()));
             }
@@ -2648,7 +2655,7 @@ impl<'a> Lower<'a> {
             self.block[order[0]] = Some(self.cur);
         }
         for &b in &order {
-            self.cur = self.block[b].expect("reachable");
+            self.cur = self.dxil_block(b)?;
             self.cur_ir = b;
             let preds: Vec<usize> =
                 p.blocks[b].preds.iter().copied().filter(|&q| self.block[q].is_some()).collect();
@@ -3851,13 +3858,13 @@ impl<'a> Lower<'a> {
         let selected = Self::sdwa_src(inst, k);
         let mut f = match op {
             _ if selected.is_some() => {
-                let (sel, sext) = selected.expect("checked");
+                let (sel, sext) = selected.ok_or("an SDWA source without its select")?;
                 let x = self.operand(inst, &op)?;
                 let x = self.select_bits(x, sel, sext);
                 self.as_float(x)
             }
             _ if k == 0 && self.src0.is_some() => {
-                let x = self.src0.expect("checked");
+                let x = self.src0.ok_or("a first source without its value")?;
                 self.as_float(x)
             }
             Operand::Vector { reg, .. } | Operand::Scalar { code: reg, .. }
@@ -4179,7 +4186,7 @@ impl<'a> Lower<'a> {
         if let Some(&v) = self.bools.get(&(at, b)) {
             return Ok(v);
         }
-        let (atom, lo, hi) = self.x.st.bools.node(b).expect("not a constant");
+        let (atom, lo, hi) = self.x.st.bools.node(b).ok_or("a constant lane boolean")?;
         let a = self.atom(atom, at)?;
         let m = &mut self.s.m;
         let v = match (lo, hi) {
@@ -4939,7 +4946,9 @@ impl<'a> Lower<'a> {
         if !self.console_lanes {
             return self.compute_id("threadIdInGroup.i32", 95, c);
         }
-        let [x, y, _] = self.s.threads.expect("compute");
+        let Some([x, y, _]) = self.s.threads else {
+            return Val::Missing("console lanes without a thread group");
+        };
         let e = self.s.entry;
         let i32t = self.s.t.i32;
         if self.halves.is_some() || self.ticket.is_some() {
@@ -4957,7 +4966,9 @@ impl<'a> Lower<'a> {
         }
         let flat = self.s.op(e, "flattenedThreadIdInGroup.i32", Attr::ReadNone, i32t, 96, &[]);
         let first = self.s.op(e, "waveReadLaneFirst.i32", Attr::NoUnwind, i32t, 118, &[flat]);
-        let wave = self.s.wave_size.expect("set with console lanes");
+        let Some(wave) = self.s.wave_size else {
+            return Val::Missing("console lanes without a wave size");
+        };
         let mask = self.s.m.i32(!(wave - 1));
         let base = self.s.m.bin(e, Bin::And, first, mask);
         let lane = self.lane_index();
@@ -4983,7 +4994,9 @@ impl<'a> Lower<'a> {
     // the host the unused vertex and primitive slots. Pass the program's own
     // counts if that shows in frame time.
     fn mesh_prologue(&mut self, mut mesh: super::shader::Mesh) -> Result<(), Why> {
-        let threads = self.s.threads.expect("mesh")[0];
+        let Some([threads, ..]) = self.s.threads else {
+            return Err("a mesh shader without a thread count");
+        };
         if mesh.topology != 2 {
             return Err("a mesh shader not drawing triangles");
         }
@@ -5910,7 +5923,7 @@ impl<'a> Lower<'a> {
                     None => e,
                 });
             }
-            let mut r = r.expect("two dwords");
+            let mut r = r.ok_or("a 64-bit compare of no dwords")?;
             if op.starts_with("lg") {
                 let t = self.s.m.bool(true);
                 r = self.s.m.bin(c, Bin::Xor, r, t);
@@ -11435,7 +11448,7 @@ impl<'a> Lower<'a> {
                             read = Some(r);
                         }
                         gathered = Some(g);
-                        read.expect("four reads")
+                        read.ok_or("a gather of no texels")?
                     } else {
                         args.extend(&os[..2]);
                         args.push(self.s.m.i32(dmask.trailing_zeros()));
@@ -12023,7 +12036,12 @@ impl<'a> Lower<'a> {
                         None => h,
                     });
                 }
-                self.write(inst, Reg::V(reg + k as u8), x.expect("a channel"), guard);
+                self.write(
+                    inst,
+                    Reg::V(reg + k as u8),
+                    x.ok_or("a packed store of no channels")?,
+                    guard,
+                );
             }
             return Ok(());
         }
@@ -12091,12 +12109,13 @@ impl<'a> Lower<'a> {
                         (!high).then_some((row, ch))
                     };
                     let found = src.and_then(|(r, c)| {
-                        outputs.iter().position(|o| {
+                        let id = outputs.iter().position(|o| {
                             o.row == Some(u32::from(r)) && c >= o.col && c < o.col + o.cols
-                        })
+                        })?;
+                        Some((id, c))
                     });
-                    if let Some(id) = found {
-                        let col = src.expect("found").1 - outputs[id].col;
+                    if let Some((id, at)) = found {
+                        let col = at - outputs[id].col;
                         stores.push((id, col, value, Some(high)));
                     }
                 }
@@ -12315,13 +12334,13 @@ impl<'a> Lower<'a> {
             self.x.p.blocks[b].insts.last().map_or(self.x.p.blocks[b].offset, |i| i.machine.offset);
         let term = match self.x.st.exits[b] {
             LaneExit::Jump(t) if self.counters.contains_key(&t) && self.rpo[t] <= self.rpo[b] => {
-                let ok = self.count_iteration(t, pred::IULT);
+                let ok = self.count_iteration(t, pred::IULT)?;
                 let abort = self.abort_block();
-                Term::CondBr(ok, self.block[t].expect("reachable"), abort)
+                Term::CondBr(ok, self.dxil_block(t)?, abort)
             }
             LaneExit::Jump(t) => {
                 self.enter_loop(b, t, self.cur);
-                Term::Br(self.block[t].expect("reachable"))
+                Term::Br(self.dxil_block(t)?)
             }
             LaneExit::Branch { when, taken, not_taken } => {
                 // A negated condition branches the other way round.
@@ -12345,17 +12364,17 @@ impl<'a> Lower<'a> {
                 // (No `xor` of a compare: a loop exit testing one hung the
                 // AMD driver.)
                 let cond = if back(self, taken) {
-                    let ok = self.count_iteration(taken, pred::IULT);
+                    let ok = self.count_iteration(taken, pred::IULT)?;
                     self.s.m.bin(self.cur, Bin::And, cond, ok)
                 } else if back(self, not_taken) {
-                    let stop = self.count_iteration(not_taken, pred::IUGE);
+                    let stop = self.count_iteration(not_taken, pred::IUGE)?;
                     self.s.m.bin(self.cur, Bin::Or, cond, stop)
                 } else {
                     cond
                 };
                 // Critical edges get a block of their own, so loops have
                 // dedicated exits and preheaders as DXC emits them.
-                let (t, f) = (self.edge(b, taken), self.edge(b, not_taken));
+                let (t, f) = (self.edge(b, taken)?, self.edge(b, not_taken)?);
                 for (to, via) in [(taken, t), (not_taken, f)] {
                     if !back(self, to) {
                         // From an edge block, or from here.
@@ -12395,9 +12414,10 @@ impl<'a> Lower<'a> {
     /// A back edge to header `to` (a back edge keeps its block, no
     /// critical-edge block): the count goes up; the result compares it with
     /// [`LOOP_LIMIT`] by `p` (below: go on; at or above: stop).
-    fn count_iteration(&mut self, to: usize, p: u8) -> V {
+    fn count_iteration(&mut self, to: usize, p: u8) -> Result<V, Stop> {
         let c = self.cur;
-        let (phi, _) = self.counters[&to];
+        let no_counter = || internal(format!("a back edge to block {to}, not a loop header"));
+        let phi = self.counters.get(&to).ok_or_else(no_counter)?.0;
         let one = self.s.m.i32(1);
         let next = self.s.m.bin(c, Bin::Add, phi, one);
         self.s.m.tag(phi, Tag::Counter);
@@ -12420,10 +12440,10 @@ impl<'a> Lower<'a> {
             named => named,
         };
         let limit = self.s.m.i32(limit);
-        self.counters.get_mut(&to).expect("header").1.push((next, c));
+        self.counters.get_mut(&to).ok_or_else(no_counter)?.1.push((next, c));
         let over = self.s.m.cmp(c, p, next, limit);
         self.s.m.tag(over, Tag::Counter);
-        over
+        Ok(over)
     }
 
     /// The block a lane stopped by [`LOOP_LIMIT`] leaves through.
@@ -12441,18 +12461,23 @@ impl<'a> Lower<'a> {
         a
     }
 
+    /// The DXIL block of IR block `b`, which every block reached has.
+    fn dxil_block(&self, b: usize) -> Result<usize, Stop> {
+        self.block[b].ok_or_else(|| internal(format!("IR block {b} reached without a DXIL block")))
+    }
+
     /// The DXIL block a branch from IR block `from` to `to` goes to.
-    fn edge(&mut self, from: usize, to: usize) -> usize {
-        let target = self.block[to].expect("reachable");
+    fn edge(&mut self, from: usize, to: usize) -> Result<usize, Stop> {
+        let target = self.dxil_block(to)?;
         let preds = self.x.p.blocks[to].preds.iter().filter(|&&q| self.block[q].is_some()).count();
         // Back edges stay as they are: the exiting block is the latch.
         if preds < 2 || self.rpo[to] <= self.rpo[from] {
-            return target;
+            return Ok(target);
         }
         let e = self.s.m.new_block();
         self.s.m.terminate(e, Term::Br(target));
         self.edges.insert((from, to), e);
-        e
+        Ok(e)
     }
 
     fn fill_phis(&mut self) -> Result<(), Stop> {
