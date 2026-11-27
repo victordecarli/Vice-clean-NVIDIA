@@ -21,6 +21,7 @@ const ALLOWED_EXTENSIONS: &[&str] = &[
 const ALLOWED_NAMES: &[&str] = &[
     ".gitignore",
     ".gitattributes",
+    ".git-blame-ignore-revs",
     ".editorconfig",
     ".victory-root",
     "pre-commit",
