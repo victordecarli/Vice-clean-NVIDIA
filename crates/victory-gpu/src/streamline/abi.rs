@@ -6,7 +6,7 @@
 //! binary is part of this repository; the library is loaded at run time
 //! (`super::load`). The offsets the SDK asserts in `sl.api/sl.cpp` are asserted
 //! again in the tests below.
-#![allow(dead_code)]
+#![allow(dead_code, reason = "mirrors the SDK's ABI, not every item of which is used")]
 
 use std::ffi::{c_char, c_void};
 

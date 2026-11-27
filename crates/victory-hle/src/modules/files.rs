@@ -9,9 +9,15 @@
 //! wide wrapper, which would rewrite the host path a second time when its
 //! drive letter is mounted too. Letters are chosen among those the host
 //! does not use, so no host drive is hidden.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(clippy::too_many_arguments)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (CreateFileW) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
+#![allow(clippy::too_many_arguments, reason = "the signature is fixed by the API title code calls")]
 
 use std::ffi::{CStr, c_char, c_void};
 use std::os::windows::ffi::OsStrExt;

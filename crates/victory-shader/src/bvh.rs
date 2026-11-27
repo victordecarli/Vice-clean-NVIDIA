@@ -177,7 +177,10 @@ pub fn boxes(children: &[u32; 4], boxes: &[[f32; 6]; 4], ray: &Ray, sort: bool) 
     // origin exactly on a box's face into a NaN. (Maximum then minimum, as
     // the emitted code: a NaN becomes the lower bound, where `clamp` would
     // keep it.)
-    #[allow(clippy::manual_clamp)]
+    #[allow(
+        clippy::manual_clamp,
+        reason = "clamp would keep a NaN; the emitted code makes it the lower bound"
+    )]
     let inverse = ray.inverse.map(|x| x.max(-f32::MAX).min(f32::MAX));
     let mut ids = [NONE; 4];
     let mut distances = [f32::INFINITY; 4];

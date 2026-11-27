@@ -57,7 +57,7 @@ fn parse_mode(value: Option<&OsStr>) -> Mode {
 
 /// The start of the player's movie structure (`HBINK` points at it).
 #[repr(C)]
-#[allow(dead_code)] // the layout; not every field is read
+#[allow(dead_code, reason = "the layout; not every field is read")] // the layout; not every field is read
 struct Movie {
     width: u32,
     height: u32,

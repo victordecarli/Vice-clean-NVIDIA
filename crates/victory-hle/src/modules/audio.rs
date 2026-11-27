@@ -13,8 +13,14 @@
 //! middleware reach through COM like on PC. fmod's console build sets up
 //! the coprocessor inside `System_Create` and waits there for its first
 //! command to be acknowledged; the title uses only XMA contexts.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (ApuCreateHeap) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::alloc::Layout;
 use std::collections::{BTreeMap, VecDeque};

@@ -2,7 +2,10 @@
 //! (titles wait for that before anything else) but reaches nothing, the
 //! connectivity hint never changes, and the title's security allow list,
 //! which comes from the service, cannot be fetched.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 

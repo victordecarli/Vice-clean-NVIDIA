@@ -429,7 +429,7 @@ pub(crate) fn bound_ahead(
 /// [`record_clamp_as`] into `list`'s scratch buffer `dst`, from the state
 /// the list left it in; afterwards the list knows it is readable as
 /// indirect arguments.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, reason = "the clamp pass needs each of these from the caller")]
 fn clamp_into(
     list: &HostList,
     c: &Clamp,
@@ -453,7 +453,7 @@ fn clamp_into(
 /// `INDIRECT_ARGUMENT`. `ahead`: the records are a window clamped ahead of
 /// their draws ([`bound_ahead`]). False, with nothing recorded, if the
 /// layout or the addresses do not fit the clamp.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, reason = "the clamp pass needs each of these from the caller")]
 fn record_clamp_as(
     c: &Clamp,
     l: &ID3D12GraphicsCommandList,

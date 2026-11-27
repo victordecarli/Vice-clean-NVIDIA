@@ -19,7 +19,7 @@
     clippy::print_stdout,
     reason = "a tool run by hand: what it prints is its output, and a failure stops it"
 )]
-#![allow(dead_code)]
+#![allow(dead_code, reason = "the example includes the whole wire module and uses part of it")]
 #[path = "../src/replay/wire.rs"]
 mod wire;
 

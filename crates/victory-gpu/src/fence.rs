@@ -1,6 +1,9 @@
 //! Fences: a 64-bit value and the events waiting for it. Nothing runs on a
 //! GPU yet, so only signals (the title's, later our queues') move one.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::c_void;
 use std::sync::Mutex;

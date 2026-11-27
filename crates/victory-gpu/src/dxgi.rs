@@ -1,7 +1,10 @@
 //! The DXGI side of the device: one adapter with one output, reached from
 //! the device by interface query. Tables follow the PC interfaces' order
 //! (IUnknown, the object methods, then each interface's methods).
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use crate::object::{
     self, ADAPTER, DXGI_DEVICE, E_INVALIDARG, FACTORY, HRESULT, Iid, MORE_DATA, NOT_FOUND, OUTPUT,

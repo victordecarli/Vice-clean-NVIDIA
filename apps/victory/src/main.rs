@@ -34,7 +34,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 #[used]
-#[allow(non_upper_case_globals)]
+#[allow(non_upper_case_globals, reason = "the Agility SDK finds the export by this exact name")]
 pub static D3D12SDKVersion: u32 = 614;
 
 /// `D3D12SDKPath`'s value: a pointer to a C string.
@@ -49,7 +49,7 @@ unsafe impl Sync for SdkPath {}
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 #[used]
-#[allow(non_upper_case_globals)]
+#[allow(non_upper_case_globals, reason = "the Agility SDK finds the export by this exact name")]
 pub static D3D12SDKPath: SdkPath = SdkPath(c".\\D3D12\\".as_ptr());
 
 #[derive(Parser)]

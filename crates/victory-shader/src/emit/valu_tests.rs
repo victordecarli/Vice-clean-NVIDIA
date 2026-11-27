@@ -45,7 +45,7 @@ const fn vop3(op: u16, vdst: u8, src0: u16, src1: u16, src2: u16) -> [u32; 2] {
 }
 
 /// VOP3 `op vdst, src0, src1, src2` with explicit `abs`, `neg`, `omod`, `clamp`.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, reason = "one argument per VOP3 field the tests set")]
 const fn vop3_mod(
     op: u16,
     vdst: u8,

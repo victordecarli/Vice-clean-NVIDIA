@@ -16,9 +16,15 @@
 //! The description layouts are the FidelityFX SDK's API (MIT) as DexNom's fork
 //! reads them (DexNom/VIctory, `crates/victory-hle/src/modules/fidelityfx.rs`,
 //! GPL-3.0-or-later), from which they are ported.
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (ffxCreateContext) that title imports are bound by"
+)]
 // Title code calls these through its import table.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::HashMap;
 use std::ffi::c_void;

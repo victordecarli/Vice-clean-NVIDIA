@@ -3,10 +3,16 @@
 //! stand-in gamepad (`FALLBACK_BUTTONS`). The keyboard is a device of its own
 //! too. A poll thread turns host state into readings (a new one per change)
 //! and runs device callbacks on connect and disconnect.
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (GameInputCreate) that title imports are bound by"
+)]
 // Title code calls these through the objects, passing pointers the real API
 // would trust.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::VecDeque;
 use std::ffi::c_void;
@@ -224,7 +230,7 @@ pub struct Device {
 /// follows the public layout and is zero where we have nothing to say.
 #[repr(C)]
 #[derive(Default)]
-#[allow(dead_code)] // read by title code
+#[allow(dead_code, reason = "fields are written for title code to read; Rust never reads them")] // read by title code
 struct DeviceInfo {
     size: u32,
     vendor: u16,
@@ -1234,7 +1240,6 @@ mod host {
                     super::dualsense::pads,
                 );
             }
-            #[allow(unused_mut)]
             let mut pad = self.pads[slot]?;
             // The scripted keys (`VICTORY_KEYS`) also press the first
             // pad's buttons, by the stand-in pad's table: with a real pad

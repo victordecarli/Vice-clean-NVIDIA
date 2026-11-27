@@ -2734,7 +2734,10 @@ static MAPPING: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 /// What the runtime holds while it changes what title memory shows
 /// ([`title_memory_remapping`]).
-pub struct Remapping(#[allow(dead_code)] std::sync::RwLockWriteGuard<'static, ()>);
+pub struct Remapping(
+    #[allow(dead_code, reason = "the guard is held, never read")]
+    std::sync::RwLockWriteGuard<'static, ()>,
+);
 
 impl Drop for Remapping {
     fn drop(&mut self) {
@@ -2905,7 +2908,10 @@ pub fn title_memory_remapping() -> Remapping {
 }
 
 /// What a read of title memory in place holds ([`title_memory_reading`]).
-pub struct Reading(#[allow(dead_code)] std::sync::RwLockReadGuard<'static, ()>);
+pub struct Reading(
+    #[allow(dead_code, reason = "the guard is held, never read")]
+    std::sync::RwLockReadGuard<'static, ()>,
+);
 
 /// For reading title memory in place: until what it returns is dropped,
 /// the runtime changes no mapping, so memory found mapped stays mapped.
@@ -5273,7 +5279,7 @@ mod many_askers_tests {
                         let to = page + 1 + next((PAGES - page).min(3));
                         // Written through one view, asked about at another.
                         let (through, asked) = (all[next(VIEWS)], next(VIEWS));
-                        #[allow(unused_assignments)]
+                        #[allow(unused_assignments, reason = "the test writes each value it then asks about")]
                         let mut how = 0;
                         let (at, last) = (all[asked], &mut last[asked]);
                         if next(4) != 0 {

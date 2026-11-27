@@ -2,7 +2,10 @@
 //! privilege. Served as the user provider's objects from `QueryApiImpl`;
 //! adding a user completes through `xasync` like any other async call. No
 //! input device is associated with the user (there are none, `gameinput`).
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 
@@ -202,7 +205,7 @@ extern "system" fn resolve_privilege_result(_: This, block: *mut AsyncBlock) -> 
 /// The documented "failed to get token": tokens come from the service.
 pub const FAILED_TO_GET_TOKEN: HRESULT = 0x8924_5111_u32 as i32;
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, reason = "the signature is fixed by the API title code calls")]
 extern "system" fn token_async(
     _: This,
     _: Handle,

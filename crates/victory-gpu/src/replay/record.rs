@@ -1418,7 +1418,10 @@ unsafe fn clear_of(clear: *const D3D12_CLEAR_VALUE) -> Option<[u32; 5]> {
     (!clear.is_null()).then(|| unsafe { clear.cast::<[u32; 5]>().read() })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn create_committed(
     this: Ptr,
     props: *const D3D12_HEAP_PROPERTIES,
@@ -1442,7 +1445,10 @@ unsafe extern "system" fn create_committed(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn create_placed(
     this: Ptr,
     heap: Ptr,
@@ -1629,7 +1635,10 @@ unsafe extern "system" fn copy_descriptors_simple(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn copy_descriptors(
     this: Ptr,
     n_to: u32,
@@ -1910,7 +1919,10 @@ unsafe extern "system" fn resolve(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn resolve_region(
     this: Ptr,
     dst: Ptr,
@@ -2256,7 +2268,10 @@ unsafe extern "system" fn targets(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn clear_depth(
     this: Ptr,
     view: D3D12_CPU_DESCRIPTOR_HANDLE,

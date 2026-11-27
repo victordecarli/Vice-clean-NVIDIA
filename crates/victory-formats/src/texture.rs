@@ -626,7 +626,10 @@ impl Layout {
     }
 
     /// Copies contiguous runs in one direction between the two layouts.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the shared core of tile and detile, taking their arguments as they are"
+    )]
     fn walk<const DETILE: bool>(
         &self,
         src: &[u8],

@@ -25,7 +25,7 @@ macro_rules! wrapped {
             }
         }
 
-        #[allow(non_snake_case)]
+        #[allow(non_snake_case, reason = "the wrappers carry the exact names of the functions they stand in for")]
         mod wrappers {
             use super::*;
             $(

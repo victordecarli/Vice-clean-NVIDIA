@@ -5,7 +5,10 @@
 //! image and sampler descriptors, so a title that copies descriptors itself
 //! moves whole ones. Render target and depth views are ours alone; 128 bytes
 //! leaves room for whatever stride a title assumes.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use crate::object::{self, DESCRIPTOR_HEAP, E_INVALIDARG, HRESULT, Iid, Object, Table, This, guid};
 use crate::resource::{Memory, PAGEABLE_IIDS};
@@ -1666,7 +1669,10 @@ pub(crate) extern "system" fn copy_simple(_: This, count: u32, dst: u64, src: u6
 
 /// Device method: ranges of descriptors (start and count each) gathered
 /// from the sources and scattered to the destinations, in order.
-#[allow(clippy::too_many_arguments)] // the method's own arguments
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)] // the method's own arguments
 pub(crate) extern "system" fn copy(
     _: This,
     dst_ranges: u32,

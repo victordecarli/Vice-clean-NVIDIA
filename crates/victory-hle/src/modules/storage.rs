@@ -2,7 +2,10 @@
 //! (`runtime::Title::storage`, under the data directory, never the cache)
 //! with the quota its manifest declares, seen by the title as a drive
 //! (`files`).
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::path::Path;
 

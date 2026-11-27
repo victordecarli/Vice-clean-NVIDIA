@@ -4,7 +4,10 @@
 //! device methods in PC order); console additions follow. Methods we have
 //! not written log their table offset and fail, so a run shows what to
 //! write next.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::c_void;
 

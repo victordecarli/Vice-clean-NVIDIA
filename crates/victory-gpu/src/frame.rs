@@ -14,7 +14,10 @@
 //! once); unset, the title's interval as before. The loader gives the title
 //! the matching frame rate too (`victory_loader::frame_rate`), as the title
 //! would otherwise keep to its 30 with a limiter of its own.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};

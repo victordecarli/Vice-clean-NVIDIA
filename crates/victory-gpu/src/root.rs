@@ -4,7 +4,10 @@
 //! versioned form): the description is laid out as on PC, and the blob it
 //! returns works as the console's, whose two methods sit in the same slots.
 //! The console's own flags (bit 24 and up) are dropped first.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{CStr, c_void};
 use std::sync::OnceLock;

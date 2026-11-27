@@ -4,8 +4,14 @@
 //! give a title a network path outside `modules::net`): the handful of calls
 //! titles use are implemented here, and everything else stays refused as
 //! before.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (UuidCreate) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 

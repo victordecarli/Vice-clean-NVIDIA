@@ -18,8 +18,14 @@
 //! in order: a status entry is written once every request enqueued before
 //! it on its queue has finished, with the first failure (in queue order)
 //! since the previous status entry, or success.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (DStorageGetFactory) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};

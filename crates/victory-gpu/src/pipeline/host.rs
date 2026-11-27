@@ -381,7 +381,10 @@ pub(crate) struct HostPipeline {
     pub(crate) name: String,
     /// Its depth, stencil, cull and blend state in short, for the frame
     /// listing (empty for compute).
-    #[cfg_attr(not(feature = "diagnostics"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "diagnostics"),
+        allow(dead_code, reason = "only diagnostics builds list the state")
+    )]
     pub(crate) state: String,
 }
 

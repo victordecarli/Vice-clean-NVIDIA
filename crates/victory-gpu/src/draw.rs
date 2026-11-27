@@ -674,7 +674,10 @@ pub(crate) fn take_frame() -> Vec<String> {
 }
 
 /// The draws dropped since [`take_dropped`].
-#[cfg_attr(not(feature = "diagnostics"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "diagnostics"),
+    allow(dead_code, reason = "only diagnostics builds report the draws dropped")
+)]
 pub(crate) fn dropped_now() -> u64 {
     DROPPED.load(Ordering::Relaxed)
 }

@@ -6885,7 +6885,10 @@ impl<'a> Lower<'a> {
     // shortcut: an image whose kind nothing tells is taken for a 2D texture (the title's
     // reads are texel sizes of 2D textures: puddle masks, shadow masks); a host view of
     // another kind would answer its own sizes.
-    #[allow(clippy::type_complexity)]
+    #[allow(
+        clippy::type_complexity,
+        reason = "a lookup returning the descriptor kind and its parts, used once"
+    )]
     fn unused_descriptor_kind(
         &self,
         inst: &Inst,
@@ -9200,7 +9203,10 @@ impl<'a> Lower<'a> {
     /// signed zero (flushed, as the console's default float mode does).
     // The flush-to-zero form of v_cvt_f32_f64: kept beside the IEEE form in use until the console's
     // float mode for this instruction is checked.
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        reason = "the flush-to-zero form, kept until the console float mode is checked"
+    )]
     fn f64_bits_to_f32_bits(&mut self, lo: V, hi: V) -> V {
         let c = self.cur;
         let k = |l: &mut Self, x: u32| l.s.m.i32(x);
@@ -9412,7 +9418,10 @@ impl<'a> Lower<'a> {
         Some(self.valu16_op(inst, name, guard, FLOAT1, FLOAT2, FLOAT3))
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the operands and modifiers of one VOP3 16-bit operation"
+    )]
     fn valu16_op(
         &mut self,
         inst: &Inst,

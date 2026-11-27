@@ -268,7 +268,7 @@ pub fn make(dir: &Path, which: &[usize], mut each: impl FnMut(usize, Option<(f64
     }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, reason = "a parser of one file format, returning its parts")]
 fn parse(
     entry: &[u8],
     read: &mut impl FnMut(&[u8; 32]) -> Option<Vec<u8>>,

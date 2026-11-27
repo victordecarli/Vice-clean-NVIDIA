@@ -409,7 +409,7 @@ impl Word for f32 {
 /// and the call made of it later.
 macro_rules! plain {
     ($($op:ident $name:ident = $was:path, ($($a:ident: $t:ty),*);)*) => {
-        #[allow(clippy::upper_case_acronyms, non_camel_case_types)]
+        #[allow(clippy::upper_case_acronyms, non_camel_case_types, reason = "the variants are named after the D3D12.X operations they stand for")]
         #[repr(u64)]
         enum Plain { $($op),* , END }
         $(extern "system" fn $name(this: This $(, $a: $t)*) {
@@ -732,7 +732,10 @@ extern "system" fn copy_texture_region(
         &[bytes_of(dst, 1), bytes_of(src, 1), bytes_of(source_box, usize::from(boxed))],
     );
 }
-#[allow(clippy::too_many_arguments)] // the method's own arguments
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)] // the method's own arguments
 extern "system" fn copy_texture_region_x(
     this: This,
     dst: *const CopyLocation,

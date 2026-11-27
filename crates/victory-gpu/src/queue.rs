@@ -1,6 +1,9 @@
 //! Command queues. Submitted lists run on the host GPU and are waited for,
 //! so fence signals complete at once.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 

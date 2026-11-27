@@ -82,7 +82,7 @@ static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 static FINISHED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// A retired object, dropped on whatever thread finishes the submission.
-#[allow(dead_code)]
+#[allow(dead_code, reason = "the variants only hold objects until they are dropped")]
 enum Retired {
     Any(Box<dyn std::any::Any>),
     /// What a descriptor slot showed: 20,000 a frame, without a box each.
@@ -150,7 +150,7 @@ pub(crate) fn available_physical_ram() -> Option<u64> {
 /// (By those times everything idle for 2.5 s went from 75 % of the budget
 /// on: 61,000 of them in the first 300 s of session play-1125-0203, at 78 to
 /// 80 %, of which 13,000 were made and uploaded again.)
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(not(test), allow(dead_code, reason = "only the tests call it for now"))]
 pub(crate) fn vram_keep(budget: u64, used: u64) -> (u64, u64) {
     vram_keep_below(budget, used, budget / 100 * 90)
 }
@@ -1851,7 +1851,10 @@ pub(crate) fn dred_faults() -> bool {
 /// ends in, with their marker texts and the pipelines they bind: a report made
 /// on another thread than the one that submits has no lists of its own.
 #[cfg(feature = "diagnostics")]
-#[allow(clippy::type_complexity)]
+#[allow(
+    clippy::type_complexity,
+    reason = "three weak handles per list; a named type would be used once"
+)]
 static LIST_NOTES: Mutex<
     std::collections::BTreeMap<
         u32,
@@ -6555,7 +6558,10 @@ impl Host {
                         LIST_NOTES.lock().unwrap_or_else(|e| e.into_inner()).get(&n)?.2.upgrade()
                     });
                     #[cfg(not(feature = "diagnostics"))]
-                    #[allow(clippy::type_complexity)]
+                    #[allow(
+                        clippy::type_complexity,
+                        reason = "a local tuple of what the lookup found"
+                    )]
                     let by_name: Option<(
                         Option<()>,
                         Option<std::sync::Arc<Mutex<std::collections::BTreeSet<String>>>>,
@@ -10224,7 +10230,7 @@ impl Host {
     /// Shows `texture`, which is in `state` (a host state) and stays in it,
     /// as frame `frame` (saved if captures are on). `None` if nothing was
     /// shown; else, in diagnostics builds, whether the frame was black.
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "no caller since f5847e6; kept for upstream to decide")]
     pub(crate) fn present(&self, texture: &ID3D12Resource, state: u32, frame: u64) -> Option<bool> {
         self.present_planes(texture, state, None, frame)
     }

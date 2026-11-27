@@ -3,7 +3,10 @@
 //! needs the store service (catalog, consumables, purchase and update
 //! pages, collection ids, update checks) fails with the documented store
 //! network error.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 

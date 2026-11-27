@@ -5762,7 +5762,10 @@ pub(crate) fn window_cover() -> u64 {
 
 /// The bytes `windows` (start, bytes; in order of start) lie over, each
 /// byte once.
-#[cfg_attr(not(any(test, feature = "diagnostics")), allow(dead_code))]
+#[cfg_attr(
+    not(any(test, feature = "diagnostics")),
+    allow(dead_code, reason = "only tests and diagnostics builds measure the cover")
+)]
 fn cover(windows: impl Iterator<Item = (u64, u64)>) -> u64 {
     let (mut covered, mut reached) = (0, 0);
     for (start, bytes) in windows {
@@ -5976,7 +5979,10 @@ fn loose(address: u64, end: u64, unsized_ask: bool, any: bool) -> Option<Arc<Sha
 
 /// Copies of single buffer views' own bytes ([`exact`]), by (start,
 /// bytes), each with the asking that last took it; and the askings so far.
-#[allow(clippy::type_complexity)]
+#[allow(
+    clippy::type_complexity,
+    reason = "a lock around the copies and their count, used in this file only"
+)]
 static EXACT: Mutex<(u64, BTreeMap<(u64, u64), (Arc<Shadow>, u64)>)> =
     Mutex::new((0, BTreeMap::new()));
 

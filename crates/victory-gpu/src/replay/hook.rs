@@ -191,7 +191,10 @@ pub(super) const DEVICE: usize = 1;
 pub(super) const QUEUE: usize = 2;
 const CLASSES: usize = 3;
 
-#[allow(clippy::declare_interior_mutable_const)]
+#[allow(
+    clippy::declare_interior_mutable_const,
+    reason = "the array initialiser repeats the constant, a fresh atomic each"
+)]
 const ZERO: AtomicU64 = AtomicU64::new(0);
 static COUNTS: [AtomicU64; CLASSES * SLOTS] = [ZERO; CLASSES * SLOTS];
 

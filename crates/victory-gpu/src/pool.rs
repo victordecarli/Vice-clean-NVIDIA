@@ -190,7 +190,10 @@ struct Block<B> {
     /// The newest submission begun when it was made ([`Ripe`]).
     made: u64,
     /// When that was (ms).
-    #[cfg_attr(not(feature = "diagnostics"), allow(dead_code))]
+    #[cfg_attr(
+        not(feature = "diagnostics"),
+        allow(dead_code, reason = "only diagnostics builds report when")
+    )]
     since: u64,
 }
 
@@ -722,7 +725,10 @@ pub(crate) unsafe fn texture(
     if info.SizeInBytes == u64::MAX {
         return None;
     }
-    #[cfg_attr(not(feature = "diagnostics"), allow(unused_variables))]
+    #[cfg_attr(
+        not(feature = "diagnostics"),
+        allow(unused_variables, reason = "only diagnostics builds report the piece and heap")
+    )]
     let (piece, heap, again) = lock(&TEXTURES).take_ripe(
         info.SizeInBytes,
         info.Alignment.max(1),

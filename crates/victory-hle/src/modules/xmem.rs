@@ -2,10 +2,16 @@
 //! from CPU addresses (unified memory), so memory types and bandwidth
 //! classes change nothing here; what constrains addresses (alignment,
 //! 2 MiB pages, address-bit limits) is honoured.
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (XMemVirtualAlloc) that title imports are bound by"
+)]
 // Title code calls these through its import table, passing pointers the real
 // API would trust.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::alloc::{Layout, alloc, dealloc};
 use std::collections::{BTreeMap, HashMap};

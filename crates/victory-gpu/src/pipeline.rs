@@ -14,7 +14,10 @@
 //! and the plain graphics description, keep their containers only. The 32-byte
 //! packet after the header stays zero: titles only copy it inline, which
 //! our null command-list limits keep from running.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::HashMap;
 use std::mem::offset_of;
@@ -82,7 +85,10 @@ static KEPT: [std::sync::atomic::AtomicU64; 4] =
 /// the library's file (kept whole while the library lives) and what its
 /// last save wrote.
 #[cfg(windows)]
-#[cfg_attr(not(feature = "diagnostics"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "diagnostics"),
+    allow(dead_code, reason = "only diagnostics builds report the saved pipelines")
+)]
 pub(crate) fn kept() -> [u64; 7] {
     use std::sync::atomic::Ordering::Relaxed;
     [

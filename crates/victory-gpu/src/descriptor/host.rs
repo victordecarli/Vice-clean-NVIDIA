@@ -1444,7 +1444,10 @@ impl TextureQueue {
     /// with fingerprint `print`: looked at again from frame `due`, for a
     /// title that fills a texture's memory after it wrote the view (the
     /// `looks`-th such look; `uploaded` is the upload's frame).
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the upload and the look it rechecks, as the queue keeps them"
+    )]
     fn recheck(
         &mut self,
         index: u32,
@@ -2465,7 +2468,7 @@ impl HostHeap {
     }
 
     /// Title slot `index` was uploaded whole: see [`TextureQueue::recheck`].
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, reason = "passes TextureQueue::recheck its arguments")]
     pub(crate) fn texture_slot_recheck(
         &self,
         index: u32,
