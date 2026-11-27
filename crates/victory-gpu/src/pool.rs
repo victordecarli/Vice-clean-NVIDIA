@@ -691,7 +691,7 @@ fn give_back_with(texture: &ID3D12Resource, piece: Piece) {
         if texture.SetPrivateDataInterface(&KEY, &object).is_err() {
             // Never given back: the piece stays taken, nothing is reused
             // under a texture that may be alive.
-            std::mem::forget(object);
+            let _ = std::mem::ManuallyDrop::new(object);
         }
     }
 }

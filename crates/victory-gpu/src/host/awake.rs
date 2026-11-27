@@ -83,7 +83,7 @@ pub(super) fn sent(device: &ID3D12Device) {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
         // Runs as long as the process does.
-        std::mem::forget(start(device, wanted));
+        let _ = std::mem::ManuallyDrop::new(start(device, wanted));
     });
 }
 

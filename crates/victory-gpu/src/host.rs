@@ -6037,7 +6037,7 @@ impl Host {
             first => {
                 if let Some(first) = first {
                     HEAP_SYNC_FIRST[1].fetch_add(1, Ordering::Relaxed);
-                    std::mem::forget(first);
+                    let _ = std::mem::ManuallyDrop::new(first);
                 }
                 if heaps_mark != 0 && !waited_for_flights {
                     crate::descriptor::begin_sync_heaps_after(heaps_mark)

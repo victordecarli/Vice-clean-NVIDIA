@@ -228,7 +228,7 @@ fn watch(object: &ID3D12Object, id: u64) {
     unsafe {
         let notice = IUnknown::from_raw(notice.cast());
         if object.SetPrivateDataInterface(&KEY, &notice).is_err() {
-            std::mem::forget(notice);
+            let _ = std::mem::ManuallyDrop::new(notice);
         }
     }
 }

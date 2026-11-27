@@ -582,7 +582,7 @@ impl Recorder {
                 // The memory goes whatever we hold: letting go of it later
                 // would be a call into what is there then.
                 if let Some(dead) = lock(&self.held).remove(&id) {
-                    std::mem::forget(dead);
+                    let _ = std::mem::ManuallyDrop::new(dead);
                     self.problem(
                         "a resource died as the frame started: its contents may be missing",
                     );
@@ -625,7 +625,7 @@ impl Recorder {
                 .and_then(|o| o.SetPrivateDataInterface(&KEY, &notice));
             if set.is_err() {
                 self.problem("an object's end cannot be followed");
-                std::mem::forget(notice);
+                let _ = std::mem::ManuallyDrop::new(notice);
             }
         }
     }

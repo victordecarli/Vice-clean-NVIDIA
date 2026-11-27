@@ -2205,7 +2205,7 @@ void main(uint3 g : SV_GroupID, uint i : SV_GroupIndex) {
                         }
                     }
                     // The lists sent last may read them: the process goes next.
-                    std::mem::forget(alive);
+                    let _ = std::mem::ManuallyDrop::new(alive);
                 });
             }
             let lost = loop {

@@ -704,7 +704,7 @@ impl Menu {
         let _ours = crate::replay::record::unrecorded();
         let scale = (height / 540).max(1);
         if self.buffers.as_ref().is_none_or(|b| (b.format, b.scale) != (format, scale)) {
-            std::mem::forget(self.buffers.take());
+            let _ = std::mem::ManuallyDrop::new(self.buffers.take());
             self.buffers = Buffers::new(host, format, scale);
             self.failed = self.buffers.is_none();
             self.changed = true;

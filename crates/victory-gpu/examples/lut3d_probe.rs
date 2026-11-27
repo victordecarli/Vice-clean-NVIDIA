@@ -219,8 +219,8 @@ fn main() -> windows::core::Result<()> {
             let p: ID3D12PipelineState =
                 library.LoadComputePipeline(windows::core::w!("probe"), &desc)?;
             println!("probe pipeline loaded from the library");
-            std::mem::forget(bytes); // the library points into them
-            std::mem::forget(library);
+            let _ = std::mem::ManuallyDrop::new(bytes); // the library points into them
+            let _ = std::mem::ManuallyDrop::new(library);
             p
         } else {
             let p = pso(&probe)?;
@@ -600,8 +600,8 @@ fn main() -> windows::core::Result<()> {
                 let library: ID3D12PipelineLibrary = device1.CreatePipelineLibrary(&bytes)?;
                 let p = library.LoadComputePipeline(windows::core::w!("probe66"), &desc66)?;
                 println!("probe66 loaded from the library");
-                std::mem::forget(bytes);
-                std::mem::forget(library);
+                let _ = std::mem::ManuallyDrop::new(bytes);
+                let _ = std::mem::ManuallyDrop::new(library);
                 p
             } else {
                 let p: ID3D12PipelineState = device.CreateComputePipelineState(&desc66)?;

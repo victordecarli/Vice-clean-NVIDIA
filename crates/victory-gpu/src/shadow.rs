@@ -4972,7 +4972,7 @@ impl Shadow {
             });
         }
         let shadow = Arc::new(shadow);
-        std::mem::forget(shadow.clone());
+        let _ = std::mem::ManuallyDrop::new(shadow.clone());
         shadow
     }
 
