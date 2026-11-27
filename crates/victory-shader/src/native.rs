@@ -820,9 +820,9 @@ fn ms_io(data: &[u8], lds_bytes: u32) -> Result<StageIo, ShaderError> {
     }))
 }
 
-/// For entries already sized by `as_chunks`.
-fn le32(entry: &[u8], at: usize) -> u32 {
-    u32::from_le_bytes(entry[at..at + 4].try_into().unwrap())
+/// The dword at `at` (0, 4, 8, 12, ...) of a root-table entry.
+fn le32<const N: usize>(entry: &[u8; N], at: usize) -> u32 {
+    u32::from_le_bytes([entry[at], entry[at + 1], entry[at + 2], entry[at + 3]])
 }
 
 /// `data[offset..offset + len]` with untrusted 64-bit bounds.

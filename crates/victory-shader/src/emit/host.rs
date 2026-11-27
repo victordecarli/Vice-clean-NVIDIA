@@ -336,8 +336,13 @@ impl Host {
         ps: &[u8],
     ) -> Result<ID3D12PipelineState, String> {
         let inputs = sig(vs, FourCC::ISG1)?;
-        let names: Vec<CString> =
-            inputs.iter().map(|e| CString::new(e.name.clone()).unwrap()).collect();
+        let names = inputs
+            .iter()
+            .map(|e| {
+                CString::new(e.name.clone())
+                    .map_err(|err| format!("input semantic {:?}: {err}", e.name))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let layout: Vec<D3D12_INPUT_ELEMENT_DESC> = inputs
             .iter()
             .zip(&names)

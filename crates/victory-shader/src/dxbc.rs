@@ -71,7 +71,7 @@ impl<'a> Container<'a> {
         if data.len() < HEADER_SIZE || &data[0..4] != b"DXBC" {
             return Err(ShaderError::NotDxbc);
         }
-        let digest = data[4..20].try_into().expect("16 bytes");
+        let digest = array_at(data, 4).ok_or(ShaderError::NotDxbc)?;
         let version = (u16_at(data, 0x14)?, u16_at(data, 0x16)?);
         let total = u32_at(data, 0x18)? as usize;
         if total > data.len() || total < HEADER_SIZE {
@@ -86,10 +86,8 @@ impl<'a> Container<'a> {
         for i in 0..count {
             let offset = u32_at(data, HEADER_SIZE + 4 * i)? as usize;
             let fourcc = FourCC(
-                data.get(offset..offset + 4)
-                    .ok_or(ShaderError::Malformed("part header out of bounds"))?
-                    .try_into()
-                    .expect("4 bytes"),
+                array_at(data, offset)
+                    .ok_or(ShaderError::Malformed("part header out of bounds"))?,
             );
             let size = u32_at(data, offset + 4)? as usize;
             let body = data
@@ -105,22 +103,21 @@ impl<'a> Container<'a> {
     }
 }
 
+/// The `N` bytes at `at`, or `None` when they run past the end.
+pub(crate) fn array_at<const N: usize>(data: &[u8], at: usize) -> Option<[u8; N]> {
+    data.get(at..)?.first_chunk().copied()
+}
+
 pub(crate) fn u16_at(data: &[u8], at: usize) -> Result<u16, ShaderError> {
-    data.get(at..at + 2)
-        .map(|b| u16::from_le_bytes(b.try_into().expect("2 bytes")))
-        .ok_or(ShaderError::Malformed("truncated"))
+    array_at(data, at).map(u16::from_le_bytes).ok_or(ShaderError::Malformed("truncated"))
 }
 
 pub(crate) fn u32_at(data: &[u8], at: usize) -> Result<u32, ShaderError> {
-    data.get(at..at + 4)
-        .map(|b| u32::from_le_bytes(b.try_into().expect("4 bytes")))
-        .ok_or(ShaderError::Malformed("truncated"))
+    array_at(data, at).map(u32::from_le_bytes).ok_or(ShaderError::Malformed("truncated"))
 }
 
 pub(crate) fn u64_at(data: &[u8], at: usize) -> Result<u64, ShaderError> {
-    data.get(at..at + 8)
-        .map(|b| u64::from_le_bytes(b.try_into().expect("8 bytes")))
-        .ok_or(ShaderError::Malformed("truncated"))
+    array_at(data, at).map(u64::from_le_bytes).ok_or(ShaderError::Malformed("truncated"))
 }
 
 /// Builds a container from parts (test helper).
@@ -171,5 +168,30 @@ mod tests {
         assert!(Container::parse(&bytes).is_err());
         bytes.truncate(last);
         assert!(Container::parse(&bytes).is_err());
+    }
+
+    #[test]
+    fn rejects_a_part_header_past_the_end() {
+        let mut bytes = build(&[(FourCC::SFI0, &[0; 8])]);
+        // The part's fourcc starts two bytes before the end of the container.
+        let at = u32::try_from(bytes.len() - 2).unwrap();
+        bytes[0x20..0x24].copy_from_slice(&at.to_le_bytes());
+        assert_eq!(
+            Container::parse(&bytes).unwrap_err(),
+            ShaderError::Malformed("part header out of bounds")
+        );
+    }
+
+    #[test]
+    fn reads_fields_only_inside_the_data() {
+        let data = [1u8, 0, 0, 0, 0, 0, 0, 0, 2];
+        assert_eq!(u16_at(&data, 0), Ok(1u16));
+        assert_eq!(u32_at(&data, 0), Ok(1u32));
+        assert_eq!(u64_at(&data, 1), Ok(0x0200_0000_0000_0000u64));
+        let truncated = ShaderError::Malformed("truncated");
+        assert_eq!(u16_at(&data, 8).unwrap_err(), truncated);
+        assert_eq!(u32_at(&data, 6).unwrap_err(), truncated);
+        assert_eq!(u64_at(&data, 2).unwrap_err(), truncated);
+        assert_eq!(u32_at(&data, usize::MAX).unwrap_err(), truncated);
     }
 }

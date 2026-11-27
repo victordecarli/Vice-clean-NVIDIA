@@ -307,7 +307,11 @@ impl Bools {
         let before = *budget;
         *budget -= 1;
         let top = |code: u32| self.nodes[(code >> 1) as usize].0;
-        let v = work[at..].iter().map(|&c| top(c)).min().expect("not empty");
+        // Not empty (`kept == at` returned above); were it, every lane would meet it.
+        let Some(v) = work[at..].iter().map(|&c| top(c)).min() else {
+            work.truncate(at);
+            return true;
+        };
         let mut found = false;
         for value in [false, true] {
             for i in at..end {
