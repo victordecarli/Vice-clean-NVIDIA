@@ -1438,6 +1438,10 @@ fn alias_as(to: u64, from: u64, len: u64, runs_in_one: bool, lazy: bool) -> bool
                         && map_as(&mut physical, base, len, slices[k].clone(), true)
                 };
             if !one {
+                #[allow(
+                    clippy::needless_range_loop,
+                    reason = "the page number gives the address as well as the slice"
+                )]
                 for page in k..k + run {
                     if !map(&mut physical, to + page * PAGE, PAGE, slices[page].clone()) {
                         return false;

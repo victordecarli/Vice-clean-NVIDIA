@@ -578,8 +578,8 @@ impl Ctx<'_> {
                     if p.blocks[some].preds[..] != [u.0] || !self.dominates(some, h) {
                         return Err((self.at(u), SHAPE));
                     }
-                    for b in 0..n {
-                        pre[b] = self.dominates(some, b) && !self.dominates(h, b);
+                    for (b, before) in pre.iter_mut().enumerate() {
+                        *before = self.dominates(some, b) && !self.dominates(h, b);
                     }
                     for b in (0..n).filter(|&b| pre[b]) {
                         let inside = match p.blocks[b].exit {
@@ -722,6 +722,10 @@ impl Ctx<'_> {
         let mut tainted = |b: Bool| -> bool {
             *seen.entry(b).or_insert_with(|| st.bools.support(b).iter().any(|a| dep.contains(a)))
         };
+        #[allow(
+            clippy::needless_range_loop,
+            reason = "b is a block number, read in several per-block tables"
+        )]
         for b in 0..n {
             if lp[b] && tests.iter().any(|&(_, tb, _)| self.dominates(tb, b)) {
                 continue;

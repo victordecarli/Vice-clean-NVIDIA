@@ -527,10 +527,10 @@ mod tests {
         let product: abi::Float4x4 = std::array::from_fn(|r| {
             std::array::from_fn(|c| (0..4).map(|k| standard[r][k] * inverse[k][c]).sum())
         });
-        for r in 0..4 {
-            for c in 0..4 {
+        for (r, row) in product.iter().enumerate() {
+            for (c, &got) in row.iter().enumerate() {
                 let want = if r == c { 1.0 } else { 0.0 };
-                assert!((product[r][c] - want).abs() < 1e-4, "{r} {c} {}", product[r][c]);
+                assert!((got - want).abs() < 1e-4, "{r} {c} {got}");
             }
         }
         assert_eq!(invert(&[[0.0; 4]; 4]), None);

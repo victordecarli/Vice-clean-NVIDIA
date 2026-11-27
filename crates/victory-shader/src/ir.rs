@@ -347,6 +347,10 @@ fn unspill(
         read.push(from);
     }
     let leader = |i: usize| leaders.binary_search(&list[i].offset).is_ok();
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "reg is the register number the parks are matched against"
+    )]
     for reg in 0..256 {
         let Some(last) = other[reg] else { continue };
         let of = |p: &Option<(bool, u8, u8, u32)>| p.filter(|p| usize::from(p.1) == reg);
@@ -473,6 +477,10 @@ fn unspill(
             }
         } else {
             let mut of: HashMap<(u8, u32), usize> = HashMap::new();
+            #[allow(
+                clippy::needless_range_loop,
+                reason = "i is the instruction number the slot and the first table share"
+            )]
             for i in 0..list.len() {
                 if let Some(s) = slot(i) {
                     first[i] = *of.entry(s).or_insert(i);
@@ -895,6 +903,10 @@ pub(crate) fn without_skips(p: &Program, deep: bool) -> Option<Program> {
     };
     let mut blocks = p.blocks.clone();
     let mut any = false;
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "b is a block number, read in several per-block tables"
+    )]
     for b in 0..n {
         let Exit::Branch { taken, not_taken } = p.blocks[b].exit else {
             continue;

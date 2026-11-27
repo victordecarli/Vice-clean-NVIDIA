@@ -1272,9 +1272,7 @@ mod relay_tests {
             snap[at..at + n].copy_from_slice(&title[at..at + n]);
         }
         // The card starts B: it has written 32..36 so far, over A's 32..34.
-        for at in 32..36 {
-            copy[at] = 0xb0;
-        }
+        copy[32..36].fill(0xb0);
         // A lands (B still on the card): its range is merged. The copy is
         // read once and not written.
         let seen = copy.clone();
@@ -1291,13 +1289,9 @@ mod relay_tests {
             assert_eq!(title[at], 0xa0, "A's byte at {at}");
         }
         assert_eq!((title[8], title[9], title[20], title[50]), (0x77, 0x77, 0x77, 0x77));
-        for at in 32..36 {
-            assert_eq!(title[at], 0xb0, "B's byte so far at {at}");
-        }
+        assert_eq!(title[32..36], [0xb0; 4], "B's bytes so far");
         // The card finishes B: 36..44.
-        for at in 36..44 {
-            copy[at] = 0xb1;
-        }
+        copy[36..44].fill(0xb1);
         // The title's CPU writes 40 after B's shader did: found against
         // the snapshot at the next preparing, which is before B lands.
         title[40] = 0x55;
@@ -1314,9 +1308,7 @@ mod relay_tests {
             title[b.0..b.1].copy_from_slice(&t);
         }
         // B's results are there, never replaced by A's older ones.
-        for at in 32..36 {
-            assert_eq!(title[at], 0xb0);
-        }
+        assert_eq!(title[32..36], [0xb0; 4]);
         for at in (36..40).chain(41..44) {
             assert_eq!(title[at], 0xb1, "B's byte at {at}");
         }
@@ -1342,9 +1334,7 @@ mod relay_tests {
         let base: Vec<u8> = (0..N as u32).map(|i| (i + 100) as u8).collect();
         let (mut card, mut cpu, mut title) = (base.clone(), base.clone(), base.clone());
         // Flight A's shaders write 10..14 on the card.
-        for at in 10..14 {
-            card[at] = 0xa0;
-        }
+        card[10..14].fill(0xa0);
         // The title's CPU writes 12 (over A's) and 30; the preparing of
         // the next submission puts both into the CPU's side and notes them
         // to go up (send 5). They are not on the card yet.

@@ -818,6 +818,10 @@ mod tests {
         menu.started = menu.values.clone();
         for note in ["", "SAVED"] {
             menu.note = note.to_owned();
+            #[allow(
+                clippy::needless_range_loop,
+                reason = "the position is set on the menu and compared, not only an index"
+            )]
             for at in 0..ITEMS.len() + ACTIONS.len() {
                 menu.at = at;
                 let lines = menu.lines();
