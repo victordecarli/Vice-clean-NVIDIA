@@ -122,13 +122,8 @@ pub extern "system" fn XGCreateTextureComputer(
         "texture computer"
     );
     let mips = texture.planes[0].layout.mips.len() as u32;
-    let computer = Box::new(Computer {
-        vtable: &VTABLE,
-        refs: AtomicU32::new(1),
-        desc,
-        mips,
-        texture,
-    });
+    let computer =
+        Box::new(Computer { vtable: &VTABLE, refs: AtomicU32::new(1), desc, mips, texture });
     // SAFETY: checked non-null.
     unsafe { out.write(Box::into_raw(computer)) };
     S_OK
@@ -354,13 +349,7 @@ fn copy_args(
     let bytes = m.width as usize * l.desc.element_bytes as usize;
     let depths = l.subresource_depth(mip) as usize;
     let linear = (depths - 1) * depth as usize + (m.height as usize - 1) * row as usize + bytes;
-    Some(CopyArgs {
-        layout: l,
-        mip,
-        slice,
-        tiled: (p.offset + l.size) as usize,
-        linear,
-    })
+    Some(CopyArgs { layout: l, mip, slice, tiled: (p.offset + l.size) as usize, linear })
 }
 
 fn result(r: Result<(), Error>) -> HRESULT {
@@ -396,9 +385,7 @@ extern "system" fn copy_into(
             std::slice::from_raw_parts(linear, a.linear),
         )
     };
-    let r = a
-        .layout
-        .tile(tiled, a.mip, a.slice, linear, row as usize, depth as usize);
+    let r = a.layout.tile(tiled, a.mip, a.slice, linear, row as usize, depth as usize);
     if r.is_err() {
         tracing::warn!(?r, desc = ?c.desc, subresource, "copy into a texture failed");
     }
@@ -433,9 +420,7 @@ extern "system" fn copy_from(
             std::slice::from_raw_parts_mut(linear, a.linear),
         )
     };
-    let r = a
-        .layout
-        .detile(tiled, a.mip, a.slice, linear, row as usize, depth as usize);
+    let r = a.layout.detile(tiled, a.mip, a.slice, linear, row as usize, depth as usize);
     if r.is_err() {
         tracing::warn!(?r, desc = ?c.desc, subresource, "copy out of a texture failed");
     }
@@ -516,12 +501,7 @@ extern "system" fn tiling(
                 let (slice, mip) = ((first + i) / standard, (first + i) % standard);
                 let m = &l.mips[mip as usize];
                 let entry = if tail && slice > 0 {
-                    SubresourceTiling {
-                        width: 0,
-                        height: 0,
-                        depth: 0,
-                        start: 0,
-                    }
+                    SubresourceTiling { width: 0, height: 0, depth: 0, start: 0 }
                 } else {
                     SubresourceTiling {
                         width: m.pitch / l.block[0],
@@ -582,29 +562,26 @@ struct Vtable([*const (); 13]);
 unsafe impl Sync for Vtable {}
 
 static VTABLE: Vtable = Vtable([
-    add_ref as *const (),   // 0x00
-    release as *const (),   // 0x08
-    layout as *const (),    // 0x10
-    unused as *const (),    // 0x18 size
-    unused as *const (),    // 0x20 alignment
-    unused as *const (),    // 0x28 mip offset
+    add_ref as *const (),        // 0x00
+    release as *const (),        // 0x08
+    layout as *const (),         // 0x10
+    unused as *const (),         // 0x18 size
+    unused as *const (),         // 0x20 alignment
+    unused as *const (),         // 0x28 mip offset
     element_offset as *const (), // 0x30
-    unused as *const (),    // 0x38 element coordinate
-    copy_into as *const (), // 0x40
-    copy_from as *const (), // 0x48
-    tiling as *const (),    // 0x50
-    unused as *const (),    // 0x58 view descriptor
-    unused as *const (),    // 0x60 tiled resource?
+    unused as *const (),         // 0x38 element coordinate
+    copy_into as *const (),      // 0x40
+    copy_from as *const (),      // 0x48
+    tiling as *const (),         // 0x50
+    unused as *const (),         // 0x58 view descriptor
+    unused as *const (),         // 0x60 tiled resource?
 ]);
 
 pub(crate) fn module() -> HleModule {
     HleModule {
         name: "xg",
         dlls: &["xg_xs.dll"],
-        exports: vec![
-            hle_export!(XGCreateTextureComputer),
-            hle_export!(XGSuggestSwizzleMode),
-        ],
+        exports: vec![hle_export!(XGCreateTextureComputer), hle_export!(XGSuggestSwizzleMode)],
     }
 }
 
@@ -680,10 +657,7 @@ mod tests {
         let mut l: Box<LayoutOut> = Box::new(unsafe { std::mem::zeroed() });
         let get: extern "system" fn(This, *mut LayoutOut) -> HRESULT = slot(c, 2);
         assert_eq!(get(c, &mut *l), S_OK);
-        assert_eq!(
-            (l.size, l.alignment, l.mips, l.planes),
-            (131072, 65536, 9, 1)
-        );
+        assert_eq!((l.size, l.alignment, l.mips, l.planes), (131072, 65536, 9, 1));
         let p = &l.plane[0];
         assert_eq!((p.standard_mips, p.tail_mips, p.element_bytes), (1, 8, 16));
         assert_eq!((p.mips[0].offset, p.mips[0].pitch_bytes), (65536, 1024));
@@ -698,15 +672,9 @@ mod tests {
             let m = &p.mips[mip as usize];
             let row = m.elements[0] * 16;
             let rows: Vec<u8> = (0..row * m.elements[1]).map(|i| (i ^ mip) as u8).collect();
-            assert_eq!(
-                into(c, tiled.as_mut_ptr(), 0, mip, rows.as_ptr(), row, 0),
-                S_OK
-            );
+            assert_eq!(into(c, tiled.as_mut_ptr(), 0, mip, rows.as_ptr(), row, 0), S_OK);
             let mut back = vec![0u8; rows.len()];
-            assert_eq!(
-                from(c, back.as_mut_ptr(), 0, mip, 0, tiled.as_ptr(), row, 0),
-                S_OK
-            );
+            assert_eq!(from(c, back.as_mut_ptr(), 0, mip, 0, tiled.as_ptr(), row, 0), S_OK);
             assert_eq!(back, rows, "mip {mip}");
         }
         // 0x50: one tile for the tail, one for mip 0.
@@ -721,36 +689,14 @@ mod tests {
         ) -> HRESULT;
         let tiling: Tiling = slot(c, 10);
         let (mut tiles, mut shape, mut n) = (0, [0; 3], 4);
-        let mut packed = PackedMips {
-            standard: 0,
-            packed: 0,
-            tiles: 0,
-            start: 0,
-        };
-        let mut subs: Vec<SubresourceTiling> = (0..4)
-            .map(|_| SubresourceTiling {
-                width: 0,
-                height: 0,
-                depth: 0,
-                start: 0,
-            })
-            .collect();
+        let mut packed = PackedMips { standard: 0, packed: 0, tiles: 0, start: 0 };
+        let mut subs: Vec<SubresourceTiling> =
+            (0..4).map(|_| SubresourceTiling { width: 0, height: 0, depth: 0, start: 0 }).collect();
         assert_eq!(
-            tiling(
-                c,
-                &mut tiles,
-                &mut packed,
-                &mut shape,
-                &mut n,
-                0,
-                subs.as_mut_ptr()
-            ),
+            tiling(c, &mut tiles, &mut packed, &mut shape, &mut n, 0, subs.as_mut_ptr()),
             S_OK
         );
-        assert_eq!(
-            (tiles, packed.standard, packed.packed, packed.tiles),
-            (2, 1, 8, 1)
-        );
+        assert_eq!((tiles, packed.standard, packed.packed, packed.tiles), (2, 1, 8, 1));
         assert_eq!((shape, n, subs[0].start), ([256, 256, 1], 1, 1));
         assert_eq!(release(c), 0);
 
@@ -758,15 +704,7 @@ mod tests {
         let null = std::ptr::null_mut::<u8>();
         let c = create(&desc(256, 256, 0, 98, 0x105));
         assert_eq!(
-            tiling(
-                c,
-                &mut tiles,
-                null.cast(),
-                null.cast(),
-                null.cast(),
-                0,
-                null.cast()
-            ),
+            tiling(c, &mut tiles, null.cast(), null.cast(), null.cast(), 0, null.cast()),
             E_FAIL
         );
         assert_eq!(release(c), 0);

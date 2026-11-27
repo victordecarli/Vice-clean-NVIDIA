@@ -102,7 +102,10 @@ fn claim(resource: This, first: u32, there: u64) -> Option<Taken> {
     let copy = crate::resource::host_copy(resource)?;
     if copy.ahead.load(Relaxed) == PENDING {
         let way = ON_THEIR_WAY.lock().unwrap_or_else(|e| e.into_inner());
-        return way.iter().find(|(serial, _)| *serial == copy.serial).map(|(_, job)| Taken::Known(job.clone()));
+        return way
+            .iter()
+            .find(|(serial, _)| *serial == copy.serial)
+            .map(|(_, job)| Taken::Known(job.clone()));
     }
     let most = if crate::residency::limited_host_ram() { 32 << 20 } else { MOST };
     if !crate::residency::allow_staging_growth(false)
@@ -131,9 +134,21 @@ fn claim(resource: This, first: u32, there: u64) -> Option<Taken> {
         return turned_down();
     };
     if super::no_wait() && super::fill_unlocked() {
-        staging.expected.store(if there == u64::MAX { super::mapped_bytes(staging.memory, staging.read) } else { there }, Relaxed);
+        staging.expected.store(
+            if there == u64::MAX {
+                super::mapped_bytes(staging.memory, staging.read)
+            } else {
+                there
+            },
+            Relaxed,
+        );
     }
-    let job = Arc::new(Job { staging, copy, asked: std::time::Instant::now(), then: Mutex::new(Some(Vec::new())) });
+    let job = Arc::new(Job {
+        staging,
+        copy,
+        asked: std::time::Instant::now(),
+        then: Mutex::new(Some(Vec::new())),
+    });
     BYTES.fetch_add(job.staging.read as u64, Relaxed);
     {
         let mut way = ON_THEIR_WAY.lock().unwrap_or_else(|e| e.into_inner());
@@ -177,8 +192,13 @@ pub(crate) fn listed(copy: &HostTexture) {
     STATS[5].fetch_add(1, Relaxed);
     let mut way = ON_THEIR_WAY.lock().unwrap_or_else(|e| e.into_inner());
     let started = std::time::Instant::now();
-    while way.iter().any(|(serial, _)| *serial == copy.serial) && started.elapsed().as_millis() < 1000 {
-        way = LANDED.wait_timeout(way, std::time::Duration::from_millis(50)).unwrap_or_else(|e| e.into_inner()).0;
+    while way.iter().any(|(serial, _)| *serial == copy.serial)
+        && started.elapsed().as_millis() < 1000
+    {
+        way = LANDED
+            .wait_timeout(way, std::time::Duration::from_millis(50))
+            .unwrap_or_else(|e| e.into_inner())
+            .0;
     }
 }
 
@@ -205,7 +225,10 @@ fn workers() -> Option<&'static ID3D12CommandQueue> {
             };
             for n in 0..2 {
                 let worker = Worker::new(&host.device, queue.clone()).ok()?;
-                std::thread::Builder::new().name(format!("uploads ahead {n}")).spawn(move || worker.work()).ok()?;
+                std::thread::Builder::new()
+                    .name(format!("uploads ahead {n}"))
+                    .spawn(move || worker.work())
+                    .ok()?;
             }
             Some(Queue(queue))
         })
@@ -227,11 +250,17 @@ impl Worker {
     fn new(device: &ID3D12Device, queue: ID3D12CommandQueue) -> windows::core::Result<Worker> {
         // SAFETY: plain object creation.
         unsafe {
-            let allocator: ID3D12CommandAllocator = device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY)?;
+            let allocator: ID3D12CommandAllocator =
+                device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY)?;
             let list: ID3D12GraphicsCommandList =
                 device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, &allocator, None)?;
             list.Close()?;
-            Ok(Worker { queue, allocator, list, fence: device.CreateFence(0, D3D12_FENCE_FLAG_NONE)? })
+            Ok(Worker {
+                queue,
+                allocator,
+                list,
+                fence: device.CreateFence(0, D3D12_FENCE_FLAG_NONE)?,
+            })
         }
     }
 
@@ -245,7 +274,8 @@ impl Worker {
                     queue = QUEUE.1.wait(queue).unwrap_or_else(|e| e.into_inner());
                 }
                 let mut bytes = 0;
-                while bytes < BATCH.0 && jobs.len() < BATCH.1
+                while bytes < BATCH.0
+                    && jobs.len() < BATCH.1
                     && let Some(job) = queue.pop_front()
                 {
                     bytes += job.staging.read as u64;
@@ -276,7 +306,8 @@ impl Worker {
             self.queue.ExecuteCommandLists(&[Some(self.list.cast()?)]);
             self.queue.Signal(&self.fence, value)?;
             // (Without an event: this waits.)
-            self.fence.SetEventOnCompletion(value, windows::Win32::Foundation::HANDLE::default())?;
+            self.fence
+                .SetEventOnCompletion(value, windows::Win32::Foundation::HANDLE::default())?;
         }
         Ok(())
     }
@@ -292,14 +323,19 @@ impl Job {
                 // SAFETY: a borrowed pointer the location never releases.
                 pResource: unsafe { std::mem::transmute_copy(texture) },
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: s.first - s.level0 + i as u32 },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
+                    SubresourceIndex: s.first - s.level0 + i as u32,
+                },
             };
             let from = D3D12_TEXTURE_COPY_LOCATION {
                 // SAFETY: as above.
                 pResource: unsafe { std::mem::transmute_copy(&s.buffer) },
                 Type: D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
                 Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    PlacedFootprint: D3D12_PLACED_SUBRESOURCE_FOOTPRINT { Offset: s.base + footprint.Offset, ..*footprint },
+                    PlacedFootprint: D3D12_PLACED_SUBRESOURCE_FOOTPRINT {
+                        Offset: s.base + footprint.Offset,
+                        ..*footprint
+                    },
                 },
             };
             // SAFETY: the caller's.
@@ -369,13 +405,18 @@ mod tests {
     /// first on its way, and a later one is the list's.
     #[test]
     fn a_placed_texture_is_filled_ahead_of_the_lists() {
-        use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+        use windows_sys::Win32::System::Memory::{
+            MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc,
+        };
         let Some(host) = crate::host::host() else { return };
         // 256x256 BC7, nine levels.
         let desc = [3u32, 0, 0, 0, 256, 0, 256, 0x9_0001, 98, 1, 0, 0x105, 0, 0];
         let whole = crate::resource::placed_bytes(&desc).unwrap() as usize;
         // SAFETY: memory of our own that stays.
-        let at = unsafe { VirtualAlloc(std::ptr::null(), whole, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) }.cast::<u8>();
+        let at = unsafe {
+            VirtualAlloc(std::ptr::null(), whole, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+        }
+        .cast::<u8>();
         // SAFETY: as above.
         unsafe { (0..whole).for_each(|i| at.add(i).write((i * 13 + i / 509) as u8)) };
         let texture = crate::resource::texture_at(at as u64, &desc).unwrap();
@@ -398,7 +439,9 @@ mod tests {
         assert!(there(texture) && claim(texture, 0, u64::MAX).is_none());
         // Level 0 as the card has it, and as the layout says.
         let layout = crate::resource::texture_memory(texture)
-            .and_then(|(_, d)| crate::resource::texture_layout(&d).map(|t| t.planes[0].layout.clone()))
+            .and_then(|(_, d)| {
+                crate::resource::texture_layout(&d).map(|t| t.planes[0].layout.clone())
+            })
             .unwrap();
         let (pitch, rows) = (1024usize, 64usize);
         let mut expected = vec![0u8; pitch * rows];
@@ -447,12 +490,17 @@ mod tests {
     #[test]
     fn drain_waits_until_then_callbacks_have_run() {
         use std::sync::atomic::AtomicBool;
-        use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+        use windows_sys::Win32::System::Memory::{
+            MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc,
+        };
         let Some(_host) = crate::host::host() else { return };
         let desc = [3u32, 0, 0, 0, 128, 0, 128, 0x8_0001, 98, 1, 0, 0x105, 0, 0];
         let whole = crate::resource::placed_bytes(&desc).unwrap() as usize;
         // SAFETY: memory of our own that stays for the test.
-        let at = unsafe { VirtualAlloc(std::ptr::null(), whole, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) }.cast::<u8>();
+        let at = unsafe {
+            VirtualAlloc(std::ptr::null(), whole, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+        }
+        .cast::<u8>();
         // SAFETY: as above.
         unsafe { std::ptr::write_bytes(at, 0x5a, whole) };
         let texture = crate::resource::texture_at(at as u64, &desc).unwrap();
@@ -467,7 +515,10 @@ mod tests {
         job.then(move || flag.store(true, std::sync::atomic::Ordering::Release));
         send(&job);
         assert!(drain() >= 1);
-        assert!(ran.load(std::sync::atomic::Ordering::Acquire), "job.then callback must run before drain() returns");
+        assert!(
+            ran.load(std::sync::atomic::Ordering::Acquire),
+            "job.then callback must run before drain() returns"
+        );
         assert_eq!(drain(), 0);
     }
 }

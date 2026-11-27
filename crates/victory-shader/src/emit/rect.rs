@@ -70,9 +70,7 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
     if outputs.iter().any(|e| e.row.is_none()) {
         return Err(unsupported("a rectangle list output without a register"));
     }
-    let Some(position) = outputs
-        .iter()
-        .position(|e| e.kind == 3 && e.comp == 9 && e.cols == 4)
+    let Some(position) = outputs.iter().position(|e| e.kind == 3 && e.comp == 9 && e.cols == 4)
     else {
         return Err(unsupported("a rectangle list without a four-component position"));
     };
@@ -88,9 +86,7 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
         e.usage = (1 << e.cols) - 1;
     }
     let mut s = Shader::new(false);
-    s.geometry = Some(Geometry {
-        max_vertices: VERTICES,
-    });
+    s.geometry = Some(Geometry { max_vertices: VERTICES });
     s.inputs = outputs.clone();
     // The primitive id the pixel shader declares, as one more output.
     let wanted = ps_inputs
@@ -109,11 +105,7 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
                     "a rectangle list whose primitive id shares a register with a vertex output",
                 ));
             }
-            outputs.push(SigElement {
-                interp: 1,
-                usage: (1 << e.cols) - 1,
-                ..e.clone()
-            });
+            outputs.push(SigElement { interp: 1, usage: (1 << e.cols) - 1, ..e.clone() });
             Some(outputs.len() - 1)
         }
         None => None,
@@ -138,11 +130,7 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
     }
 
     // One positive w, and no two vertices in one place.
-    let (x, y, w) = (
-        corners[position][0],
-        corners[position][1],
-        corners[position][3],
-    );
+    let (x, y, w) = (corners[position][0], corners[position][1], corners[position][3]);
     let zero = s.m.f32(0);
     let mut plain = s.m.cmp(b, pred::OGT, w[0], zero);
     for &other in &w[1..] {
@@ -183,9 +171,8 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
             // value; the second triangle of the latter is then empty.
             let mut fourth = p0;
             if float {
-                for (k, (a, c, at)) in [(p1, p2, p0), (p2, p0, p1), (p0, p1, p2)]
-                    .into_iter()
-                    .enumerate()
+                for (k, (a, c, at)) in
+                    [(p1, p2, p0), (p2, p0, p1), (p0, p1, p2)].into_iter().enumerate()
                 {
                     let sum = s.m.bin(b, Bin::Add, a, c);
                     let opposite = s.m.bin(b, Bin::Sub, sum, at);
@@ -212,18 +199,9 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
     let stream = s.m.i8(0);
     for vertex in 0..VERTICES as usize {
         for (id, columns) in emitted.iter().enumerate() {
-            let name = if s.outputs[id].comp == 9 {
-                "storeOutput.f32"
-            } else {
-                "storeOutput.i32"
-            };
+            let name = if s.outputs[id].comp == 9 { "storeOutput.f32" } else { "storeOutput.i32" };
             for (col, values) in columns.iter().enumerate() {
-                let args = [
-                    s.m.i32(id as u32),
-                    s.m.i32(0),
-                    s.m.i8(col as u8),
-                    values[vertex],
-                ];
+                let args = [s.m.i32(id as u32), s.m.i32(0), s.m.i8(col as u8), values[vertex]];
                 s.op(b, name, Attr::NoUnwind, s.t.void, 5, &args);
             }
         }
@@ -248,12 +226,7 @@ fn load(s: &mut Shader, id: usize, col: u8, vertex: u32) -> V {
     } else {
         ("loadInput.i32", s.t.i32)
     };
-    let args = [
-        s.m.i32(id as u32),
-        s.m.i32(0),
-        s.m.i8(col),
-        s.m.i32(vertex),
-    ];
+    let args = [s.m.i32(id as u32), s.m.i32(0), s.m.i8(col), s.m.i32(vertex)];
     let entry = s.entry;
     s.op(entry, name, Attr::ReadNone, ty, 4, &args)
 }
@@ -358,40 +331,17 @@ mod tests {
     /// pixel shader that writes the float4.
     #[cfg(windows)]
     fn pass_through() -> (super::super::HostShader, super::super::HostShader) {
-        let position = SigElement {
-            interp: 4,
-            usage: 15,
-            ..element("SV_Position", 0, 3, 9, 0, 4)
-        };
-        let coord = SigElement {
-            interp: 2,
-            usage: 15,
-            ..element("TEXCOORD", 0, 0, 9, 1, 4)
-        };
+        let position = SigElement { interp: 4, usage: 15, ..element("SV_Position", 0, 3, 9, 0, 4) };
+        let coord = SigElement { interp: 2, usage: 15, ..element("TEXCOORD", 0, 0, 9, 1, 4) };
         let mut vs = Shader::new(false);
         vs.inputs = vec![
-            SigElement {
-                usage: 15,
-                ..element("POSITION", 0, 0, 9, 0, 4)
-            },
-            SigElement {
-                interp: 0,
-                ..coord.clone()
-            },
+            SigElement { usage: 15, ..element("POSITION", 0, 0, 9, 0, 4) },
+            SigElement { interp: 0, ..coord.clone() },
         ];
         vs.outputs = vec![position.clone(), coord.clone()];
         let mut ps = Shader::new(true);
-        ps.inputs = vec![
-            SigElement {
-                usage: 0,
-                ..position
-            },
-            coord,
-        ];
-        ps.outputs = vec![SigElement {
-            usage: 15,
-            ..element("SV_Target", 0, 16, 9, 0, 4)
-        }];
+        ps.inputs = vec![SigElement { usage: 0, ..position }, coord];
+        ps.outputs = vec![SigElement { usage: 15, ..element("SV_Target", 0, 16, 9, 0, 4) }];
         // Vertex: output id from input id. Pixel: target 0 from input 1.
         for (s, copies) in [(&mut vs, &[(0, 0), (1, 1)][..]), (&mut ps, &[(1, 0)][..])] {
             let b = s.entry;
@@ -416,10 +366,7 @@ mod tests {
             root_uavs: Vec::new(),
             root_indexed_views: Vec::new(),
         };
-        (
-            host(crate::native::HwStage::Vs, vs),
-            host(crate::native::HwStage::Ps, ps),
-        )
+        (host(crate::native::HwStage::Vs, vs), host(crate::native::HwStage::Ps, ps))
     }
 
     /// Three corners of the whole target, the corner between the other two
@@ -453,9 +400,7 @@ mod tests {
         ] {
             let vertices = corners.map(vertex).concat();
             let draw = |gs: Option<&[u8]>| {
-                let pso = host
-                    .pipeline_with_gs(&root, &vs.dxil, gs, &ps.dxil)
-                    .unwrap();
+                let pso = host.pipeline_with_gs(&root, &vs.dxil, gs, &ps.dxil).unwrap();
                 let d = Draw {
                     roots: Vec::new(),
                     textures: &[],

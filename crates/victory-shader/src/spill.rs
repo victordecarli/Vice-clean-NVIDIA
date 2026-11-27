@@ -275,8 +275,7 @@ pub fn user_data(p: &mut Program, native: &NativeProgram) -> usize {
         read.extend(block.phis.iter().flat_map(|phi| phi.args.iter().copied()));
         read.extend(block.insts.iter().flat_map(|i| i.reads.iter().map(|r| r.1)));
     }
-    p.inputs
-        .retain(|&(reg, v)| !matches!(reg, Reg::S(0 | 1)) || read.contains(&v));
+    p.inputs.retain(|&(reg, v)| !matches!(reg, Reg::S(0 | 1)) || read.contains(&v));
     gone.len()
 }
 
@@ -286,14 +285,7 @@ mod tests {
     use crate::native::{ComputeIo, RootParam, RootType};
 
     fn param(root: RootType, user_data: u8, sgprs: u32, slot: u8) -> RootParam {
-        RootParam {
-            root,
-            table_offset_dwords: 0,
-            sgprs,
-            base_register: 0,
-            user_data,
-            slot,
-        }
+        RootParam { root, table_offset_dwords: 0, sgprs, base_register: 0, user_data, slot }
     }
 
     /// A compute program with `registers` user SGPRs and the group id after
@@ -305,10 +297,7 @@ mod tests {
             vgprs: 256,
             layout,
             used: vec![],
-            io: StageIo::Cs(ComputeIo {
-                rsrc2: registers << 1 | 1 << 7,
-                threads: [1, 1, 1],
-            }),
+            io: StageIo::Cs(ComputeIo { rsrc2: registers << 1 | 1 << 7, threads: [1, 1, 1] }),
             code: words.iter().flat_map(|w| w.to_le_bytes()).collect(),
         }
     }

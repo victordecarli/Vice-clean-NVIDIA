@@ -93,18 +93,10 @@ impl ThunkBlock {
         let len = (count.max(1) * THUNK_SIZE).next_multiple_of(4096);
         // SAFETY: fresh anonymous allocation; no existing memory is touched.
         let base = unsafe {
-            VirtualAlloc(
-                std::ptr::null(),
-                len,
-                MEM_COMMIT | MEM_RESERVE,
-                PAGE_READWRITE,
-            )
+            VirtualAlloc(std::ptr::null(), len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
         } as *mut u8;
         if base.is_null() {
-            bail!(
-                "VirtualAlloc for import stubs failed: {}",
-                std::io::Error::last_os_error()
-            );
+            bail!("VirtualAlloc for import stubs failed: {}", std::io::Error::last_os_error());
         }
         Ok(ThunkBlock { base, len, used: 0 })
     }
@@ -138,10 +130,7 @@ impl ThunkBlock {
         // SAFETY: `base..base+len` is the allocation made in `new`.
         let ok = unsafe { VirtualProtect(self.base as _, self.len, PAGE_EXECUTE_READ, &mut old) };
         if ok == 0 {
-            bail!(
-                "VirtualProtect for import stubs failed: {}",
-                std::io::Error::last_os_error()
-            );
+            bail!("VirtualProtect for import stubs failed: {}", std::io::Error::last_os_error());
         }
         // SAFETY: flushing our own process's instruction cache for our own block.
         unsafe { FlushInstructionCache(GetCurrentProcess(), self.base as _, self.len) };

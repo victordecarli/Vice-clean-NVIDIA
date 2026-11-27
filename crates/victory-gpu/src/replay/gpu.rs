@@ -46,9 +46,8 @@ impl Worker {
             let i = match self.lists.iter().position(|l| l.2 <= done) {
                 Some(i) => i,
                 None => {
-                    let allocator: ID3D12CommandAllocator = self
-                        .device
-                        .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
+                    let allocator: ID3D12CommandAllocator =
+                        self.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
                     let list: ID3D12GraphicsCommandList = self.device.CreateCommandList(
                         0,
                         D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -106,10 +105,7 @@ pub(super) fn buffer_desc(size: u64, flags: D3D12_RESOURCE_FLAGS) -> D3D12_RESOU
         Height: 1,
         DepthOrArraySize: 1,
         MipLevels: 1,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
         Flags: flags,
         ..Default::default()
@@ -123,10 +119,7 @@ pub(super) fn buffer(
     size: u64,
     flags: D3D12_RESOURCE_FLAGS,
 ) -> Result<(ID3D12Resource, *mut u8)> {
-    let heap = D3D12_HEAP_PROPERTIES {
-        Type: kind,
-        ..Default::default()
-    };
+    let heap = D3D12_HEAP_PROPERTIES { Type: kind, ..Default::default() };
     let state = match kind {
         D3D12_HEAP_TYPE_UPLOAD => D3D12_RESOURCE_STATE_GENERIC_READ,
         D3D12_HEAP_TYPE_READBACK => D3D12_RESOURCE_STATE_COPY_DEST,
@@ -165,11 +158,8 @@ pub(super) fn subresources(d: &wire::Desc) -> u32 {
     if d.dimension == D3D12_RESOURCE_DIMENSION_BUFFER.0 {
         return 1;
     }
-    let layers = if d.dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D.0 {
-        1
-    } else {
-        u32::from(d.depth)
-    };
+    let layers =
+        if d.dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D.0 { 1 } else { u32::from(d.depth) };
     u32::from(d.mips.max(1)) * layers.max(1) * planes(d.format)
 }
 
@@ -205,9 +195,7 @@ pub(super) fn sub_location(res: &ID3D12Resource, sub: u32) -> D3D12_TEXTURE_COPY
         // SAFETY: a borrowed pointer the location never releases.
         pResource: unsafe { std::mem::transmute_copy(res) },
         Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-        Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-            SubresourceIndex: sub,
-        },
+        Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: sub },
     }
 }
 
@@ -278,10 +266,7 @@ pub(super) fn to_desc(d: &wire::Desc) -> D3D12_RESOURCE_DESC {
         DepthOrArraySize: d.depth,
         MipLevels: d.mips,
         Format: DXGI_FORMAT(d.format),
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: d.samples[0],
-            Quality: d.samples[1],
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: d.samples[0], Quality: d.samples[1] },
         Layout: D3D12_TEXTURE_LAYOUT(d.layout),
         Flags: D3D12_RESOURCE_FLAGS(d.flags),
     }
@@ -312,11 +297,7 @@ pub(super) fn to_props(p: &wire::HeapProps) -> D3D12_HEAP_PROPERTIES {
 }
 
 pub(super) fn from_props(p: &D3D12_HEAP_PROPERTIES) -> wire::HeapProps {
-    wire::HeapProps {
-        kind: p.Type.0,
-        cpu: p.CPUPageProperty.0,
-        pool: p.MemoryPoolPreference.0,
-    }
+    wire::HeapProps { kind: p.Type.0, cpu: p.CPUPageProperty.0, pool: p.MemoryPoolPreference.0 }
 }
 
 /// How the CPU sees memory of a heap.
@@ -366,11 +347,7 @@ pub(super) fn rgb(
             31 => 65536.0,
             e => (1.0 + m / 1024.0) * 2f32.powi(i32::from(e) - 15),
         };
-        if s == 1 {
-            0
-        } else {
-            (v.min(1.0) * 255.0) as u8
-        }
+        if s == 1 { 0 } else { (v.min(1.0) * 255.0) as u8 }
     };
     for y in 0..height as usize {
         let row = rows.get(y * pitch as usize..)?;
@@ -400,11 +377,7 @@ pub(super) fn rgb(
 /// Peak signal-to-noise ratio of two pictures of 8-bit channels, in dB
 /// (infinite if equal).
 pub(super) fn psnr(a: &[u8], b: &[u8]) -> f64 {
-    let sum: u64 = a
-        .iter()
-        .zip(b)
-        .map(|(&x, &y)| u64::from(x.abs_diff(y)).pow(2))
-        .sum();
+    let sum: u64 = a.iter().zip(b).map(|(&x, &y)| u64::from(x.abs_diff(y)).pow(2)).sum();
     if sum == 0 && a.len() == b.len() {
         return f64::INFINITY;
     }
@@ -424,11 +397,7 @@ pub(super) fn adapter(device: &ID3D12Device) -> (String, u32, u32) {
     match desc {
         Ok(d) => {
             let name = String::from_utf16_lossy(&d.Description);
-            (
-                name.trim_end_matches('\0').to_owned(),
-                d.VendorId,
-                d.DeviceId,
-            )
+            (name.trim_end_matches('\0').to_owned(), d.VendorId, d.DeviceId)
         }
         Err(_) => ("unknown".into(), 0, 0),
     }
@@ -445,10 +414,7 @@ mod tests {
         let v = (1023u32 | 512 << 10).to_le_bytes();
         assert_eq!(rgb(1, 1, 4, 24, &v).unwrap(), [255, 128, 0]);
         // 1.0, 0.5 and -1.0 as halves.
-        assert_eq!(
-            rgb(1, 1, 8, 10, &[0, 0x3c, 0, 0x38, 0, 0xbc, 0, 0]).unwrap(),
-            [255, 127, 0]
-        );
+        assert_eq!(rgb(1, 1, 8, 10, &[0, 0x3c, 0, 0x38, 0, 0xbc, 0, 0]).unwrap(), [255, 127, 0]);
         assert!(rgb(1, 1, 4, 41, &[0; 4]).is_none());
         assert!(rgb(2, 2, 8, 28, &[0; 12]).is_none(), "too few rows");
         assert_eq!(psnr(&[1, 2], &[1, 2]), f64::INFINITY);

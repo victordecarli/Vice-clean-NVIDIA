@@ -68,10 +68,7 @@ pub fn mount(root: &Path) -> Option<char> {
 /// drive of that letter is hidden from the title.
 pub fn mount_at(letter: char, root: &Path) {
     let letter = letter.to_ascii_uppercase();
-    let Some(index) = u32::from(letter)
-        .checked_sub(u32::from('A'))
-        .filter(|i| *i < 26)
-    else {
+    let Some(index) = u32::from(letter).checked_sub(u32::from('A')).filter(|i| *i < 26) else {
         return;
     };
     // SAFETY: no arguments.
@@ -87,11 +84,7 @@ pub fn mount_at(letter: char, root: &Path) {
 /// path joined to it: it is the title's folder when the title is run by its
 /// file name alone (`victory run GTA6.exe`).
 fn root_wide(root: &Path) -> Vec<u16> {
-    let root = if root.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        root
-    };
+    let root = if root.as_os_str().is_empty() { Path::new(".") } else { root };
     let root = std::path::absolute(root).unwrap_or_else(|_| root.to_owned());
     let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
     while wide.len() > 3 && wide.last().is_some_and(|c| SEPARATORS.contains(c)) {
@@ -172,13 +165,11 @@ pub(crate) fn translate(path: &[u16]) -> Option<Vec<u16>> {
         out.push(b'\\'.into());
     }
     let verbatim = !prefix.is_empty();
-    out.extend(tail.iter().map(|&c| {
-        if verbatim && c == u16::from(b'/') {
-            b'\\'.into()
-        } else {
-            c
-        }
-    }));
+    out.extend(tail.iter().map(
+        |&c| {
+            if verbatim && c == u16::from(b'/') { b'\\'.into() } else { c }
+        },
+    ));
     out.push(0);
     Some(out)
 }
@@ -547,13 +538,20 @@ pub extern "system" fn ReadFile(
     // refresh that guards its blocks before it does will not see it.
     if done == 0 && error == windows_sys::Win32::Foundation::ERROR_IO_PENDING {
         static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| tracing::info!(len, "ReadFile: a read of the title's goes on after the call"));
+        ONCE.call_once(|| {
+            tracing::info!(len, "ReadFile: a read of the title's goes on after the call")
+        });
     }
     if done == 0 && error == windows_sys::Win32::Foundation::ERROR_NOACCESS {
         static FAILED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = FAILED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         if n.is_power_of_two() {
-            tracing::warn!(n, buffer = format_args!("{buffer:p}"), len, "ReadFile: the title's buffer could not be written");
+            tracing::warn!(
+                n,
+                buffer = format_args!("{buffer:p}"),
+                len,
+                "ReadFile: the title's buffer could not be written"
+            );
         }
     }
     drop(writing);
@@ -752,14 +750,8 @@ pub(crate) fn module() -> HleModule {
             hle_export!(remove),
             hle_export!(_wchmod),
             hle_export!(_wutime64),
-            HleExport {
-                name: FIOPEN,
-                address: fiopen as *const () as usize,
-            },
-            HleExport {
-                name: FIOPEN_WIDE,
-                address: fiopen_wide as *const () as usize,
-            },
+            HleExport { name: FIOPEN, address: fiopen as *const () as usize },
+            HleExport { name: FIOPEN_WIDE, address: fiopen_wide as *const () as usize },
         ],
     }
 }
@@ -828,23 +820,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_string_lossy().into_owned();
         let letter = mount(dir.path()).unwrap();
-        assert_eq!(
-            mount(dir.path()),
-            Some(letter),
-            "mounting twice reuses the letter"
-        );
+        assert_eq!(mount(dir.path()), Some(letter), "mounting twice reuses the letter");
         let tr = |s: String| translate(&w(&s)[..s.encode_utf16().count()]).map(|v| text(&v));
-        assert_eq!(
-            tr(format!("{letter}:/a/b.txt")),
-            Some(format!("{root}/a/b.txt"))
-        );
+        assert_eq!(tr(format!("{letter}:/a/b.txt")), Some(format!("{root}/a/b.txt")));
         let lower = letter.to_ascii_lowercase();
         assert_eq!(tr(format!("{lower}:\\a")), Some(format!("{root}\\a")));
         assert_eq!(tr(format!("{letter}:")), Some(format!("{root}\\")));
-        assert_eq!(
-            tr(format!(r"\\?\{letter}:/a/b")),
-            Some(format!(r"\\?\{root}\a\b"))
-        );
+        assert_eq!(tr(format!(r"\\?\{letter}:/a/b")), Some(format!(r"\\?\{root}\a\b")));
         assert_eq!(tr(r"C:\Windows".into()), None);
         assert_eq!(tr("relative/path".into()), None);
         assert_eq!(tr(String::new()), None);
@@ -911,15 +893,7 @@ mod tests {
 
         let path = w(&format!(r"{letter}:\created.bin"));
         let null = std::ptr::null_mut();
-        let h = CreateFileW(
-            path.as_ptr(),
-            GENERIC_WRITE,
-            0,
-            null,
-            CREATE_ALWAYS,
-            0,
-            null,
-        );
+        let h = CreateFileW(path.as_ptr(), GENERIC_WRITE, 0, null, CREATE_ALWAYS, 0, null);
         assert_ne!(h as isize, -1);
         close(h);
         assert!(dir.path().join("created.bin").is_file());
@@ -1011,10 +985,8 @@ mod tests {
         assert!(fiopen(path("d.txt").as_ptr().cast(), OUT, 0x40).is_null());
 
         // Nothing was made behind a path rewritten twice.
-        let names: Vec<_> = std::fs::read_dir(&folder)
-            .unwrap()
-            .map(|e| e.unwrap().file_name())
-            .collect();
+        let names: Vec<_> =
+            std::fs::read_dir(&folder).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(names, ["present.txt"]);
     }
 }

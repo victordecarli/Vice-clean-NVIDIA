@@ -36,12 +36,8 @@ use super::xgameruntime::{Guid, HRESULT, Methods, Object, S_OK, add_ref, missing
 use crate::{HleModule, hle_export};
 
 /// The factory interface the title asks for.
-const FACTORY: Guid = Guid::new(
-    0x6295_9d11,
-    0xd45f,
-    0x4884,
-    [0xa0, 0xa3, 0xf7, 0x86, 0x2e, 0xa2, 0x43, 0xae],
-);
+const FACTORY: Guid =
+    Guid::new(0x6295_9d11, 0xd45f, 0x4884, [0xa0, 0xa3, 0xf7, 0x86, 0x2e, 0xa2, 0x43, 0xae]);
 const E_NOINTERFACE: HRESULT = 0x8000_4002_u32 as i32;
 const E_OUTOFMEMORY: HRESULT = 0x8007_000E_u32 as i32;
 /// `HRESULT_FROM_WIN32(ERROR_HANDLE_EOF)`: the source ends early.
@@ -77,12 +73,7 @@ struct Instance<T> {
 
 impl<T> Instance<T> {
     fn create(base: Object, state: T) -> *mut c_void {
-        Box::into_raw(Box::new(Instance {
-            base,
-            refs: AtomicU32::new(1),
-            state,
-        }))
-        .cast()
+        Box::into_raw(Box::new(Instance { base, refs: AtomicU32::new(1), state })).cast()
     }
 }
 
@@ -108,9 +99,7 @@ fn iid_text(iid: *const Guid) -> String {
 
 /// `HRESULT_FROM_WIN32` of a host error.
 fn from_win32(error: &std::io::Error) -> HRESULT {
-    error
-        .raw_os_error()
-        .map_or(E_INVALIDARG, |e| (0x8007_0000 | (e as u32 & 0xffff)) as i32)
+    error.raw_os_error().map_or(E_INVALIDARG, |e| (0x8007_0000 | (e as u32 & 0xffff)) as i32)
 }
 
 // The factory.
@@ -166,12 +155,7 @@ extern "system" fn create_status_array(
     iid: *const Guid,
     out: Out,
 ) -> HRESULT {
-    tracing::info!(
-        capacity,
-        name = text(name),
-        iid = iid_text(iid),
-        "dstorage: status array"
-    );
+    tracing::info!(capacity, name = text(name), iid = iid_text(iid), "dstorage: status array");
     let entries = (0..capacity).map(|_| AtomicI32::new(S_OK)).collect();
     let written = (0..capacity).map(|_| AtomicU64::new(0)).collect();
     let array = Instance::create(
@@ -221,10 +205,7 @@ extern "system" fn create_queue(
     let lane = Lane::new(desc.priority, desc.capacity);
     lanes.lanes.insert(id, lane);
     drop(lanes);
-    put(
-        out,
-        Instance::create(Object::new("dstorage queue", &QUEUE_VTABLE), Queue { id }),
-    )
+    put(out, Instance::create(Object::new("dstorage queue", &QUEUE_VTABLE), Queue { id }))
 }
 
 /// The title asks for 32 MiB and stops if this fails. Give PC worker threads
@@ -250,9 +231,7 @@ fn text(name: *const c_char) -> String {
         return String::new();
     }
     // SAFETY: a NUL-terminated name from the title.
-    unsafe { CStr::from_ptr(name) }
-        .to_string_lossy()
-        .into_owned()
+    unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned()
 }
 
 static FACTORY_VTABLE: Methods<16> = Methods([
@@ -339,7 +318,9 @@ impl Files {
 
     /// Reads at `offset`; as [`FileExt::seek_read`].
     fn read_at(&self, out: &mut [u8], offset: u64) -> std::io::Result<usize> {
-        use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED};
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED,
+        };
         let flags = match self.io {
             Io::One | Io::Handles => 0,
             Io::Overlapped => FILE_FLAG_OVERLAPPED,
@@ -414,12 +395,19 @@ fn read_overlapped(file: &std::fs::File, out: &mut [u8], offset: u64) -> std::io
         // SAFETY: `out` and `overlapped` stay until the read is done, which
         // is waited for.
         let mut read = unsafe {
-            ReadFile(file.as_raw_handle(), out.as_mut_ptr(), len, std::ptr::null_mut(), &mut overlapped)
+            ReadFile(
+                file.as_raw_handle(),
+                out.as_mut_ptr(),
+                len,
+                std::ptr::null_mut(),
+                &mut overlapped,
+            )
         } != 0;
         let mut error = std::io::Error::last_os_error();
         if read || error.raw_os_error() == Some(ERROR_IO_PENDING as i32) {
             // SAFETY: as above.
-            read = unsafe { GetOverlappedResult(file.as_raw_handle(), &overlapped, &mut n, 1) } != 0;
+            read =
+                unsafe { GetOverlappedResult(file.as_raw_handle(), &overlapped, &mut n, 1) } != 0;
             error = std::io::Error::last_os_error();
         }
         match error.raw_os_error() {
@@ -484,9 +472,7 @@ type Array = *mut Instance<StatusArray>;
 extern "system" fn status_result(this: Array, index: u32) -> HRESULT {
     // SAFETY: an array we created and the title still holds.
     let entries = &unsafe { &*this }.state.entries;
-    entries
-        .get(index as usize)
-        .map_or(E_INVALIDARG, |e| e.load(Ordering::Acquire))
+    entries.get(index as usize).map_or(E_INVALIDARG, |e| e.load(Ordering::Acquire))
 }
 
 /// The title polls this (entry 0, a `Sleep(1)` loop) and never
@@ -496,7 +482,9 @@ extern "system" fn is_complete(this: Array, index: u32) -> bool {
     if done && stream_log::on() {
         // SAFETY: as above.
         let written = &unsafe { &*this }.state.written;
-        if let Some(at) = written.get(index as usize).map(|w| w.swap(0, Ordering::Relaxed)).filter(|&at| at != 0) {
+        if let Some(at) =
+            written.get(index as usize).map(|w| w.swap(0, Ordering::Relaxed)).filter(|&at| at != 0)
+        {
             stream_log::line(format_args!("P\t{:x}\t{at}\t{}", this as usize, stream_log::now()));
         }
     }
@@ -656,7 +644,10 @@ impl Scheduler {
 fn walls_trace() -> u8 {
     static ON: OnceLock<u8> = OnceLock::new();
     *ON.get_or_init(|| {
-        std::env::var("VICTORY_WALLS_TRACE").ok().and_then(|v| v.trim().parse::<u8>().ok()).unwrap_or(0)
+        std::env::var("VICTORY_WALLS_TRACE")
+            .ok()
+            .and_then(|v| v.trim().parse::<u8>().ok())
+            .unwrap_or(0)
     })
 }
 
@@ -753,7 +744,8 @@ pub(crate) mod stream_log {
             return;
         }
         let now = now();
-        let ago = |t: Option<std::time::Instant>| now - t.map_or(0, |t| t.elapsed().as_millis() as u64);
+        let ago =
+            |t: Option<std::time::Instant>| now - t.map_or(0, |t| t.elapsed().as_millis() as u64);
         let r = &job.request;
         line(format_args!(
             "R\t{}\t{}\t{:x}\t{}\t{}\t{}\t{:x}\t{}\t{}\t{}\t{now}\t{:x}",
@@ -824,7 +816,8 @@ impl Lanes {
                 reading_workers = format_args!("{:.2}", reading / elapsed.as_secs_f64()),
                 staging_waits = std::mem::take(&mut self.refused),
                 bcpack_mb = self.bcpack.0 / 1_000_000,
-                bcpack_workers = format_args!("{:.2}", self.bcpack.1.as_secs_f64() / elapsed.as_secs_f64()),
+                bcpack_workers =
+                    format_args!("{:.2}", self.bcpack.1.as_secs_f64() / elapsed.as_secs_f64()),
                 waiting,
                 "dstorage: last {:.1} s",
                 elapsed.as_secs_f64()
@@ -861,13 +854,7 @@ impl Lanes {
         self.clock[class] += size * COST[class];
         self.lane_now[class] = lane.clock;
         lane.clock += size;
-        Some(Job {
-            lane: id,
-            seq,
-            request,
-            note,
-            staging,
-        })
+        Some(Job { lane: id, seq, request, note, staging })
     }
 
     fn finish(&mut self, job: &Job, result: Result<(), HRESULT>) {
@@ -889,11 +876,7 @@ impl Lanes {
         };
         // A class that had nothing waiting starts from now, not from the
         // credit it left behind.
-        if !self
-            .lanes
-            .values()
-            .any(|l| l.class == class && !l.reads.is_empty())
-        {
+        if !self.lanes.values().any(|l| l.class == class && !l.reads.is_empty()) {
             self.clock[class] = self.clock[class].max(self.now);
         }
         let Some(lane) = self.lanes.get_mut(&id) else {
@@ -949,17 +932,16 @@ impl Lane {
                 return;
             };
             let later = self.failures.split_off(&seq);
-            let first = std::mem::replace(&mut self.failures, later)
-                .into_values()
-                .next();
+            let first = std::mem::replace(&mut self.failures, later).into_values().next();
             if stream_log::on() {
                 let at = stream_log::now();
-                stream_log::line(format_args!("S\t{:x}\t{seq}\t{}\t{at}", status.array as usize, status.enqueued));
+                stream_log::line(format_args!(
+                    "S\t{:x}\t{seq}\t{}\t{at}",
+                    status.array as usize, status.enqueued
+                ));
                 status.written().store(at, Ordering::Relaxed);
             }
-            status
-                .entry()
-                .store(first.unwrap_or(S_OK), Ordering::Release);
+            status.entry().store(first.unwrap_or(S_OK), Ordering::Release);
         }
     }
 }
@@ -991,10 +973,7 @@ fn close_lane(id: u64) {
     lane.reads.clear();
     lane.statuses.clear(); // releases their arrays
     while lanes.lanes.get(&id).is_some_and(|l| !l.running.is_empty()) {
-        lanes = scheduler
-            .finished
-            .wait(lanes)
-            .unwrap_or_else(|e| e.into_inner());
+        lanes = scheduler.finished.wait(lanes).unwrap_or_else(|e| e.into_inner());
     }
     lanes.lanes.remove(&id);
     scheduler.finished.notify_all();
@@ -1054,7 +1033,10 @@ struct Read {
 fn trace() -> u8 {
     static ON: OnceLock<u8> = OnceLock::new();
     *ON.get_or_init(|| {
-        std::env::var("VICTORY_DSTORAGE_TRACE").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(0)
+        std::env::var("VICTORY_DSTORAGE_TRACE")
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0)
     })
 }
 
@@ -1074,7 +1056,9 @@ struct Note {
 impl Note {
     fn enqueued(request: &Request) -> Note {
         match trace() {
-            0 if stream_log::on() => Note { enqueued: Some(std::time::Instant::now()), ..Note::default() },
+            0 if stream_log::on() => {
+                Note { enqueued: Some(std::time::Instant::now()), ..Note::default() }
+            }
             0 => Note::default(),
             _ => Note {
                 enqueued: Some(std::time::Instant::now()),
@@ -1099,7 +1083,10 @@ impl Note {
 fn list_hash(request: &Request) -> u64 {
     list_of(request).map_or(0, |pages| {
         // FNV-1a; never 0.
-        pages.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, &p| (h ^ p as u64).wrapping_mul(0x100_0000_01b3)) | 1
+        pages
+            .iter()
+            .fold(0xcbf2_9ce4_8422_2325_u64, |h, &p| (h ^ p as u64).wrapping_mul(0x100_0000_01b3))
+            | 1
     })
 }
 
@@ -1137,7 +1124,10 @@ fn trace_batch(queue: u64, commands: &[Command], early: bool) {
         to_pages,
         lists_filled_since_enqueued = filled,
         lists_not_filled = empty,
-        oldest_ms = reads().next().and_then(|r| r.note.enqueued).map_or(0, |t| t.elapsed().as_millis() as u64),
+        oldest_ms = reads()
+            .next()
+            .and_then(|r| r.note.enqueued)
+            .map_or(0, |t| t.elapsed().as_millis() as u64),
         "dstorage trace: a batch"
     );
 }
@@ -1333,10 +1323,7 @@ fn queue(this: QueueRef, command: Command) {
             scheduler.work.notify_all();
             continue;
         }
-        lanes = scheduler
-            .finished
-            .wait(lanes)
-            .unwrap_or_else(|e| e.into_inner());
+        lanes = scheduler.finished.wait(lanes).unwrap_or_else(|e| e.into_inner());
     }
     let Some(lane) = lanes.lanes.get_mut(&id) else {
         return;
@@ -1543,13 +1530,13 @@ const READ_RETRIES: u32 = 8;
 fn read_into(request: &Request, out: &mut [u8]) -> Result<(), HRESULT> {
     if request.options & MEMORY_SOURCE != 0 {
         // SAFETY: the title's source holds `out.len()` bytes until completion.
-        out.copy_from_slice(unsafe { std::slice::from_raw_parts(request.source.cast(), out.len()) });
+        out.copy_from_slice(unsafe {
+            std::slice::from_raw_parts(request.source.cast(), out.len())
+        });
         return Ok(());
     }
     // SAFETY: a file object we created; the title keeps it open.
-    let files = &unsafe { &*request.source.cast::<Instance<File>>() }
-        .state
-        .files;
+    let files = &unsafe { &*request.source.cast::<Instance<File>>() }.state.files;
     let started = std::time::Instant::now();
     let (mut done, mut tries) = (0, 0);
     let result = loop {
@@ -1676,12 +1663,21 @@ fn into_pages(
     if written {
         super::xmem::pages_written(pages, offset, n);
         if tries > 0 {
-            tracing::info!(offset, len, tries, "dstorage: a destination's physical pages written after a retry");
+            tracing::info!(
+                offset,
+                len,
+                tries,
+                "dstorage: a destination's physical pages written after a retry"
+            );
         }
         Ok(())
     } else {
         let known = super::xmem::pages_known(pages, offset, len);
-        tracing::warn!(known, last_error = std::io::Error::last_os_error().raw_os_error(), "dstorage: retries used up");
+        tracing::warn!(
+            known,
+            last_error = std::io::Error::last_os_error().raw_os_error(),
+            "dstorage: retries used up"
+        );
         // Said aloud: the title never reads a request's result
         // (it only polls for completion), so a destination left unwritten
         // is a model or texture that silently holds whatever its pages
@@ -1786,10 +1782,7 @@ mod tests {
         let open: extern "system" fn(*mut c_void, *const u16, *const Guid, Out) -> HRESULT =
             call(factory(), 0x20);
         let mut file = std::ptr::null_mut();
-        assert_eq!(
-            open(factory(), wide.as_ptr(), std::ptr::null(), &mut file),
-            S_OK
-        );
+        assert_eq!(open(factory(), wide.as_ptr(), std::ptr::null(), &mut file), S_OK);
         file
     }
 
@@ -1803,10 +1796,7 @@ mod tests {
         ) -> HRESULT = call(factory(), 0x28);
         let mut array = std::ptr::null_mut();
         let name = c"test".as_ptr();
-        assert_eq!(
-            create(factory(), capacity, name, std::ptr::null(), &mut array),
-            S_OK
-        );
+        assert_eq!(create(factory(), capacity, name, std::ptr::null(), &mut array), S_OK);
         array
     }
 
@@ -1902,8 +1892,7 @@ mod tests {
 
     fn compress_zlib(plain: &[u8]) -> Vec<u8> {
         let mut buf = vec![0u8; zlib_rs::compress_bound(plain.len())];
-        let (packed, rc) =
-            zlib_rs::compress_slice(&mut buf, plain, zlib_rs::DeflateConfig::new(6));
+        let (packed, rc) = zlib_rs::compress_slice(&mut buf, plain, zlib_rs::DeflateConfig::new(6));
         assert_eq!(rc, zlib_rs::ReturnCode::Ok);
         packed.to_vec()
     }
@@ -1922,14 +1911,7 @@ mod tests {
         let at = |b: &mut Vec<u8>| b.as_mut_ptr().cast();
         enqueue(queue, &request(0, at(&mut raw), 1000, file, 5000, 1000));
         let offset = plain.len() as u64;
-        let zlib = request(
-            ZLIB,
-            at(&mut inflated),
-            plain.len(),
-            file,
-            offset,
-            packed.len(),
-        );
+        let zlib = request(ZLIB, at(&mut inflated), plain.len(), file, offset, packed.len());
         enqueue(queue, &zlib);
         enqueue_status(queue, array, 0);
         assert_eq!(result(array, 0), E_PENDING, "pending until done");
@@ -1970,7 +1952,8 @@ mod tests {
         // Requests in flight together run in any order, so none of them
         // shares a destination (failed ones leave theirs undefined).
         let mut buffers = [[0u8; 16]; 5];
-        let [failed, failed_too, out, other, bcpack] = buffers.each_mut().map(|b| b.as_mut_ptr().cast());
+        let [failed, failed_too, out, other, bcpack] =
+            buffers.each_mut().map(|b| b.as_mut_ptr().cast());
 
         // Segment 0: a read past the end, then a bad stream; the first wins.
         enqueue(queue, &request(0, failed, 16, file, 4090, 16));
@@ -2085,8 +2068,12 @@ mod tests {
                 Ok(out.len())
             });
             assert_eq!((written, runs), (Ok(()), 2));
-            assert!(xmem::page_window(&new[..1], 0, PAGE).unwrap().bytes().iter().all(|&b| b == 0xa5));
-            assert!(xmem::page_window(&new[1..], 0, 100).unwrap().bytes().iter().all(|&b| b == 0xa5));
+            assert!(
+                xmem::page_window(&new[..1], 0, PAGE).unwrap().bytes().iter().all(|&b| b == 0xa5)
+            );
+            assert!(
+                xmem::page_window(&new[1..], 0, 100).unwrap().bytes().iter().all(|&b| b == 0xa5)
+            );
             for page in new {
                 xmem::page_window(&[page], 0, PAGE).unwrap().bytes().fill(0);
             }
@@ -2096,7 +2083,7 @@ mod tests {
     #[test]
     fn a_read_into_memory_guarded_for_a_moment_is_tried_again() {
         use windows_sys::Win32::System::Memory::{
-            MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, PAGE_READONLY, VirtualAlloc, VirtualProtect,
+            MEM_COMMIT, MEM_RESERVE, PAGE_READONLY, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
         };
         let plain = pattern(3 * 4096);
         let (_dir, file) = file_with(&plain);
@@ -2136,7 +2123,10 @@ mod tests {
         const READS: usize = 12_000;
         let path = std::env::var("VICTORY_BENCH_FILE").expect("VICTORY_BENCH_FILE");
         let len = std::fs::metadata(&path).unwrap().len();
-        let mut seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64 | 1;
+        let mut seed =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                as u64
+                | 1;
         let mut random = move || {
             seed ^= seed << 13;
             seed ^= seed >> 7;
@@ -2146,7 +2136,8 @@ mod tests {
         for round in 0..2 {
             for mode in [Io::One, Io::Handles, Io::Overlapped, Io::Direct] {
                 let file = Files::open_for_test(&path, mode);
-                let at: Vec<u64> = (0..READS).map(|_| random() % (len - SIZE as u64) & !15).collect();
+                let at: Vec<u64> =
+                    (0..READS).map(|_| random() % (len - SIZE as u64) & !15).collect();
                 for pass in ["cold", "again"] {
                     let next = std::sync::atomic::AtomicUsize::new(0);
                     let busy = AtomicU64::new(0);
@@ -2159,9 +2150,14 @@ mod tests {
                                     let began = Instant::now();
                                     let mut done = 0;
                                     while done < SIZE {
-                                        done += file.read_at(&mut out[done..], at + done as u64).unwrap();
+                                        done += file
+                                            .read_at(&mut out[done..], at + done as u64)
+                                            .unwrap();
                                     }
-                                    busy.fetch_add(began.elapsed().as_micros() as u64, Ordering::Relaxed);
+                                    busy.fetch_add(
+                                        began.elapsed().as_micros() as u64,
+                                        Ordering::Relaxed,
+                                    );
                                 }
                             });
                         }
@@ -2186,7 +2182,15 @@ mod tests {
         std::fs::write(&path, &plain).unwrap();
         for mode in [Io::One, Io::Handles, Io::Overlapped, Io::Direct] {
             let file = Files::open_for_test(path.to_str().unwrap(), mode);
-            for (at, len) in [(0, 4096), (1, 100), (4095, 2), (8192, 200_000), (12_345, 250_000), (299_990, 11), (300_000, 1)] {
+            for (at, len) in [
+                (0, 4096),
+                (1, 100),
+                (4095, 2),
+                (8192, 200_000),
+                (12_345, 250_000),
+                (299_990, 11),
+                (300_000, 1),
+            ] {
                 let mut out = vec![0u8; len];
                 let mut done = 0;
                 while done < len {
@@ -2400,10 +2404,7 @@ mod tests {
         use crate::modules::xmem;
         let mut pages = [0usize; 2];
         let mut n = 2;
-        assert_eq!(
-            xmem::XMemAllocatePhysicalPages(0, &mut n, pages.as_mut_ptr()),
-            1
-        );
+        assert_eq!(xmem::XMemAllocatePhysicalPages(0, &mut n, pages.as_mut_ptr()), 1);
         // Where the title would see them: a reservation of 64 KiB pages.
         let mapped = xmem::XMemVirtualAlloc(
             std::ptr::null_mut(),
@@ -2413,10 +2414,7 @@ mod tests {
             0x04,
         );
         assert!(!mapped.is_null());
-        assert_eq!(
-            xmem::XMemMapPhysicalPages(mapped, 2, pages.as_ptr()),
-            mapped
-        );
+        assert_eq!(xmem::XMemMapPhysicalPages(mapped, 2, pages.as_ptr()), mapped);
 
         let plain = pattern(100);
         let (queue, array) = (new_queue(1), status_array(1));
@@ -2442,10 +2440,7 @@ mod tests {
         use crate::modules::xmem;
         let allocate = |n: usize| {
             let (mut pages, mut given) = (vec![0usize; n], n);
-            assert_eq!(
-                xmem::XMemAllocatePhysicalPages(0, &mut given, pages.as_mut_ptr()),
-                1
-            );
+            assert_eq!(xmem::XMemAllocatePhysicalPages(0, &mut given, pages.as_mut_ptr()), 1);
             pages
         };
         let (a, b) = (allocate(3), allocate(1));
@@ -2479,18 +2474,12 @@ mod tests {
                 0x04,
             );
             assert!(!mapped.is_null());
-            assert_eq!(
-                xmem::XMemMapPhysicalPages(mapped, 3, pages.as_ptr()),
-                mapped
-            );
+            assert_eq!(xmem::XMemMapPhysicalPages(mapped, 3, pages.as_ptr()), mapped);
             // SAFETY: all three pages are mapped read-write.
             let seen = unsafe { std::slice::from_raw_parts(mapped.cast::<u8>(), 3 * PAGE) };
             assert!(seen[..50].iter().all(|&b| b == 0));
             assert_eq!(seen[50..50 + plain.len()], plain);
-            assert_eq!(
-                xmem::XMemMapPhysicalPages(mapped, 3, std::ptr::null()),
-                mapped
-            );
+            assert_eq!(xmem::XMemMapPhysicalPages(mapped, 3, std::ptr::null()), mapped);
         }
         assert_eq!(xmem::XMemFreePhysicalPages(3, a.as_ptr()), 1);
         assert_eq!(xmem::XMemFreePhysicalPages(1, b.as_ptr()), 1);
@@ -2509,10 +2498,7 @@ mod tests {
         // Short stream into a larger buffer passes and returns bytes written;
         // guard bytes outside the slice passed to `inflate` stay untouched.
         let mut larger = vec![0xAA; plain.len() + 64];
-        assert_eq!(
-            inflate(&packed, &mut larger[..plain.len() + 32]),
-            Ok(plain.len())
-        );
+        assert_eq!(inflate(&packed, &mut larger[..plain.len() + 32]), Ok(plain.len()));
         assert_eq!(&larger[..plain.len()], &plain[..]);
         assert!(larger[plain.len() + 32..].iter().all(|&b| b == 0xAA));
 
@@ -2529,14 +2515,8 @@ mod tests {
 
         // Truncated stream (missing trailer or payload bytes) fails.
         let mut out = vec![0u8; plain.len()];
-        assert_eq!(
-            inflate(&packed[..packed.len() - 1], &mut out),
-            Err(INVALID_DATA)
-        );
-        assert_eq!(
-            inflate(&packed[..packed.len() / 2], &mut out),
-            Err(INVALID_DATA)
-        );
+        assert_eq!(inflate(&packed[..packed.len() - 1], &mut out), Err(INVALID_DATA));
+        assert_eq!(inflate(&packed[..packed.len() / 2], &mut out), Err(INVALID_DATA));
         assert_eq!(inflate(&[], &mut out), Err(INVALID_DATA));
 
         // Corrupt Adler-32 trailer fails.

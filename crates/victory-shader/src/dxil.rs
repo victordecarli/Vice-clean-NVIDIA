@@ -90,9 +90,7 @@ impl<'a> DxilProgram<'a> {
         let size = (u32_at(part, 4)? as usize)
             .checked_mul(4)
             .filter(|&s| s <= part.len() && s >= 24)
-            .ok_or(ShaderError::Malformed(
-                "program size disagrees with part size",
-            ))?;
+            .ok_or(ShaderError::Malformed("program size disagrees with part size"))?;
         let part = &part[..size];
         if part.get(8..12) != Some(b"DXIL") {
             return Err(ShaderError::Malformed("missing DXIL magic"));
@@ -101,15 +99,13 @@ impl<'a> DxilProgram<'a> {
         let offset = u32_at(part, 16)?;
         let len = u32_at(part, 20)? as usize;
         let start = 8 + offset as usize;
-        let bitcode = part
-            .get(start..start + len)
-            .ok_or(ShaderError::Malformed("bitcode out of bounds"))?;
+        let bitcode =
+            part.get(start..start + len).ok_or(ShaderError::Malformed("bitcode out of bounds"))?;
         if bitcode.get(0..4) != Some(&LLVM_BITCODE_MAGIC) {
             return Err(ShaderError::Malformed("bitcode lacks LLVM magic"));
         }
-        let prefix = part
-            .get(24..start)
-            .ok_or(ShaderError::Malformed("bitcode offset too small"))?;
+        let prefix =
+            part.get(24..start).ok_or(ShaderError::Malformed("bitcode offset too small"))?;
         Ok(DxilProgram {
             kind: ShaderKind::from_raw((version >> 16) as u16),
             shader_model: (((version >> 4) & 0xF) as u8, (version & 0xF) as u8),
@@ -193,13 +189,7 @@ mod tests {
         assert_eq!(p.kind, ShaderKind::Compute);
         assert_eq!(p.shader_model, (6, 5));
         assert!(!p.is_standard_layout());
-        assert_eq!(
-            p.xbox_extras(),
-            XboxExtras {
-                xdat: true,
-                xbop: true
-            }
-        );
+        assert_eq!(p.xbox_extras(), XboxExtras { xdat: true, xbop: true });
         assert_eq!(p.bitcode, &bitcode[..]);
     }
 

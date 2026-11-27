@@ -94,18 +94,19 @@ impl Host {
                 if let Some(made) = &device {
                     let factory: IDXGIFactory4 =
                         CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)).map_err(err)?;
-                    if let Ok(adapter) = factory.EnumAdapterByLuid::<IDXGIAdapter1>(made.GetAdapterLuid())
+                    if let Ok(adapter) =
+                        factory.EnumAdapterByLuid::<IDXGIAdapter1>(made.GetAdapterLuid())
                         && let Ok(desc) = adapter.GetDesc1()
-                        && (desc.Flags & 2 != 0 || (desc.VendorId == 0x1414 && desc.DeviceId == 0x8c))
+                        && (desc.Flags & 2 != 0
+                            || (desc.VendorId == 0x1414 && desc.DeviceId == 0x8c))
                     {
                         return Err("the default device is the software adapter".to_owned());
                     }
                 }
             }
             let device = device.ok_or("no device")?;
-            let mut sm = D3D12_FEATURE_DATA_SHADER_MODEL {
-                HighestShaderModel: D3D_SHADER_MODEL_6_6,
-            };
+            let mut sm =
+                D3D12_FEATURE_DATA_SHADER_MODEL { HighestShaderModel: D3D_SHADER_MODEL_6_6 };
             device
                 .CheckFeatureSupport(
                     D3D12_FEATURE_SHADER_MODEL,
@@ -114,10 +115,7 @@ impl Host {
                 )
                 .map_err(err)?;
             if sm.HighestShaderModel.0 < D3D_SHADER_MODEL_6_6.0 {
-                return Err(format!(
-                    "the device supports SM {:#x} only",
-                    sm.HighestShaderModel.0
-                ));
+                return Err(format!("the device supports SM {:#x} only", sm.HighestShaderModel.0));
             }
             Ok(Host { device })
         }
@@ -292,7 +290,10 @@ impl Host {
                 let message = buffer.as_mut_ptr().cast::<D3D12_MESSAGE>();
                 if queue.GetMessage(i, Some(message), &mut len).is_ok() {
                     let m = &*message;
-                    let bytes = std::slice::from_raw_parts(m.pDescription, m.DescriptionByteLength.saturating_sub(1));
+                    let bytes = std::slice::from_raw_parts(
+                        m.pDescription,
+                        m.DescriptionByteLength.saturating_sub(1),
+                    );
                     text.push_str(" | ");
                     text.push_str(&String::from_utf8_lossy(bytes));
                 }
@@ -335,10 +336,8 @@ impl Host {
         ps: &[u8],
     ) -> Result<ID3D12PipelineState, String> {
         let inputs = sig(vs, FourCC::ISG1)?;
-        let names: Vec<CString> = inputs
-            .iter()
-            .map(|e| CString::new(e.name.clone()).unwrap())
-            .collect();
+        let names: Vec<CString> =
+            inputs.iter().map(|e| CString::new(e.name.clone()).unwrap()).collect();
         let layout: Vec<D3D12_INPUT_ELEMENT_DESC> = inputs
             .iter()
             .zip(&names)
@@ -381,10 +380,7 @@ impl Host {
                 NumElements: layout.len() as u32,
             },
             PrimitiveTopologyType: D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             ..Default::default()
         };
         for rt in &mut desc.BlendState.RenderTarget {
@@ -477,10 +473,7 @@ impl Host {
             BytecodeLength: b.len(),
         };
         let mut stream = Stream {
-            root: Sub(
-                D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE,
-                root.as_raw(),
-            ),
+            root: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE, root.as_raw()),
             ms: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS, code(ms)),
             ps: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS, code(ps)),
             blend: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND, blend),
@@ -495,20 +488,11 @@ impl Host {
                 },
             ),
             depth: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL, depth),
-            targets: Sub(
-                D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS,
-                targets,
-            ),
-            dsv: Sub(
-                D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT,
-                dsv,
-            ),
+            targets: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, targets),
+            dsv: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT, dsv),
             samples: Sub(
                 D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC,
-                DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             ),
         };
         let desc = D3D12_PIPELINE_STATE_STREAM_DESC {
@@ -524,17 +508,10 @@ impl Host {
 /// A vertex shader that feeds `ps`'s inputs (zeros) and a position.
 pub fn stub_vs(ps: &HostShader) -> Result<HostShader, String> {
     let inputs = sig(&ps.dxil, FourCC::ISG1)?;
-    let mut outputs: Vec<SigElement> = inputs
-        .into_iter()
-        .filter(|e| matches!(e.kind, 0 | 3 | 6 | 7))
-        .collect();
+    let mut outputs: Vec<SigElement> =
+        inputs.into_iter().filter(|e| matches!(e.kind, 0 | 3 | 6 | 7)).collect();
     if !outputs.iter().any(|e| e.kind == 3) {
-        let row = outputs
-            .iter()
-            .filter_map(|e| e.row)
-            .map(|r| r + 1)
-            .max()
-            .unwrap_or(0);
+        let row = outputs.iter().filter_map(|e| e.row).map(|r| r + 1).max().unwrap_or(0);
         outputs.push(SigElement {
             name: "SV_Position".into(),
             index: 0,
@@ -574,20 +551,10 @@ fn stub(pixel: bool, outputs: Vec<SigElement>) -> HostShader {
     let b = s.entry;
     for (id, e) in outputs.iter().enumerate() {
         for col in 0..e.cols {
-            let (suffix, zero) = if e.comp == 9 {
-                (".f32", s.m.f32(0))
-            } else {
-                (".i32", s.m.i32(0))
-            };
+            let (suffix, zero) =
+                if e.comp == 9 { (".f32", s.m.f32(0)) } else { (".i32", s.m.i32(0)) };
             let args = [s.m.i32(id as u32), s.m.i32(0), s.m.i8(col), zero];
-            s.op(
-                b,
-                &format!("storeOutput{suffix}"),
-                Attr::NoUnwind,
-                s.t.void,
-                5,
-                &args,
-            );
+            s.op(b, &format!("storeOutput{suffix}"), Attr::NoUnwind, s.t.void, 5, &args);
         }
     }
     s.outputs = outputs
@@ -599,11 +566,7 @@ fn stub(pixel: bool, outputs: Vec<SigElement>) -> HostShader {
         .collect();
     s.m.terminate(b, Term::Ret);
     HostShader {
-        stage: if pixel {
-            crate::native::HwStage::Ps
-        } else {
-            crate::native::HwStage::Vs
-        },
+        stage: if pixel { crate::native::HwStage::Ps } else { crate::native::HwStage::Vs },
         dxil: s.finish(),
         user_data: Vec::new(),
         samplers: Vec::new(),
@@ -668,9 +631,8 @@ impl Host {
                     ..Default::default()
                 })
                 .map_err(err)?;
-            let alloc: ID3D12CommandAllocator = dev
-                .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                .map_err(err)?;
+            let alloc: ID3D12CommandAllocator =
+                dev.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).map_err(err)?;
             let list: ID3D12GraphicsCommandList = dev
                 .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &alloc, pso)
                 .map_err(err)?;
@@ -681,10 +643,7 @@ impl Host {
                 DepthOrArraySize: 1,
                 MipLevels: 1,
                 Format: DXGI_FORMAT_R32G32B32A32_FLOAT,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 Flags: flags,
                 ..Default::default()
             };
@@ -694,17 +653,11 @@ impl Host {
                 Height: 1,
                 DepthOrArraySize: 1,
                 MipLevels: 1,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
                 ..Default::default()
             };
-            let heap = |t| D3D12_HEAP_PROPERTIES {
-                Type: t,
-                ..Default::default()
-            };
+            let heap = |t| D3D12_HEAP_PROPERTIES { Type: t, ..Default::default() };
             let make = |props: D3D12_HEAP_TYPE,
                         desc: &D3D12_RESOURCE_DESC,
                         state,
@@ -789,9 +742,7 @@ impl Host {
                 let dst = D3D12_TEXTURE_COPY_LOCATION {
                     pResource: std::mem::transmute_copy(&tex),
                     Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                    Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                        SubresourceIndex: 0,
-                    },
+                    Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
                 };
                 let src = D3D12_TEXTURE_COPY_LOCATION {
                     pResource: std::mem::transmute_copy(&upload),
@@ -930,9 +881,7 @@ impl Host {
             let src = D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(&target),
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    SubresourceIndex: 0,
-                },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
             };
             list.CopyTextureRegion(&dst, 0, 0, 0, &src, None);
             list.Close().map_err(err)?;
@@ -1007,11 +956,7 @@ pub enum View<'a> {
     /// A typed RGBA16F buffer UAV of this many elements, zeroed.
     HalfUav(u32),
     /// A typed buffer UAV pre-filled with `data` (`format`, bytes per element).
-    TypedUav {
-        data: &'a [u32],
-        format: DXGI_FORMAT,
-        elem_bytes: u32,
-    },
+    TypedUav { data: &'a [u32], format: DXGI_FORMAT, elem_bytes: u32 },
     /// A constant buffer of these dwords.
     Cbv(&'a [u32]),
     /// A buffer SRV over these dwords.
@@ -1061,19 +1006,15 @@ impl Host {
                     ..Default::default()
                 })
                 .map_err(err)?;
-            let alloc: ID3D12CommandAllocator = dev
-                .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                .map_err(err)?;
+            let alloc: ID3D12CommandAllocator =
+                dev.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).map_err(err)?;
             let list: ID3D12GraphicsCommandList = dev
                 .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &alloc, pso)
                 .map_err(err)?;
             let make = |heap: D3D12_HEAP_TYPE, desc: &D3D12_RESOURCE_DESC, state| {
                 let mut r: Option<ID3D12Resource> = None;
                 dev.CreateCommittedResource(
-                    &D3D12_HEAP_PROPERTIES {
-                        Type: heap,
-                        ..Default::default()
-                    },
+                    &D3D12_HEAP_PROPERTIES { Type: heap, ..Default::default() },
                     D3D12_HEAP_FLAG_NONE,
                     desc,
                     state,
@@ -1083,10 +1024,7 @@ impl Host {
                 .map_err(err)?;
                 r.ok_or_else(|| "no resource".to_string())
             };
-            let sample = DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            };
+            let sample = DXGI_SAMPLE_DESC { Count: 1, Quality: 0 };
             let texture_as = |w: u32, h: u32, flags, format| D3D12_RESOURCE_DESC {
                 Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
                 Width: u64::from(w),
@@ -1136,9 +1074,7 @@ impl Host {
             let subresource = |r: &ID3D12Resource| D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(r),
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    SubresourceIndex: 0,
-                },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
             };
             let heap = |ty, n: usize| -> Result<ID3D12DescriptorHeap, String> {
                 dev.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
@@ -1183,11 +1119,8 @@ impl Host {
                             DepthOrArraySize: depth as u16,
                             ..texture(w, h, D3D12_RESOURCE_FLAG_NONE)
                         };
-                        let tex = make(
-                            D3D12_HEAP_TYPE_DEFAULT,
-                            &desc,
-                            D3D12_RESOURCE_STATE_COPY_DEST,
-                        )?;
+                        let tex =
+                            make(D3D12_HEAP_TYPE_DEFAULT, &desc, D3D12_RESOURCE_STATE_COPY_DEST)?;
                         let pitch = (w as usize * 16).next_multiple_of(256);
                         let upload = make(
                             D3D12_HEAP_TYPE_UPLOAD,
@@ -1228,11 +1161,8 @@ impl Host {
                         let mut desc = texture(w, h, D3D12_RESOURCE_FLAG_NONE);
                         desc.DepthOrArraySize = faces as u16;
                         desc.MipLevels = mips;
-                        let tex = make(
-                            D3D12_HEAP_TYPE_DEFAULT,
-                            &desc,
-                            D3D12_RESOURCE_STATE_COPY_DEST,
-                        )?;
+                        let tex =
+                            make(D3D12_HEAP_TYPE_DEFAULT, &desc, D3D12_RESOURCE_STATE_COPY_DEST)?;
                         for sub in 0..u32::from(mips) * faces {
                             let mip = sub % u32::from(mips);
                             let (w, h) = ((w >> mip).max(1), (h >> mip).max(1));
@@ -1329,11 +1259,7 @@ impl Host {
                         )?;
                         uavs.push((b, None, n, rb));
                     }
-                    View::TypedUav {
-                        data,
-                        format,
-                        elem_bytes,
-                    } => {
+                    View::TypedUav { data, format, elem_bytes } => {
                         let n = data.len() as u32;
                         let bytes = u64::from(n) * 4;
                         let elements = (bytes / u64::from(elem_bytes)) as u32;
@@ -1418,12 +1344,9 @@ impl Host {
                     View::Buffer { data, stride } => {
                         let b = upload(data)?;
                         let (format, elements, stride, flags) = match stride {
-                            Stride::Raw => (
-                                DXGI_FORMAT_R32_TYPELESS,
-                                data.len(),
-                                0,
-                                D3D12_BUFFER_SRV_FLAG_RAW,
-                            ),
+                            Stride::Raw => {
+                                (DXGI_FORMAT_R32_TYPELESS, data.len(), 0, D3D12_BUFFER_SRV_FLAG_RAW)
+                            }
                             Stride::Typed => (
                                 DXGI_FORMAT_R32G32B32A32_FLOAT,
                                 data.len() / 4,
@@ -1436,12 +1359,9 @@ impl Host {
                                 s,
                                 D3D12_BUFFER_SRV_FLAG_NONE,
                             ),
-                            Stride::Format(f, bytes) => (
-                                f,
-                                data.len() * 4 / bytes as usize,
-                                0,
-                                D3D12_BUFFER_SRV_FLAG_NONE,
-                            ),
+                            Stride::Format(f, bytes) => {
+                                (f, data.len() * 4 / bytes as usize, 0, D3D12_BUFFER_SRV_FLAG_NONE)
+                            }
                         };
                         let desc = D3D12_SHADER_RESOURCE_VIEW_DESC {
                             Format: format,
@@ -1477,11 +1397,8 @@ impl Host {
                         0,
                     ),
                     Root::Table { sampler, index } => {
-                        let (h, size) = if *sampler {
-                            (&samplers, sampler_size)
-                        } else {
-                            (&views, view_size)
-                        };
+                        let (h, size) =
+                            if *sampler { (&samplers, sampler_size) } else { (&views, view_size) };
                         let mut at = h.GetGPUDescriptorHandleForHeapStart();
                         at.ptr += (index * size) as u64;
                         list.SetComputeRootDescriptorTable(*param, at);

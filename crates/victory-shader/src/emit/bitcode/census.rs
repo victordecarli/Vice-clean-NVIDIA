@@ -52,9 +52,9 @@ thread_local! {
 }
 
 fn fnv(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
+    bytes
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 /// Whether modules are counted (`VICTORY_SHADER_CENSUS` set).
@@ -139,12 +139,7 @@ impl Module {
             }
             c.counts[k("blocks")] += 1;
             let _: Option<Term> = blk.term;
-            for &i in blk
-                .phis
-                .iter()
-                .filter(|&&i| live[i as usize])
-                .chain(&blk.body)
-            {
+            for &i in blk.phis.iter().filter(|&&i| live[i as usize]).chain(&blk.body) {
                 c.counts[0] += 1;
                 let at = match &self.insts[i as usize].op {
                     Op::Bin(..) | Op::Cmp(..) => k("arith"),

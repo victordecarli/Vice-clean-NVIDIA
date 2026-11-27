@@ -111,8 +111,7 @@ fn heap_alloc(size: usize, align: usize) -> Option<(*mut u8, u32)> {
         heap.give_back(apu, apu + layout.size() as u32);
         return None;
     }
-    heap.blocks
-        .insert(ptr as usize, Block { size, apu, layout });
+    heap.blocks.insert(ptr as usize, Block { size, apu, layout });
     heap.by_apu.insert(apu, ptr as usize);
     // The big ones are named in the log: they are the title's audio memory
     // given out of our allocator, which the memory line counts as ours.
@@ -360,10 +359,7 @@ struct Xma {
 }
 
 impl Xma {
-    const EMPTY: Xma = Xma {
-        array: 0,
-        voices: Vec::new(),
-    };
+    const EMPTY: Xma = Xma { array: 0, voices: Vec::new() };
 }
 
 /// Written only when the context arrays are allocated or released.
@@ -673,10 +669,8 @@ fn dump_input(index: u32, context: Context) {
     }
     let dir = std::path::PathBuf::from(dir);
     let words: Vec<u8> = (0..16).flat_map(|w| context.get(w).to_le_bytes()).collect();
-    let input = heap_bytes(
-        context.get(5) & !0x7ff,
-        context.field(0, 0, 12) as usize * xma::PACKET_BYTES,
-    );
+    let input =
+        heap_bytes(context.get(5) & !0x7ff, context.field(0, 0, 12) as usize * xma::PACKET_BYTES);
     let _ = std::fs::create_dir_all(&dir);
     let _ = std::fs::write(dir.join(format!("{n:02}-{index}.ctx")), words);
     let _ = std::fs::write(dir.join(format!("{n:02}-{index}.xma")), input.unwrap_or_default());
@@ -806,14 +800,8 @@ struct AcpMethods {
     release: extern "system" fn(*mut Acp),
 }
 
-static ACP_METHODS: AcpMethods = AcpMethods {
-    connect,
-    disconnect,
-    submit,
-    pop_message,
-    message_count,
-    release,
-};
+static ACP_METHODS: AcpMethods =
+    AcpMethods { connect, disconnect, submit, pop_message, message_count, release };
 
 fn state(this: *mut Acp) -> MutexGuard<'static, State> {
     // SAFETY: title code calls methods on the object `AcpHalCreate` made,
@@ -976,11 +964,8 @@ mod tests {
     #[test]
     fn heap_reuses_freed_addresses() {
         let _serial = lock(&CONTEXT_TESTS);
-        let (mut a, mut b, mut c) = (
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        );
+        let (mut a, mut b, mut c) =
+            (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut());
         let (mut apu_a, mut apu_b, mut apu_c) = (0, 0, 0);
         assert_eq!(ApuAlloc(&mut a, &mut apu_a, 0x1000, 0x1000, 1), S_OK);
         assert_eq!(ApuAlloc(&mut b, &mut apu_b, 0x1000, 0x1000, 1), S_OK);
@@ -988,22 +973,12 @@ mod tests {
         assert_eq!(ApuAlloc(&mut c, &mut apu_c, 0x800, 0x800, 1), S_OK);
         // The freed range is free again, whichever part `c` took.
         assert!(
-            lock(&HEAP)
-                .free
-                .iter()
-                .any(|(&s, &e)| s <= apu_a + 0x800 && apu_a + 0x1000 <= e)
+            lock(&HEAP).free.iter().any(|(&s, &e)| s <= apu_a + 0x800 && apu_a + 0x1000 <= e)
                 || apu_c == apu_a
         );
-        assert_eq!(
-            ApuMapApuAddress(apu_b + 8),
-            b.cast::<u8>().wrapping_add(8).cast()
-        );
+        assert_eq!(ApuMapApuAddress(apu_b + 8), b.cast::<u8>().wrapping_add(8).cast());
         assert!(ApuMapApuAddress(0).is_null());
-        assert_eq!(
-            ApuCreateHeap(64 << 20, 0),
-            0x8ACA_0001_u32 as i32,
-            "too late"
-        );
+        assert_eq!(ApuCreateHeap(64 << 20, 0), 0x8ACA_0001_u32 as i32, "too late");
         ApuFree(b);
         ApuFree(c);
     }
@@ -1050,10 +1025,7 @@ mod tests {
         // SAFETY: two packets were allocated.
         unsafe { std::ptr::copy_nonoverlapping(stream.as_ptr(), input.cast(), stream.len()) };
         let (mut output, mut output_apu) = (std::ptr::null_mut(), 0);
-        assert_eq!(
-            ApuAlloc(&mut output, &mut output_apu, 0x400, 0x100, 2),
-            S_OK
-        );
+        assert_eq!(ApuAlloc(&mut output, &mut output_apu, 0x400, 0x100, 2), S_OK);
         // SAFETY: the ring was just allocated.
         unsafe { output.cast::<u8>().write_bytes(0x55, 0x400) };
 
@@ -1074,10 +1046,7 @@ mod tests {
         let m = unsafe { (*acp).vtable };
         assert_eq!((m.connect)(acp, 0x1000, 0x1000), S_OK);
         let submit = |command: u32, words: &[u32]| {
-            assert_eq!(
-                (m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0),
-                S_OK
-            );
+            assert_eq!((m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0), S_OK);
         };
         submit(ENABLE_XMA, &[1]);
         // A pass on a thread of its own (the decoding thread runs them too),
@@ -1130,10 +1099,7 @@ mod tests {
         // SAFETY: two packets were allocated.
         unsafe { std::ptr::copy_nonoverlapping(stream.as_ptr(), input.cast(), stream.len()) };
         let (mut output, mut output_apu) = (std::ptr::null_mut(), 0);
-        assert_eq!(
-            ApuAlloc(&mut output, &mut output_apu, 0x800, 0x100, 2),
-            S_OK
-        );
+        assert_eq!(ApuAlloc(&mut output, &mut output_apu, 0x800, 0x100, 2), S_OK);
         // SAFETY: the allocation was just made: the ring (four blocks) and a guard
         // area after it, which the pass must not touch.
         unsafe { output.cast::<u8>().write_bytes(0x55, 0x800) };
@@ -1155,10 +1121,7 @@ mod tests {
         let m = unsafe { (*acp).vtable };
         assert_eq!((m.connect)(acp, 0x1000, 0x1000), S_OK);
         let submit = |command: u32, words: &[u32]| {
-            assert_eq!(
-                (m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0),
-                S_OK
-            );
+            assert_eq!((m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0), S_OK);
         };
         submit(ENABLE_XMA, &[1]);
         // A pass on a thread of its own (the decoding thread runs them too),
@@ -1212,10 +1175,7 @@ mod tests {
         // SAFETY: two packets were allocated.
         unsafe { std::ptr::copy_nonoverlapping(stream.as_ptr(), input.cast(), stream.len()) };
         let (mut output, mut output_apu) = (std::ptr::null_mut(), 0);
-        assert_eq!(
-            ApuAlloc(&mut output, &mut output_apu, 0x400, 0x100, 2),
-            S_OK
-        );
+        assert_eq!(ApuAlloc(&mut output, &mut output_apu, 0x400, 0x100, 2), S_OK);
         // SAFETY: the ring was just allocated.
         unsafe { output.cast::<u8>().write_bytes(0x55, 0x400) };
 
@@ -1233,10 +1193,7 @@ mod tests {
         let m = unsafe { (*acp).vtable };
         assert_eq!((m.connect)(acp, 0x1000, 0x1000), S_OK);
         let submit = |command: u32, words: &[u32]| {
-            assert_eq!(
-                (m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0),
-                S_OK
-            );
+            assert_eq!((m.submit)(acp, command, 0xf1, u32::MAX, words.as_ptr().cast(), 0), S_OK);
         };
         submit(ENABLE_XMA, &[1]);
         xma().pump();
@@ -1297,10 +1254,7 @@ mod tests {
         let context = Context(words.as_mut_ptr());
         // Two packets, one loop, input 0 valid; 48 kHz mono.
         context.set(0, 2 | 1 << 12 | 1 << 20 | 4 << 22);
-        context.set(
-            1,
-            1 << 31 | 3 << 27 | end_subframe << 12 | skip_subframes << 17,
-        );
+        context.set(1, 1 << 31 | 3 << 27 | end_subframe << 12 | skip_subframes << 17);
         context.set(2, first);
         context.set(3, first);
         context.set(4, second);
@@ -1350,26 +1304,14 @@ mod tests {
         assert_eq!((m.connect)(acp, 16, 2), S_OK);
         let mask = COMMAND_COMPLETED;
         assert_eq!(
-            (m.submit)(
-                acp,
-                REGISTER_MESSAGES,
-                0,
-                u32::MAX,
-                (&raw const mask).cast(),
-                0
-            ),
+            (m.submit)(acp, REGISTER_MESSAGES, 0, u32::MAX, (&raw const mask).cast(), 0),
             S_OK
         );
         for id in 1..=4 {
             assert_eq!((m.submit)(acp, 12, id, u32::MAX, std::ptr::null(), 0), S_OK);
         }
         assert_eq!((m.message_count)(acp), 2);
-        let mut message = Message {
-            kind: 0,
-            dropped: 0,
-            usec: 0,
-            data: [0; 16],
-        };
+        let mut message = Message { kind: 0, dropped: 0, usec: 0, data: [0; 16] };
         assert!((m.pop_message)(acp, &mut message) && (m.pop_message)(acp, &mut message));
         assert_eq!((m.submit)(acp, 12, 5, u32::MAX, std::ptr::null(), 0), S_OK);
         assert!((m.pop_message)(acp, &mut message));
@@ -1404,23 +1346,12 @@ mod tests {
         assert_eq!((m.connect)(acp, 0x804, 0x804), S_OK);
         let mask = 0xfe_u32;
         let data = (&raw const mask).cast();
-        assert_eq!(
-            (m.submit)(acp, REGISTER_MESSAGES, 1, u32::MAX, data, 0),
-            S_OK
-        );
-        let mut message = Message {
-            kind: 0,
-            dropped: 0,
-            usec: 0,
-            data: [0; 16],
-        };
+        assert_eq!((m.submit)(acp, REGISTER_MESSAGES, 1, u32::MAX, data, 0), S_OK);
+        let mut message = Message { kind: 0, dropped: 0, usec: 0, data: [0; 16] };
         assert!((m.pop_message)(acp, &mut message));
         let (kind, dropped) = (message.kind, message.dropped);
         assert_eq!((kind, dropped), (COMMAND_COMPLETED, 0));
-        assert_eq!(
-            u64::from_le_bytes(message.data[4..12].try_into().unwrap()),
-            1
-        );
+        assert_eq!(u64::from_le_bytes(message.data[4..12].try_into().unwrap()), 1);
         assert!(!(m.pop_message)(acp, &mut message));
         assert_eq!((m.disconnect)(acp), S_OK);
         assert_eq!((m.message_count)(acp), 1, "disconnected");

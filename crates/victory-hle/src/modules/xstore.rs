@@ -14,33 +14,19 @@ use super::xgameruntime::{
 use super::xpackage;
 use crate::runtime;
 
-pub const PROVIDER: Guid = Guid::new(
-    0x0dd1_12ac,
-    0x7c24,
-    0x448c,
-    [0xb9, 0x2b, 0x39, 0x60, 0xfb, 0x5b, 0xd3, 0x0c],
-);
+pub const PROVIDER: Guid =
+    Guid::new(0x0dd1_12ac, 0x7c24, 0x448c, [0xb9, 0x2b, 0x39, 0x60, 0xfb, 0x5b, 0xd3, 0x0c]);
 /// As the title (2026) asks for it; every slot it calls takes
 /// the public API's arguments in the 2020 order.
-pub const IID_2026: Guid = Guid::new(
-    0xb09d_803c,
-    0x2414,
-    0x4a05,
-    [0x82, 0xc6, 0x66, 0xdf, 0xdc, 0x9e, 0x9a, 0x44],
-);
+pub const IID_2026: Guid =
+    Guid::new(0xb09d_803c, 0x2414, 0x4a05, [0x82, 0xc6, 0x66, 0xdf, 0xdc, 0x9e, 0x9a, 0x44]);
 /// The same table extended by durables licensing (0x238, 0x240).
-pub const DURABLES_IID: Guid = Guid::new(
-    0x2d42_fea5,
-    0xe71d,
-    0x4b76,
-    [0x97, 0xcd, 0xc5, 0x0a, 0xfb, 0xb3, 0xae, 0x5d],
-);
+pub const DURABLES_IID: Guid =
+    Guid::new(0x2d42_fea5, 0xe71d, 0x4b76, [0x97, 0xcd, 0xc5, 0x0a, 0xfb, 0xb3, 0xae, 0x5d]);
 
 pub static OBJECT: Object = Object::new("store", &VTABLE);
-pub const INTERFACES: &[Interface] = &[
-    (PROVIDER, IID_2026, &OBJECT),
-    (PROVIDER, DURABLES_IID, &OBJECT),
-];
+pub const INTERFACES: &[Interface] =
+    &[(PROVIDER, IID_2026, &OBJECT), (PROVIDER, DURABLES_IID, &OBJECT)];
 
 /// The documented "failed to communicate with the store network".
 pub const NETWORK_ERROR: HRESULT = 0x8924_5301_u32 as i32;
@@ -97,11 +83,7 @@ extern "system" fn entitled_products_async(
     _per_page: u32,
     block: *mut AsyncBlock,
 ) -> HRESULT {
-    xasync::finished_with(
-        block,
-        (&raw const QUERY_CALL).cast(),
-        Ok(xasync::bytes(handle(&QUERY))),
-    )
+    xasync::finished_with(block, (&raw const QUERY_CALL).cast(), Ok(xasync::bytes(handle(&QUERY))))
 }
 extern "system" fn query_result(_: This, block: *mut AsyncBlock, out: *mut Handle) -> HRESULT {
     xasync::result(block, (&raw const QUERY_CALL).cast(), out)
@@ -125,11 +107,7 @@ extern "system" fn next_page_async(_: This, _: Handle, block: *mut AsyncBlock) -
 
 fn license_for(owned: bool, block: *mut AsyncBlock) -> HRESULT {
     let license = handle(if owned { &VALID } else { &INVALID });
-    xasync::finished_with(
-        block,
-        (&raw const LICENSE_CALL).cast(),
-        Ok(xasync::bytes(license)),
-    )
+    xasync::finished_with(block, (&raw const LICENSE_CALL).cast(), Ok(xasync::bytes(license)))
 }
 /// Only the game's own package is installed, so only its licence is valid.
 extern "system" fn license_for_package_async(
@@ -148,10 +126,7 @@ extern "system" fn license_for_durables_async(
     store_id: *const c_char,
     block: *mut AsyncBlock,
 ) -> HRESULT {
-    tracing::debug!(
-        store_id = text(store_id).unwrap_or_default(),
-        "durable not owned"
-    );
+    tracing::debug!(store_id = text(store_id).unwrap_or_default(), "durable not owned");
     license_for(false, block)
 }
 extern "system" fn license_result(_: This, block: *mut AsyncBlock, out: *mut Handle) -> HRESULT {
@@ -473,10 +448,7 @@ mod tests {
             S_OK
         );
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), NETWORK_ERROR);
-        assert_eq!(
-            method::<StatusResult>(&OBJECT, 0x260)(this, &mut b),
-            NETWORK_ERROR
-        );
+        assert_eq!(method::<StatusResult>(&OBJECT, 0x260)(this, &mut b), NETWORK_ERROR);
 
         let mut b = block();
         let mut remaining = 7u32;
@@ -511,10 +483,7 @@ mod tests {
             S_OK
         );
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), NETWORK_ERROR);
-        assert_eq!(
-            method::<StatusResult>(&OBJECT, 0x190)(this, &mut b),
-            NETWORK_ERROR
-        );
+        assert_eq!(method::<StatusResult>(&OBJECT, 0x190)(this, &mut b), NETWORK_ERROR);
 
         let mut b = block();
         assert_eq!(
@@ -530,10 +499,7 @@ mod tests {
             S_OK
         );
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), NETWORK_ERROR);
-        assert_eq!(
-            method::<StatusResult>(&OBJECT, 0x1b0)(this, &mut b),
-            NETWORK_ERROR
-        );
+        assert_eq!(method::<StatusResult>(&OBJECT, 0x1b0)(this, &mut b), NETWORK_ERROR);
 
         let mut b = block();
         let mut balance = 3u32;
@@ -561,49 +527,29 @@ mod tests {
         type Begin = extern "system" fn(This, Handle, *mut AsyncBlock) -> HRESULT;
         type Result = extern "system" fn(This, *mut AsyncBlock, *mut GameLicense) -> HRESULT;
         let mut b = block();
-        assert_eq!(
-            method::<Begin>(&OBJECT, 0xe0)(this, handle(&CONTEXT), &mut b),
-            S_OK
-        );
+        assert_eq!(method::<Begin>(&OBJECT, 0xe0)(this, handle(&CONTEXT), &mut b), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), S_OK);
         let mut license = std::mem::MaybeUninit::<GameLicense>::zeroed();
-        assert_eq!(
-            method::<Result>(&OBJECT, 0xe8)(this, &mut b, license.as_mut_ptr()),
-            S_OK
-        );
+        assert_eq!(method::<Result>(&OBJECT, 0xe8)(this, &mut b, license.as_mut_ptr()), S_OK);
         // SAFETY: written by the call.
         let license = unsafe { license.assume_init() };
         assert!(license.is_active && !license.is_trial);
 
         let mut b = block();
-        assert_eq!(
-            method::<Begin>(&OBJECT, 0x1b8)(this, handle(&CONTEXT), &mut b),
-            S_OK
-        );
+        assert_eq!(method::<Begin>(&OBJECT, 0x1b8)(this, handle(&CONTEXT), &mut b), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), NETWORK_ERROR);
         type Count = extern "system" fn(This, *mut AsyncBlock, *mut u32) -> HRESULT;
-        assert_eq!(
-            method::<Count>(&OBJECT, 0x1c0)(this, &mut b, &mut 0),
-            NETWORK_ERROR
-        );
+        assert_eq!(method::<Count>(&OBJECT, 0x1c0)(this, &mut b, &mut 0), NETWORK_ERROR);
 
         type Durable = extern "system" fn(This, Handle, *const c_char, *mut AsyncBlock) -> HRESULT;
         type License = extern "system" fn(This, *mut AsyncBlock, *mut Handle) -> HRESULT;
         let mut b = block();
         let durable = method::<Durable>(&OBJECT, 0x238);
-        assert_eq!(
-            durable(this, handle(&CONTEXT), c"9XYZ".as_ptr(), &mut b),
-            S_OK
-        );
+        assert_eq!(durable(this, handle(&CONTEXT), c"9XYZ".as_ptr(), &mut b), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), S_OK);
         let mut l = std::ptr::null();
-        assert_eq!(
-            method::<License>(&OBJECT, 0x240)(this, &mut b, &mut l),
-            S_OK
-        );
-        assert!(!method::<extern "system" fn(This, Handle) -> bool>(
-            &OBJECT, 0xb0
-        )(this, l));
+        assert_eq!(method::<License>(&OBJECT, 0x240)(this, &mut b, &mut l), S_OK);
+        assert!(!method::<extern "system" fn(This, Handle) -> bool>(&OBJECT, 0xb0)(this, l));
     }
 
     #[test]
@@ -611,9 +557,6 @@ mod tests {
         type Query = extern "system" fn(This, *const c_char, usize, *mut u8) -> HRESULT;
         let query = method::<Query>(&OBJECT, 0x208);
         let mut id = [0u8; 33];
-        assert_eq!(
-            query(&OBJECT, c"9NOTINSTALLED".as_ptr(), 33, id.as_mut_ptr()),
-            E_INVALIDARG
-        );
+        assert_eq!(query(&OBJECT, c"9NOTINSTALLED".as_ptr(), 33, id.as_mut_ptr()), E_INVALIDARG);
     }
 }

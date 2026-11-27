@@ -140,8 +140,20 @@ struct Resource {
 }
 
 impl Resource {
-    const NONE: Resource =
-        Resource { resource: std::ptr::null_mut(), description: ResourceDescription { kind: 0, format: 0, width: 0, height: 0, depth: 0, mip_count: 0, flags: 0, usage: 0 }, state: STATE_COMMON };
+    const NONE: Resource = Resource {
+        resource: std::ptr::null_mut(),
+        description: ResourceDescription {
+            kind: 0,
+            format: 0,
+            width: 0,
+            height: 0,
+            depth: 0,
+            mip_count: 0,
+            flags: 0,
+            usage: 0,
+        },
+        state: STATE_COMMON,
+    };
 
     /// `ffxApiGetResourceDX12` of a 2D texture in D3D12 state `state`.
     fn texture(texture: &ID3D12Resource, state: u32) -> Resource {
@@ -149,9 +161,15 @@ impl Resource {
         let desc = unsafe { texture.GetDesc() };
         let usage = match desc.Format {
             DXGI_FORMAT_D16_UNORM | DXGI_FORMAT_D32_FLOAT => USAGE_DEPTHTARGET,
-            DXGI_FORMAT_D24_UNORM_S8_UINT | DXGI_FORMAT_D32_FLOAT_S8X24_UINT => USAGE_DEPTHTARGET | USAGE_STENCILTARGET,
+            DXGI_FORMAT_D24_UNORM_S8_UINT | DXGI_FORMAT_D32_FLOAT_S8X24_UINT => {
+                USAGE_DEPTHTARGET | USAGE_STENCILTARGET
+            }
             _ => 0,
-        } | if desc.Flags.contains(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) { USAGE_UAV } else { 0 };
+        } | if desc.Flags.contains(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) {
+            USAGE_UAV
+        } else {
+            0
+        };
         Resource {
             resource: texture.as_raw(),
             description: ResourceDescription {
@@ -244,7 +262,8 @@ struct PrepareV2 {
 }
 
 type Context = *mut c_void;
-type Create = unsafe extern "C" fn(context: *mut Context, desc: *mut Header, memory: *const c_void) -> u32;
+type Create =
+    unsafe extern "C" fn(context: *mut Context, desc: *mut Header, memory: *const c_void) -> u32;
 type Destroy = unsafe extern "C" fn(context: *mut Context, memory: *const c_void) -> u32;
 type Configure = unsafe extern "C" fn(context: *mut Context, desc: *const Header) -> u32;
 type Dispatch = unsafe extern "C" fn(context: *mut Context, desc: *const Header) -> u32;
@@ -331,7 +350,8 @@ pub(crate) fn init(dir: &Path) -> bool {
 
 fn load(dir: &Path) -> Result<Ffx, String> {
     use windows_sys::Win32::System::LibraryLoader::{
-        GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+        GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
+        LoadLibraryExW,
     };
     let open = |name: &str| -> Result<Library, String> {
         let path = dir.join(name);
@@ -343,7 +363,11 @@ fn load(dir: &Path) -> Result<Ffx, String> {
         // Its own folder and System32 only, never the current folder.
         // SAFETY: a NUL-terminated full path.
         let module = unsafe {
-            LoadLibraryExW(file.as_ptr(), std::ptr::null_mut(), LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)
+            LoadLibraryExW(
+                file.as_ptr(),
+                std::ptr::null_mut(),
+                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
+            )
         };
         if module.is_null() {
             return Err(format!("{name} did not load ({})", std::io::Error::last_os_error()));
@@ -409,7 +433,8 @@ pub(crate) fn swap_chain(
         return None;
     }
     let mut made: *mut c_void = std::ptr::null_mut();
-    let mut version = Version { header: Header::new(CREATE_SWAPCHAIN_VERSION_DX12), version: SWAPCHAIN_VERSION };
+    let mut version =
+        Version { header: Header::new(CREATE_SWAPCHAIN_VERSION_DX12), version: SWAPCHAIN_VERSION };
     let mut create = CreateSwapChainForHwnd {
         header: Header::new(CREATE_SWAPCHAIN_FOR_HWND_DX12),
         swap_chain: &mut made,
@@ -424,7 +449,10 @@ pub(crate) fn swap_chain(
     // SAFETY: filled descriptions that live through the call.
     let code = unsafe { (ffx.create)(&mut *context, (&raw mut create).cast(), std::ptr::null()) };
     if code != OK || made.is_null() {
-        tracing::warn!(code, "FSR 3 frame generation: FidelityFX did not make the swap chain; made as before, frame generation off");
+        tracing::warn!(
+            code,
+            "FSR 3 frame generation: FidelityFX did not make the swap chain; made as before, frame generation off"
+        );
         return None;
     }
     // SAFETY: the swap chain FidelityFX made, with the reference it gave us.
@@ -436,7 +464,13 @@ pub(crate) fn swap_chain(
             return None;
         }
     };
-    *live() = Some(Live { swap_chain_context: context, swap_chain: swap_chain.as_raw(), framegen: None, frame_id: 0, refused: None });
+    *live() = Some(Live {
+        swap_chain_context: context,
+        swap_chain: swap_chain.as_raw(),
+        framegen: None,
+        frame_id: 0,
+        refused: None,
+    });
     SWAP_CHAIN.store(true, Release);
     // The colour without the interface is copied in front of the title's interface composite, as for DLSS
     // Frame Generation (`VICTORY_FRAMEGEN_HUDLESS=0`: not).
@@ -556,7 +590,10 @@ pub(crate) fn before_present(
     // left: only the line of submissions orders the two.
     let line = crate::queue::line_on();
     if !line {
-        once!(warn, "FSR 3 frame generation: the line of submissions did not start; frame generation stays off");
+        once!(
+            warn,
+            "FSR 3 frame generation: the line of submissions did not start; frame generation stays off"
+        );
     }
     let wanted = super::framegen_wanted() != 0 && line;
     let fresh = if wanted { super::fresh_inputs() } else { None };
@@ -564,11 +601,17 @@ pub(crate) fn before_present(
     // and again when they change.
     if let Some(inputs) = &fresh {
         let render = inputs.camera.render;
-        let made_for = live.framegen.as_ref().map(|(_, s, r, f, flags, h)| (*s, *r, *f, *flags, *h));
+        let made_for =
+            live.framegen.as_ref().map(|(_, s, r, f, flags, h)| (*s, *r, *f, *flags, *h));
         let flags = create_flags(&inputs.camera, format);
         // (A frame without its copy keeps the context as it is.)
         let stale = made_for.is_some_and(|(s, r, f, fl, h)| {
-            s != size || r[0] < render[0] || r[1] < render[1] || f != format || fl != flags || (hudless_format != DXGI_FORMAT_UNKNOWN && h != hudless_format)
+            s != size
+                || r[0] < render[0]
+                || r[1] < render[1]
+                || f != format
+                || fl != flags
+                || (hudless_format != DXGI_FORMAT_UNKNOWN && h != hudless_format)
         });
         if stale {
             // (Everything sent so far is waited for: what was recorded with
@@ -686,7 +729,11 @@ pub(crate) fn before_present(
         PRESENTS_ON.fetch_add(1, Relaxed);
         if hudless.is_some() {
             HUDLESS_GIVEN.fetch_add(1, Relaxed);
-            once!(info, two_planes, "FSR 3 frame generation: first frame with the colour without the interface");
+            once!(
+                info,
+                two_planes,
+                "FSR 3 frame generation: first frame with the colour without the interface"
+            );
         }
     } else {
         PRESENTS_OFF.fetch_add(1, Relaxed);
@@ -702,15 +749,26 @@ fn create_context(
     flags: u32,
     hudless_format: DXGI_FORMAT,
 ) -> Option<Box<Context>> {
-    let mut backend = CreateBackend { header: Header::new(CREATE_BACKEND_DX12), device: device.as_raw() };
+    let mut backend =
+        CreateBackend { header: Header::new(CREATE_BACKEND_DX12), device: device.as_raw() };
     // The colour without the interface in a format of its own (else the back buffer's is assumed).
-    let mut hudless = Version { header: Header::new(CREATE_FRAMEGENERATION_HUDLESS), version: surface_format(hudless_format) };
+    let mut hudless = Version {
+        header: Header::new(CREATE_FRAMEGENERATION_HUDLESS),
+        version: surface_format(hudless_format),
+    };
     if hudless_format != DXGI_FORMAT_UNKNOWN && hudless_format != format {
         hudless.header.next = (&raw mut backend).cast();
     }
     let first_after_version: *mut Header =
-        if hudless_format != DXGI_FORMAT_UNKNOWN && hudless_format != format { (&raw mut hudless).cast() } else { (&raw mut backend).cast() };
-    let mut version = Version { header: Header::new(CREATE_FRAMEGENERATION_VERSION), version: FRAMEGENERATION_VERSION };
+        if hudless_format != DXGI_FORMAT_UNKNOWN && hudless_format != format {
+            (&raw mut hudless).cast()
+        } else {
+            (&raw mut backend).cast()
+        };
+    let mut version = Version {
+        header: Header::new(CREATE_FRAMEGENERATION_VERSION),
+        version: FRAMEGENERATION_VERSION,
+    };
     let mut create = CreateFrameGeneration {
         header: Header::new(CREATE_FRAMEGENERATION),
         flags,
@@ -805,8 +863,13 @@ fn surface_format(format: DXGI_FORMAT) -> u32 {
         DXGI_FORMAT_R32G32B32A32_FLOAT => 3,
         DXGI_FORMAT_R16G16B16A16_FLOAT => 4,
         DXGI_FORMAT_R32G32_FLOAT => 6,
-        DXGI_FORMAT_R8_UINT | DXGI_FORMAT_X32_TYPELESS_G8X24_UINT | DXGI_FORMAT_X24_TYPELESS_G8_UINT => 7,
-        DXGI_FORMAT_R32_UINT | DXGI_FORMAT_R24G8_TYPELESS | DXGI_FORMAT_D24_UNORM_S8_UINT | DXGI_FORMAT_R24_UNORM_X8_TYPELESS => 8,
+        DXGI_FORMAT_R8_UINT
+        | DXGI_FORMAT_X32_TYPELESS_G8X24_UINT
+        | DXGI_FORMAT_X24_TYPELESS_G8_UINT => 7,
+        DXGI_FORMAT_R32_UINT
+        | DXGI_FORMAT_R24G8_TYPELESS
+        | DXGI_FORMAT_D24_UNORM_S8_UINT
+        | DXGI_FORMAT_R24_UNORM_X8_TYPELESS => 8,
         DXGI_FORMAT_R8G8B8A8_TYPELESS => 9,
         DXGI_FORMAT_R8G8B8A8_UNORM => 10,
         DXGI_FORMAT_R8G8B8A8_SNORM => 11,
@@ -825,7 +888,11 @@ fn surface_format(format: DXGI_FORMAT) -> u32 {
         DXGI_FORMAT_R8_UNORM | DXGI_FORMAT_A8_UNORM => 25,
         DXGI_FORMAT_R8G8_UNORM => 26,
         DXGI_FORMAT_R8G8_UINT => 27,
-        DXGI_FORMAT_R32_FLOAT | DXGI_FORMAT_D32_FLOAT | DXGI_FORMAT_R32G8X24_TYPELESS | DXGI_FORMAT_D32_FLOAT_S8X24_UINT | DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS => 28,
+        DXGI_FORMAT_R32_FLOAT
+        | DXGI_FORMAT_D32_FLOAT
+        | DXGI_FORMAT_R32G8X24_TYPELESS
+        | DXGI_FORMAT_D32_FLOAT_S8X24_UINT
+        | DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS => 28,
         DXGI_FORMAT_R9G9B9E5_SHAREDEXP => 29,
         DXGI_FORMAT_R16G16B16A16_TYPELESS => 30,
         DXGI_FORMAT_R32G32_TYPELESS => 31,
@@ -848,7 +915,12 @@ pub(crate) fn line_counts() -> Option<(u64, u64, u64, u64)> {
     static LINES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let due = LINES.fetch_add(1, Relaxed) % 10 == 9;
     (SWAP_CHAIN.load(Relaxed) && due).then(|| {
-        (PRESENTS_ON.swap(0, Relaxed), PRESENTS_OFF.swap(0, Relaxed), FAILED.swap(0, Relaxed), HUDLESS_GIVEN.swap(0, Relaxed))
+        (
+            PRESENTS_ON.swap(0, Relaxed),
+            PRESENTS_OFF.swap(0, Relaxed),
+            FAILED.swap(0, Relaxed),
+            HUDLESS_GIVEN.swap(0, Relaxed),
+        )
     })
 }
 
@@ -876,7 +948,12 @@ mod tests {
         assert_eq!(size_of::<PrepareV2>(), 232);
     }
 
-    fn facts(dlss: bool, dlss_fg_supported: bool, fsr_loaded: bool, series_s: bool) -> super::super::Facts {
+    fn facts(
+        dlss: bool,
+        dlss_fg_supported: bool,
+        fsr_loaded: bool,
+        series_s: bool,
+    ) -> super::super::Facts {
         super::super::Facts {
             adapter: "NVIDIA GeForce RTX 3080".into(),
             series_s,
@@ -897,11 +974,19 @@ mod tests {
         let shown = |lines: &[String]| {
             for l in lines {
                 assert!(l.len() <= 52, "{l}");
-                assert!(l.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || b" .,:()/->+!?_=*".contains(&c)), "{l}");
+                assert!(
+                    l.bytes().all(|c| c.is_ascii_uppercase()
+                        || c.is_ascii_digit()
+                        || b" .,:()/->+!?_=*".contains(&c)),
+                    "{l}"
+                );
             }
         };
         let lines = |f, dlss_live, fsr_live| {
-            let l = notice_of(&f, dlss_live, fsr_live).into_iter().map(|l| l.to_ascii_uppercase()).collect::<Vec<_>>();
+            let l = notice_of(&f, dlss_live, fsr_live)
+                .into_iter()
+                .map(|l| l.to_ascii_uppercase())
+                .collect::<Vec<_>>();
             shown(&l);
             l.join("|")
         };
@@ -912,10 +997,15 @@ mod tests {
         assert!(rtx40.contains("FRAME GEN: DLSS, SUPPORTED") && !rtx40.contains("MOD"), "{rtx40}");
         // RTX 20/30 with DLSS frame generation running: a mod unlocked it (MFG Unlocker).
         let unlocked = lines(facts(true, true, true, false), true, false);
-        assert!(unlocked.contains("UNLOCKED BY A MOD") && !unlocked.contains("SUPPORTED HERE"), "{unlocked}");
+        assert!(
+            unlocked.contains("UNLOCKED BY A MOD") && !unlocked.contains("SUPPORTED HERE"),
+            "{unlocked}"
+        );
         // RTX 20/30 on Series X with DLSS: FSR 3 instead, 2X.
         let rtx30 = lines(facts(true, false, true, false), false, true);
-        assert!(rtx30.contains("NOT ON THIS CARD") && rtx30.contains("FSR 3") && rtx30.contains("2X"));
+        assert!(
+            rtx30.contains("NOT ON THIS CARD") && rtx30.contains("FSR 3") && rtx30.contains("2X")
+        );
         // No DLSS at all, Series X: FSR 3 needs Series S.
         let amd_x = lines(facts(false, false, false, false), false, false);
         assert!(amd_x.contains("HAS NO DLSS") && amd_x.contains("SERIES S"), "{amd_x}");

@@ -9,41 +9,21 @@ use super::xgameruntime::{
 };
 
 /// HDR mode; asked for with this interface id since 2020.
-pub const HDR_PROVIDER: Guid = Guid::new(
-    0x03f0_fe74,
-    0xfdd9,
-    0x4e5c,
-    [0xb6, 0x30, 0xf9, 0x33, 0x9c, 0x47, 0xac, 0xc5],
-);
-pub const HDR_IID: Guid = Guid::new(
-    0x35f0_7670,
-    0x706e,
-    0x4bfb,
-    [0x94, 0x76, 0x09, 0x07, 0x98, 0xc5, 0xeb, 0xf3],
-);
+pub const HDR_PROVIDER: Guid =
+    Guid::new(0x03f0_fe74, 0xfdd9, 0x4e5c, [0xb6, 0x30, 0xf9, 0x33, 0x9c, 0x47, 0xac, 0xc5]);
+pub const HDR_IID: Guid =
+    Guid::new(0x35f0_7670, 0x706e, 0x4bfb, [0x94, 0x76, 0x09, 0x07, 0x98, 0xc5, 0xeb, 0xf3]);
 /// Launching URIs and screen timeout deferrals; the interface id is the
 /// provider's.
-pub const SHELL: Guid = Guid::new(
-    0x1b33_9674,
-    0x328d,
-    0x4283,
-    [0xa2, 0x00, 0x31, 0x71, 0xf1, 0x8d, 0x36, 0x39],
-);
+pub const SHELL: Guid =
+    Guid::new(0x1b33_9674, 0x328d, 0x4283, [0xa2, 0x00, 0x31, 0x71, 0xf1, 0x8d, 0x36, 0x39]);
 /// Screenshots and clips.
-pub const CAPTURE_PROVIDER: Guid = Guid::new(
-    0xa4f1_aee2,
-    0x4bf1,
-    0x4485,
-    [0xb0, 0x08, 0xa7, 0xc2, 0x6d, 0x52, 0xac, 0x27],
-);
+pub const CAPTURE_PROVIDER: Guid =
+    Guid::new(0xa4f1_aee2, 0x4bf1, 0x4485, [0xb0, 0x08, 0xa7, 0xc2, 0x6d, 0x52, 0xac, 0x27]);
 /// As the title (2026) asks for it; it calls 0x28 (take a
 /// screenshot) with the public API's arguments.
-pub const CAPTURE_IID_2026: Guid = Guid::new(
-    0x22e6_72d7,
-    0xb4e3,
-    0x406c,
-    [0xbd, 0x50, 0x8f, 0x0d, 0x25, 0x23, 0x6f, 0x9e],
-);
+pub const CAPTURE_IID_2026: Guid =
+    Guid::new(0x22e6_72d7, 0xb4e3, 0x406c, [0xbd, 0x50, 0x8f, 0x0d, 0x25, 0x23, 0x6f, 0x9e]);
 
 pub static HDR_OBJECT: Object = Object::new("hdr", &HDR_VTABLE);
 pub static SHELL_OBJECT: Object = Object::new("shell", &SHELL_VTABLE);
@@ -87,10 +67,8 @@ extern "system" fn acquire_deferral(_: This, out: *mut *mut c_void) -> HRESULT {
         return super::xasync::E_INVALIDARG;
     }
     let mut reason: Vec<u16> = "Title display deferral\0".encode_utf16().collect();
-    let mut context = REASON_CONTEXT {
-        Flags: POWER_REQUEST_CONTEXT_SIMPLE_STRING,
-        ..Default::default()
-    };
+    let mut context =
+        REASON_CONTEXT { Flags: POWER_REQUEST_CONTEXT_SIMPLE_STRING, ..Default::default() };
     context.Reason.SimpleReasonString = reason.as_mut_ptr();
     // SAFETY: a valid context; the string is copied by the call.
     let request = unsafe { PowerCreateRequest(&context) };
@@ -178,10 +156,7 @@ mod tests {
     #[test]
     fn sdr_and_display_deferrals() {
         type Hdr = extern "system" fn(This, u32, *mut c_void) -> u32;
-        assert_eq!(
-            method::<Hdr>(&HDR_OBJECT, 0x20)(&HDR_OBJECT, 0, std::ptr::null_mut()),
-            2
-        );
+        assert_eq!(method::<Hdr>(&HDR_OBJECT, 0x20)(&HDR_OBJECT, 0, std::ptr::null_mut()), 2);
         type Acquire = extern "system" fn(This, *mut *mut c_void) -> HRESULT;
         type Close = extern "system" fn(This, *mut c_void);
         let mut handle = std::ptr::null_mut();

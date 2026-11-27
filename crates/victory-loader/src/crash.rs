@@ -64,8 +64,11 @@ pub fn log_crashes_to(file: std::path::PathBuf) {
 /// Appends a failure that is not an exception (the host GPU's) to the crash
 /// log, with the title's last debug output, and prints it.
 pub fn log_crash(text: &str) {
-    let text = format!("{text}
-{}", title_output());
+    let text = format!(
+        "{text}
+{}",
+        title_output()
+    );
     eprint!("{text}");
     append_to_log(&text);
 }
@@ -251,11 +254,7 @@ struct ClwbLoop {
 /// `u64::MAX`, or `None` if `add base, 0x40` would overflow or wrap (in which
 /// case we fall through to single-instruction `clwb` emulation).
 fn clwb_loop_end(base: u64, limit: u64) -> Option<u64> {
-    let step = if base <= limit {
-        ((limit - base) / 64 + 1).checked_mul(64)?
-    } else {
-        64
-    };
+    let step = if base <= limit { ((limit - base) / 64 + 1).checked_mul(64)? } else { 64 };
     let end = base.checked_add(step)?;
     (end > limit).then_some(end)
 }
@@ -368,8 +367,7 @@ unsafe fn clzero(context: &mut CONTEXT) -> bool {
                 context.Rax = next;
                 *gpr(context, a) = next.wrapping_add(0x40);
             }
-            context.EFlags =
-                context.EFlags & !CMP_FLAGS | cmp_flags(*gpr(context, a), limit);
+            context.EFlags = context.EFlags & !CMP_FLAGS | cmp_flags(*gpr(context, a), limit);
             context.Rip += 8;
             return true;
         }
@@ -427,11 +425,7 @@ unsafe fn sse4a(code: *const u8, xmm: &mut [M128A; 16]) -> Option<usize> {
     // SAFETY: the caller's code bytes are readable up to the instruction's end.
     let b = |i: usize| unsafe { code.add(i).read() };
     let prefix = b(0);
-    let (rex, at) = if b(1) & 0xf0 == 0x40 {
-        (b(1), 2)
-    } else {
-        (0, 1)
-    };
+    let (rex, at) = if b(1) & 0xf0 == 0x40 { (b(1), 2) } else { (0, 1) };
     if !matches!(prefix, 0x66 | 0xf2) || b(at) != 0x0f || !matches!(b(at + 1), 0x78 | 0x79) {
         return None;
     }
@@ -533,8 +527,7 @@ unsafe fn thrown(p: &[usize]) -> String {
         let types = p[3] + rva(p[2] + 12);
         let name = |i: usize| {
             let descriptor = p[3] + rva(p[3] + rva(types + 4 + 4 * i) + 4);
-            std::ffi::CStr::from_ptr((descriptor + 16) as *const std::ffi::c_char)
-                .to_string_lossy()
+            std::ffi::CStr::from_ptr((descriptor + 16) as *const std::ffi::c_char).to_string_lossy()
         };
         let first = name(0);
         let value = match &*first {
@@ -589,11 +582,7 @@ unsafe fn report(what: &str, info: *const EXCEPTION_POINTERS, to_file: bool) {
         text.push_str(&l);
         text.push('\n');
     };
-    line(format!(
-        "VIctory: {what} {:#010x} at {}{detail}",
-        code as u32,
-        locate(at)
-    ));
+    line(format!("VIctory: {what} {:#010x} at {}{detail}", code as u32, locate(at)));
     line(format!(
         "  rax {:#x} rbx {:#x} rcx {:#x} rdx {:#x} rsi {:#x} rdi {:#x} rsp {:#x} rbp {:#x}",
         context.Rax,
@@ -630,10 +619,7 @@ unsafe fn report(what: &str, info: *const EXCEPTION_POINTERS, to_file: bool) {
         // SAFETY: the caller of `save_on_crash` named readable memory.
         let bytes = unsafe { std::slice::from_raw_parts(*address as *const u8, *len) };
         let saved = std::fs::write(file, bytes);
-        eprintln!(
-            "  saved {address:#x}+{len:#x} to {} ({saved:?})",
-            file.display()
-        );
+        eprintln!("  saved {address:#x}+{len:#x} to {} ({saved:?})", file.display());
     }
 }
 
@@ -832,10 +818,7 @@ mod tests {
         // call sites), and the callers above are the same.
         if walked.len() >= helpers.len() {
             assert!(frames.len() >= walked.len(), "{frames:?} vs {walked:?}");
-            let ours: Vec<usize> = frames[1..walked.len()]
-                .iter()
-                .map(|&f| f as usize)
-                .collect();
+            let ours: Vec<usize> = frames[1..walked.len()].iter().map(|&f| f as usize).collect();
             assert_eq!(ours.as_slice(), &walked[1..]);
         }
     }
@@ -852,10 +835,7 @@ mod tests {
             let mut walked = [null_mut(); 8];
             let n = RtlCaptureStackBackTrace(0, 8, walked.as_mut_ptr(), null_mut());
             let frames = unwind(context.0);
-            let walked = walked[..usize::from(n)]
-                .iter()
-                .map(|&f| f as usize)
-                .collect();
+            let walked = walked[..usize::from(n)].iter().map(|&f| f as usize).collect();
             (frames, walked)
         }
     }
@@ -1031,21 +1011,14 @@ mod tests {
         };
         // SAFETY: two pages of ours, the second unreadable so reading past the first faults.
         unsafe {
-            let page = VirtualAlloc(
-                std::ptr::null(),
-                0x2000,
-                MEM_RESERVE | MEM_COMMIT,
-                PAGE_READWRITE,
-            )
-            .cast::<u8>();
+            let page =
+                VirtualAlloc(std::ptr::null(), 0x2000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+                    .cast::<u8>();
             assert!(!page.is_null());
             let mut old = 0;
             let guard = page.add(0x1000).cast();
             assert_ne!(VirtualProtect(guard, 0x1000, PAGE_NOACCESS, &mut old), 0);
-            for insn in [
-                &[0x66, 0x0f, 0xae, 0x30][..],
-                &[0x66, 0x41, 0x0f, 0xae, 0x31][..],
-            ] {
+            for insn in [&[0x66, 0x0f, 0xae, 0x30][..], &[0x66, 0x41, 0x0f, 0xae, 0x31][..]] {
                 let end = page.add(0x1000 - insn.len());
                 end.copy_from_nonoverlapping(insn.as_ptr(), insn.len());
                 let mut record: EXCEPTION_RECORD = std::mem::zeroed();
@@ -1164,10 +1137,7 @@ mod tests {
     }
 
     fn reg(low: u64, high: u64) -> M128A {
-        M128A {
-            Low: low,
-            High: high as i64,
-        }
+        M128A { Low: low, High: high as i64 }
     }
 
     /// Gives `code` to the emulation as if it faulted with `exception` at
@@ -1191,10 +1161,8 @@ mod tests {
             context.Rip = start;
             context.Rax = rax;
             context.Anonymous.FltSave.XmmRegisters = *xmm;
-            let mut pointers = EXCEPTION_POINTERS {
-                ExceptionRecord: &mut record,
-                ContextRecord: &mut context,
-            };
+            let mut pointers =
+                EXCEPTION_POINTERS { ExceptionRecord: &mut record, ContextRecord: &mut context };
             let emulated = emulate_amd_only(&mut pointers);
             *xmm = context.Anonymous.FltSave.XmmRegisters;
             emulated.then(|| context.Rip - start)
@@ -1238,10 +1206,8 @@ mod tests {
         unsafe {
             let mut record: EXCEPTION_RECORD = std::mem::zeroed();
             record.ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
-            let mut pointers = EXCEPTION_POINTERS {
-                ExceptionRecord: &mut record,
-                ContextRecord: context,
-            };
+            let mut pointers =
+                EXCEPTION_POINTERS { ExceptionRecord: &mut record, ContextRecord: context };
             let emulated = emulate_amd_only(&mut pointers);
             context.Rip -= bytes.as_ptr() as u64;
             emulated
@@ -1387,17 +1353,11 @@ mod tests {
         xmm[0] = reg(0x1122_3344_5566_7788, 0);
         // extrq xmm0, length 0 (64), index 0. A non-zero index with
         // length 64 goes past bit 63, and AMD leaves that result undefined.
-        assert_eq!(
-            emulate(&[0x66, 0x0f, 0x78, 0xc0, 0x00, 0x00], 0, &mut xmm),
-            Some(6)
-        );
+        assert_eq!(emulate(&[0x66, 0x0f, 0x78, 0xc0, 0x00, 0x00], 0, &mut xmm), Some(6));
         assert_eq!(low(&xmm, 0), 0x1122_3344_5566_7788);
         // insertq xmm0, xmm1, length 0 (64), index 0
         xmm[1] = reg(0xdead_beef_cafe_f00d, 0);
-        assert_eq!(
-            emulate(&[0xf2, 0x0f, 0x78, 0xc1, 0x00, 0x00], 0, &mut xmm),
-            Some(6)
-        );
+        assert_eq!(emulate(&[0xf2, 0x0f, 0x78, 0xc1, 0x00, 0x00], 0, &mut xmm), Some(6));
         assert_eq!(low(&xmm, 0), 0xdead_beef_cafe_f00d);
     }
 
@@ -1412,10 +1372,7 @@ mod tests {
         assert_eq!(emulate(&bad_extrq, 0, &mut xmm), None);
         // a clzero that did not cause an illegal instruction
         let clzero = [0x0f, 0x01, 0xfc];
-        assert_eq!(
-            emulate_as(EXCEPTION_ACCESS_VIOLATION, &clzero, 0, &mut xmm),
-            None
-        );
+        assert_eq!(emulate_as(EXCEPTION_ACCESS_VIOLATION, &clzero, 0, &mut xmm), None);
     }
 
     #[test]
@@ -1430,13 +1387,9 @@ mod tests {
         // SAFETY: two fresh pages of ours, the second made unreadable, so a
         // read past the end of the first faults.
         unsafe {
-            let page = VirtualAlloc(
-                std::ptr::null(),
-                0x2000,
-                MEM_RESERVE | MEM_COMMIT,
-                PAGE_READWRITE,
-            )
-            .cast::<u8>();
+            let page =
+                VirtualAlloc(std::ptr::null(), 0x2000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+                    .cast::<u8>();
             assert!(!page.is_null());
             let mut old = 0;
             let guard = page.add(0x1000).cast();

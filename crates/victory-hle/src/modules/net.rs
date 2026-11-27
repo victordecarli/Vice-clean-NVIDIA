@@ -50,18 +50,10 @@ const WINHTTP_OPTION_PROXY: u32 = 38;
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Guid(u32, u16, u16, [u8; 8]);
 
-const WSAID_CONNECTEX: Guid = Guid(
-    0x25a2_07b9,
-    0xddf3,
-    0x4660,
-    [0x8e, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e],
-);
-const WSAID_WSASENDMSG: Guid = Guid(
-    0xa441_e712,
-    0x754f,
-    0x43ca,
-    [0x84, 0xa7, 0x0d, 0xee, 0x44, 0xcf, 0x60, 0x6d],
-);
+const WSAID_CONNECTEX: Guid =
+    Guid(0x25a2_07b9, 0xddf3, 0x4660, [0x8e, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e]);
+const WSAID_WSASENDMSG: Guid =
+    Guid(0xa441_e712, 0x754f, 0x43ca, [0x84, 0xa7, 0x0d, 0xee, 0x44, 0xcf, 0x60, 0x6d]);
 
 type Socket = usize;
 type Handle = *mut c_void;
@@ -83,9 +75,7 @@ fn wsa_error(code: i32) {
 fn narrow(text: *const c_char) -> Option<String> {
     (!text.is_null()).then(|| {
         // SAFETY: the title passes a NUL-terminated string.
-        unsafe { CStr::from_ptr(text) }
-            .to_string_lossy()
-            .into_owned()
+        unsafe { CStr::from_ptr(text) }.to_string_lossy().into_owned()
     })
 }
 
@@ -162,11 +152,7 @@ fn reachable_name(name: Option<String>) -> bool {
         Some(name) if !loopback_name(&name) => {
             let literal = name.parse::<IpAddr>().is_ok();
             once("network connect blocked", name);
-            wsa_error(if literal {
-                WSAENETUNREACH
-            } else {
-                WSAHOST_NOT_FOUND
-            });
+            wsa_error(if literal { WSAENETUNREACH } else { WSAHOST_NOT_FOUND });
             false
         }
         // No name: the host rejects the call itself.
@@ -313,10 +299,7 @@ pub extern "system" fn WSAConnectByList(
             let count = usize::try_from(list.cast::<i32>().read()).unwrap_or(0);
             std::slice::from_raw_parts(list.add(8).cast::<SocketAddress>(), count)
         };
-        if !entries
-            .iter()
-            .all(|e| reachable("network connect blocked", e.addr, e.len))
-        {
+        if !entries.iter().all(|e| reachable("network connect blocked", e.addr, e.len)) {
             return 0;
         }
     }
@@ -1002,59 +985,32 @@ mod tests {
             null,
         );
         assert_eq!((got, f), (0, connect_ex as *const () as usize));
-        assert_eq!(
-            connect_ex(s, v4(AWAY, 80).as_ptr(), 16, null, 0, n, null),
-            0
-        );
+        assert_eq!(connect_ex(s, v4(AWAY, 80).as_ptr(), 16, null, 0, n, null), 0);
         assert_eq!(last_error(), WSAENETUNREACH);
         close(s);
 
         // Datagram sends.
         let u = socket(2, 2, 17);
-        assert_eq!(
-            sendto(u, b"x".as_ptr(), 1, 0, v4(AWAY, 9).as_ptr(), 16),
-            SOCKET_ERROR
-        );
+        assert_eq!(sendto(u, b"x".as_ptr(), 1, 0, v4(AWAY, 9).as_ptr(), 16), SOCKET_ERROR);
         assert_eq!(last_error(), WSAENETUNREACH);
-        assert_eq!(
-            sendto(u, b"x".as_ptr(), 1, 0, v4(HOME, port).as_ptr(), 16),
-            1
-        );
+        assert_eq!(sendto(u, b"x".as_ptr(), 1, 0, v4(HOME, port).as_ptr(), 16), 1);
         close(u);
 
         // Forward and reverse lookups.
         let mut result = null;
         assert_eq!(
-            getaddrinfo(
-                c"example.com".as_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                &mut result
-            ),
+            getaddrinfo(c"example.com".as_ptr(), std::ptr::null(), std::ptr::null(), &mut result),
             WSAHOST_NOT_FOUND
         );
         let name: Vec<u16> = "example.com\0".encode_utf16().collect();
         assert_eq!(
-            GetAddrInfoW(
-                name.as_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                &mut result
-            ),
+            GetAddrInfoW(name.as_ptr(), std::ptr::null(), std::ptr::null(), &mut result),
             WSAHOST_NOT_FOUND
         );
         let mut text = [0 as c_char; 64];
         let away = v4(AWAY, 80);
         assert_eq!(
-            getnameinfo(
-                away.as_ptr(),
-                16,
-                text.as_mut_ptr(),
-                64,
-                std::ptr::null_mut(),
-                0,
-                0
-            ),
+            getnameinfo(away.as_ptr(), 16, text.as_mut_ptr(), 64, std::ptr::null_mut(), 0, 0),
             0
         );
         // SAFETY: NUL-terminated by `getnameinfo`.
@@ -1107,11 +1063,7 @@ mod tests {
         // them only when the host really lacks them.
         const NEWER_WINDOWS_ONLY: &[&str] = &["WinHttpGetProxySettingsEx"];
         for e in m.exports.iter().filter(|e| !e.name.starts_with('#')) {
-            let dll = if e.name.starts_with("WinHttp") {
-                "winhttp.dll"
-            } else {
-                "ws2_32.dll"
-            };
+            let dll = if e.name.starts_with("WinHttp") { "winhttp.dll" } else { "ws2_32.dll" };
             let present = crate::host::function(dll, e.name).is_some();
             if !present && NEWER_WINDOWS_ONLY.contains(&e.name) {
                 continue;

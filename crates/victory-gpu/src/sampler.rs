@@ -49,11 +49,8 @@ impl Fields {
         };
         let min_lod = finite_lod(self.min_lod, 0.0);
         // Without a mip filter the console clamps sampling to `min_lod`.
-        let max_lod = if self.mip == 0 {
-            min_lod
-        } else {
-            finite_lod(self.max_lod, min_lod).max(min_lod)
-        };
+        let max_lod =
+            if self.mip == 0 { min_lod } else { finite_lod(self.max_lod, min_lod).max(min_lod) };
         D3D12_SAMPLER_DESC {
             Filter: D3D12_FILTER((reduction << 7 | filter) as i32),
             AddressU: address_mode(self.address[0]),
@@ -62,14 +59,9 @@ impl Fields {
             MipLODBias: if self.bias.is_nan() {
                 0.0
             } else {
-                self.bias
-                    .clamp(D3D12_MIP_LOD_BIAS_MIN, D3D12_MIP_LOD_BIAS_MAX)
+                self.bias.clamp(D3D12_MIP_LOD_BIAS_MIN, D3D12_MIP_LOD_BIAS_MAX)
             },
-            MaxAnisotropy: if aniso {
-                self.anisotropy.clamp(1, 16)
-            } else {
-                1
-            },
+            MaxAnisotropy: if aniso { self.anisotropy.clamp(1, 16) } else { 1 },
             ComparisonFunc: if reduction == 1 {
                 D3D12_COMPARISON_FUNC(self.compare as i32)
             } else {
@@ -92,11 +84,7 @@ fn address_mode(mode: u32) -> D3D12_TEXTURE_ADDRESS_MODE {
 
 /// Sanitizes an LOD bound for D3D12, substituting `fallback` for `NaN` and clamping infinities.
 fn finite_lod(value: f32, fallback: f32) -> f32 {
-    if value.is_nan() {
-        fallback
-    } else {
-        value.clamp(-D3D12_FLOAT32_MAX, D3D12_FLOAT32_MAX)
-    }
+    if value.is_nan() { fallback } else { value.clamp(-D3D12_FLOAT32_MAX, D3D12_FLOAT32_MAX) }
 }
 
 /// The console's sampler description (27 words): flags, magnification,
@@ -183,10 +171,7 @@ mod tests {
         w[9] = f32::NEG_INFINITY.to_bits();
         w[10] = f32::NEG_INFINITY.to_bits();
         let d = console(&w);
-        assert_eq!(
-            (d.MinLOD, d.MaxLOD),
-            (-D3D12_FLOAT32_MAX, -D3D12_FLOAT32_MAX)
-        );
+        assert_eq!((d.MinLOD, d.MaxLOD), (-D3D12_FLOAT32_MAX, -D3D12_FLOAT32_MAX));
     }
 
     #[test]
@@ -197,10 +182,7 @@ mod tests {
         w[16] = 99;
         let d = console(&w);
         assert_eq!(d.MipLODBias, D3D12_MIP_LOD_BIAS_MAX);
-        assert_eq!(
-            [d.AddressU, d.AddressV, d.AddressW],
-            [D3D12_TEXTURE_ADDRESS_MODE_CLAMP; 3]
-        );
+        assert_eq!([d.AddressU, d.AddressV, d.AddressW], [D3D12_TEXTURE_ADDRESS_MODE_CLAMP; 3]);
         assert_eq!(d.ComparisonFunc, D3D12_COMPARISON_FUNC_NEVER);
 
         w[11] = (-24.0f32).to_bits();

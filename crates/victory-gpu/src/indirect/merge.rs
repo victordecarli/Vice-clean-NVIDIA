@@ -217,7 +217,9 @@ impl Held {
         // recorded since: everything that records records this first); the
         // run's records are in `buffer`, which `self` holds; the signature
         // is cached for the process.
-        unsafe { list.ExecuteIndirect(&self.signature, run.records, &self.buffer, run.at, None, 0) };
+        unsafe {
+            list.ExecuteIndirect(&self.signature, run.records, &self.buffer, run.at, None, 0)
+        };
     }
 }
 
@@ -236,9 +238,31 @@ pub(crate) fn count(verdict: Verdict, joined: bool) {
 
 /// The frame line of the joining: per frame of the last `frames`.
 pub(crate) fn line(frames: f64) {
-    let [joins, first, between, counted, alone, differs, clamped, rebound, constants, unsettled, apart, joined] =
-        std::array::from_fn::<f64, 12, _>(|i| COUNTS[i].swap(0, Ordering::Relaxed) as f64 / frames);
-    let all = joins + first + between + counted + alone + differs + clamped + rebound + constants + unsettled + apart;
+    let [
+        joins,
+        first,
+        between,
+        counted,
+        alone,
+        differs,
+        clamped,
+        rebound,
+        constants,
+        unsettled,
+        apart,
+        joined,
+    ] = std::array::from_fn::<f64, 12, _>(|i| COUNTS[i].swap(0, Ordering::Relaxed) as f64 / frames);
+    let all = joins
+        + first
+        + between
+        + counted
+        + alone
+        + differs
+        + clamped
+        + rebound
+        + constants
+        + unsettled
+        + apart;
     if all == 0.0 {
         return;
     }
@@ -336,7 +360,10 @@ mod tests {
         // Another table or view between: not joined.
         assert_eq!(verdict(Some(&run), &Call { rebinds: [2, 6], ..call(3, 1) }), Verdict::Rebound);
         // Root constants only: what a signature with root constants could join.
-        assert_eq!(verdict(Some(&run), &Call { rebinds: [3, 5], ..call(3, 1) }), Verdict::Constants);
+        assert_eq!(
+            verdict(Some(&run), &Call { rebinds: [3, 5], ..call(3, 1) }),
+            Verdict::Constants
+        );
         assert_eq!(verdict(Some(&run), &Call { rebinds: [3, 6], ..call(3, 1) }), Verdict::Rebound);
         // A joined execution carries the counts on.
         let mut run = Run::of(&call(3, 0), 7);
@@ -374,7 +401,10 @@ mod tests {
         let run = Run::of(&call(3, 0), 7);
         assert_eq!(verdict(Some(&run), &Call { buffer: 0x200, ..call(3, 1) }), Verdict::Apart);
         // A window walked at 48 bytes is not a run of 32-byte slots.
-        assert_eq!(verdict(Some(&run), &Call { step: 48, at: 64 + 48, ..call(3, 1) }), Verdict::Apart);
+        assert_eq!(
+            verdict(Some(&run), &Call { step: 48, at: 64 + 48, ..call(3, 1) }),
+            Verdict::Apart
+        );
         // The same record again (a batch gives a repeated record its slot).
         assert_eq!(verdict(Some(&run), &call(3, 0)), Verdict::Apart);
     }
@@ -382,7 +412,14 @@ mod tests {
     #[test]
     fn the_title_calls_come_first_among_the_reasons() {
         let run = Run::of(&call(3, 0), 8);
-        let other = Call { kind: DRAW, clamped: true, single: false, epoch: 9, buffer: 0x200, ..call(4, 5) };
+        let other = Call {
+            kind: DRAW,
+            clamped: true,
+            single: false,
+            epoch: 9,
+            buffer: 0x200,
+            ..call(4, 5)
+        };
         assert_eq!(verdict(Some(&run), &other), Verdict::Between);
     }
 }

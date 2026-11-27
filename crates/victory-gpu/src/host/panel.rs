@@ -91,14 +91,22 @@ fn lit(lines: &[String], shape: Shape, x: u32, y: u32) -> bool {
     if x % CELL.0 >= GLYPH.0 || y % CELL.1 >= GLYPH.1 || x / CELL.0 >= shape.columns {
         return false;
     }
-    let Some(&c) = lines.get((y / CELL.1) as usize).and_then(|l| l.as_bytes().get((x / CELL.0) as usize)) else {
+    let Some(&c) =
+        lines.get((y / CELL.1) as usize).and_then(|l| l.as_bytes().get((x / CELL.0) as usize))
+    else {
         return false;
     };
     (glyph(c.to_ascii_uppercase())[(y % CELL.1) as usize] >> (GLYPH.0 - 1 - x % CELL.0)) & 1 != 0
 }
 
 /// The box as rows of `pitch` bytes.
-fn painted(lines: &[String], shape: Shape, scale: u32, colours: [&[u8]; 2], pitch: usize) -> Vec<u8> {
+fn painted(
+    lines: &[String],
+    shape: Shape,
+    scale: u32,
+    colours: [&[u8]; 2],
+    pitch: usize,
+) -> Vec<u8> {
     let (width, height) = size(shape, scale);
     let bytes = colours[0].len();
     let mut out = vec![0; pitch * height as usize];
@@ -162,7 +170,9 @@ impl Counters {
 /// The process's memory in bytes: in physical memory, and committed
 /// (private bytes).
 fn process_memory() -> (u64, u64) {
-    use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+    };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     let mut c = PROCESS_MEMORY_COUNTERS {
         cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
@@ -229,11 +239,9 @@ impl Buffers {
         let (width, height) = size(shape, scale);
         let pitch = (width * colours(format)?[0].len() as u32).next_multiple_of(256);
         let bytes = u64::from(pitch) * u64::from(height);
-        let uploads = (0..UPLOADS).map(|_| host.upload_buffer(bytes)).collect::<Option<Vec<_>>>()?;
-        let heap = D3D12_HEAP_PROPERTIES {
-            Type: D3D12_HEAP_TYPE_DEFAULT,
-            ..Default::default()
-        };
+        let uploads =
+            (0..UPLOADS).map(|_| host.upload_buffer(bytes)).collect::<Option<Vec<_>>>()?;
+        let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() };
         let desc = D3D12_RESOURCE_DESC {
             Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
             Width: bytes,
@@ -248,7 +256,14 @@ impl Buffers {
         // SAFETY: plain creation of a buffer.
         unsafe {
             host.device
-                .CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, None, &mut card)
+                .CreateCommittedResource(
+                    &heap,
+                    D3D12_HEAP_FLAG_NONE,
+                    &desc,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    None,
+                    &mut card,
+                )
                 .ok()?;
         }
         Some(Buffers { shape, format, scale, pitch, uploads, card: card?, turn: 0, fresh: false })
@@ -259,13 +274,25 @@ impl Buffers {
         let picture = painted(lines, self.shape, self.scale, colours, self.pitch as usize);
         self.turn = (self.turn + 1) % UPLOADS;
         // SAFETY: a mapped upload buffer of the picture's size, which the card read a second or more ago.
-        unsafe { std::ptr::copy_nonoverlapping(picture.as_ptr(), self.uploads[self.turn].1, picture.len()) };
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                picture.as_ptr(),
+                self.uploads[self.turn].1,
+                picture.len(),
+            )
+        };
         self.fresh = true;
     }
 
     /// Records the copy of the box onto `back` (of `width` x `height`, in the
     /// state to be copied into), its upper left corner at `at`.
-    fn copy(&mut self, list: &ID3D12GraphicsCommandList, back: &ID3D12Resource, at: (u32, u32), (width, height): (u32, u32)) {
+    fn copy(
+        &mut self,
+        list: &ID3D12GraphicsCommandList,
+        back: &ID3D12Resource,
+        at: (u32, u32),
+        (width, height): (u32, u32),
+    ) {
         let (w, h) = size(self.shape, self.scale);
         if at.0 >= width || at.1 >= height {
             return;
@@ -274,7 +301,11 @@ impl Buffers {
         unsafe {
             if std::mem::take(&mut self.fresh) {
                 list.CopyResource(&self.card, &self.uploads[self.turn].0);
-                list.ResourceBarrier(&[transition(&self.card, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE)]);
+                list.ResourceBarrier(&[transition(
+                    &self.card,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_COPY_SOURCE,
+                )]);
             }
             let from = D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(&self.card),
@@ -297,7 +328,14 @@ impl Buffers {
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
                 Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
             };
-            let part = D3D12_BOX { left: 0, top: 0, front: 0, right: w.min(width - at.0), bottom: h.min(height - at.1), back: 1 };
+            let part = D3D12_BOX {
+                left: 0,
+                top: 0,
+                front: 0,
+                right: w.min(width - at.0),
+                bottom: h.min(height - at.1),
+                back: 1,
+            };
             list.CopyTextureRegion(&to, at.0, at.1, 0, &from, Some(&part));
         }
     }
@@ -424,9 +462,13 @@ pub(super) struct Notice {
 impl Notice {
     pub(super) fn new() -> Notice {
         // The first start of a new victory.exe says first that it restarts by itself (menu.rs).
-        let warmup = super::menu::warmup_seconds().map(super::menu::warmup_notice).unwrap_or_default();
-        let lines: Vec<String> =
-            warmup.into_iter().chain(crate::streamline::notice()).map(|l| l.to_ascii_uppercase()).collect();
+        let warmup =
+            super::menu::warmup_seconds().map(super::menu::warmup_notice).unwrap_or_default();
+        let lines: Vec<String> = warmup
+            .into_iter()
+            .chain(crate::streamline::notice())
+            .map(|l| l.to_ascii_uppercase())
+            .collect();
         let columns = lines.iter().map(|l| l.len() as u32).max().unwrap_or(0).min(NOTICE_COLUMNS);
         let shape = Shape { columns, lines: lines.len() as u32 };
         Notice { done: lines.is_empty(), lines, shape, since: None, buffers: None, written: false }
@@ -434,7 +476,14 @@ impl Notice {
 
     /// Records the copy of the notice onto `back` (as [`Panel::draw`]), at
     /// the top in the middle, while it is due.
-    pub(super) fn draw(&mut self, host: &Host, list: &HostList, back: &ID3D12Resource, (width, height): (u32, u32), format: DXGI_FORMAT) {
+    pub(super) fn draw(
+        &mut self,
+        host: &Host,
+        list: &HostList,
+        back: &ID3D12Resource,
+        (width, height): (u32, u32),
+        format: DXGI_FORMAT,
+    ) {
         if self.done {
             return;
         }

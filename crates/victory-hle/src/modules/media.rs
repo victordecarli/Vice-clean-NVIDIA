@@ -21,19 +21,12 @@ const E_POINTER: HRESULT = 0x8000_4003_u32 as i32;
 const UNSUPPORTED_SCHEME: HRESULT = 0xC00D_36C3_u32 as i32;
 
 const IID_IUNKNOWN: [u8; 16] = guid(0x0000_0000, 0x0000, 0x0000, [0xC0, 0, 0, 0, 0, 0, 0, 0x46]);
-const IID_RESOLVER: [u8; 16] = guid(
-    0xFBE5_A32D,
-    0xA497,
-    0x4B61,
-    [0xBB, 0x85, 0x97, 0xB1, 0xA8, 0x48, 0xA6, 0xE3],
-);
+const IID_RESOLVER: [u8; 16] =
+    guid(0xFBE5_A32D, 0xA497, 0x4B61, [0xBB, 0x85, 0x97, 0xB1, 0xA8, 0x48, 0xA6, 0xE3]);
 
 const fn guid(a: u32, b: u16, c: u16, d: [u8; 8]) -> [u8; 16] {
     let (a, b, c) = (a.to_le_bytes(), b.to_le_bytes(), c.to_le_bytes());
-    [
-        a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6],
-        d[7],
-    ]
+    [a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]]
 }
 
 // The URL rule.
@@ -70,9 +63,7 @@ fn local(url: &[u16]) -> Result<Vec<u16>, (String, String)> {
     } else if drive(&text) {
         text.clone()
     } else if let Some((scheme, rest)) = text.split_once(':').filter(|(s, _)| {
-        s.len() > 1
-            && s.bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"+-.".contains(&c))
+        s.len() > 1 && s.bytes().all(|c| c.is_ascii_alphanumeric() || b"+-.".contains(&c))
     }) {
         let scheme = scheme.to_ascii_lowercase();
         let authority = rest.strip_prefix("//");
@@ -145,23 +136,14 @@ fn checked(url: *const u16) -> Result<Vec<u16>, HRESULT> {
         return Err(E_POINTER);
     }
     // SAFETY: a NUL-terminated wide string from the title.
-    let len = (0..)
-        .take_while(|&i| unsafe { url.add(i).read() } != 0)
-        .count();
+    let len = (0..).take_while(|&i| unsafe { url.add(i).read() } != 0).count();
     // SAFETY: as above, `len` characters before the NUL.
     let wide = unsafe { std::slice::from_raw_parts(url, len) };
     local(wide).map_err(|(scheme, host)| {
         static REFUSED: Mutex<Option<HashSet<(String, String)>>> = Mutex::new(None);
         let mut refused = REFUSED.lock().unwrap_or_else(|e| e.into_inner());
-        if refused
-            .get_or_insert_with(HashSet::new)
-            .insert((scheme.clone(), host.clone()))
-        {
-            tracing::warn!(
-                scheme,
-                host,
-                "media: refused a URL that is not a local file"
-            );
+        if refused.get_or_insert_with(HashSet::new).insert((scheme.clone(), host.clone())) {
+            tracing::warn!(scheme, host, "media: refused a URL that is not a local file");
         }
         UNSUPPORTED_SCHEME
     })
@@ -273,13 +255,7 @@ extern "system" fn query_interface(
     let iid = unsafe { *iid };
     let found = iid == IID_IUNKNOWN || iid == IID_RESOLVER;
     // SAFETY: checked non-null.
-    unsafe {
-        out.write(if found {
-            this.cast()
-        } else {
-            std::ptr::null_mut()
-        })
-    };
+    unsafe { out.write(if found { this.cast() } else { std::ptr::null_mut() }) };
     if !found {
         return E_NOINTERFACE;
     }
@@ -466,11 +442,7 @@ pub extern "system" fn MFCreateSourceResolver(out: *mut *mut Resolver) -> HRESUL
     if hr < 0 || host.is_null() {
         return hr;
     }
-    let proxy = Box::new(Resolver {
-        vtable: &METHODS,
-        host,
-        refs: AtomicU32::new(1),
-    });
+    let proxy = Box::new(Resolver { vtable: &METHODS, host, refs: AtomicU32::new(1) });
     // SAFETY: checked non-null.
     unsafe { out.write(Box::into_raw(proxy)) };
     S_OK
@@ -515,14 +487,8 @@ mod tests {
         );
         assert_eq!(refused("RTSP://10.0.0.1:554/x").0, "rtsp");
         assert_eq!(refused("mms://h/x").0, "mms");
-        assert_eq!(
-            refused(r"\\server\share\a.mp4"),
-            ("unc".into(), "server".into())
-        );
-        assert_eq!(
-            refused("file://server/share/a.mp4"),
-            ("file".into(), "server".into())
-        );
+        assert_eq!(refused(r"\\server\share\a.mp4"), ("unc".into(), "server".into()));
+        assert_eq!(refused("file://server/share/a.mp4"), ("file".into(), "server".into()));
 
         // A path on a virtual drive goes to its host folder, also as a
         // `file:` URL; other local files pass as they are.
@@ -534,32 +500,18 @@ mod tests {
         std::fs::write(dir.path().join("movies").join("intro a.mp4"), b"2").unwrap();
         let letter = files::mount(dir.path()).expect("a free drive letter");
         let host = text(&local(&wide(&format!(r"{letter}:\movies\intro.mp4"))).unwrap());
-        assert_eq!(
-            std::fs::read(&host).ok().as_deref(),
-            Some(&b"1"[..]),
-            "{host}"
-        );
+        assert_eq!(std::fs::read(&host).ok().as_deref(), Some(&b"1"[..]), "{host}");
         let from_url =
             text(&local(&wide(&format!("file:///{letter}:/movies/intro%20a.mp4"))).unwrap());
-        assert_eq!(
-            std::fs::read(&from_url).ok().as_deref(),
-            Some(&b"2"[..]),
-            "{from_url}"
-        );
-        assert_eq!(
-            text(&local(&wide("file:///C:/Windows/a.wav")).unwrap()),
-            r"C:\Windows\a.wav"
-        );
+        assert_eq!(std::fs::read(&from_url).ok().as_deref(), Some(&b"2"[..]), "{from_url}");
+        assert_eq!(text(&local(&wide("file:///C:/Windows/a.wav")).unwrap()), r"C:\Windows\a.wav");
         assert_eq!(text(&local(&wide("clip.mp4")).unwrap()), "clip.mp4");
     }
 
     /// Other spellings of `\\server\share\a.mp4`, as paths and as `file:`
     /// URLs without a host.
-    const SHARE_PATHS: [&str; 3] = [
-        r"/\server\share\a.mp4",
-        r"\/server/share/a.mp4",
-        r"\??\UNC\server\share\a.mp4",
-    ];
+    const SHARE_PATHS: [&str; 3] =
+        [r"/\server\share\a.mp4", r"\/server/share/a.mp4", r"\??\UNC\server\share\a.mp4"];
     const SHARE_URLS: [&str; 5] = [
         "file:////server/share/a.mp4",
         "file://///server/share/a.mp4",
@@ -588,10 +540,7 @@ mod tests {
         ] {
             assert_eq!(asked(local_file), Ok(local_file.into()), "{local_file}");
         }
-        assert_eq!(
-            asked("file:////C:/Windows/a.wav"),
-            Ok(r"C:\Windows\a.wav".into())
-        );
+        assert_eq!(asked("file:////C:/Windows/a.wav"), Ok(r"C:\Windows\a.wav".into()));
     }
 
     /// What the host makes of those spellings: the share, for each.
@@ -625,10 +574,7 @@ mod tests {
             );
         }
         // And of the ones that pass: local paths.
-        assert_eq!(
-            host_path("file://localhost//server/share/a.mp4"),
-            r"\server\share\a.mp4"
-        );
+        assert_eq!(host_path("file://localhost//server/share/a.mp4"), r"\server\share\a.mp4");
         assert_eq!(host_path("file:////C:/Windows/a.wav"), r"C:\Windows\a.wav");
         assert_eq!(host_path("file:///movies/a.mp4"), r"\movies\a.mp4");
     }

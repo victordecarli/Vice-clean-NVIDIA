@@ -13,27 +13,15 @@ use super::xgameruntime::{
 };
 use crate::runtime;
 
-pub const PROVIDER: Guid = Guid::new(
-    0xf4fa_f4d4,
-    0x2d04,
-    0x4fce,
-    [0xb3, 0xe0, 0x47, 0x4a, 0x71, 0x3a, 0x3e, 0x84],
-);
-pub const IID: Guid = Guid::new(
-    0xd294_11df,
-    0x0794,
-    0x4553,
-    [0x8b, 0x27, 0x95, 0xfc, 0x02, 0xd0, 0xf7, 0x5d],
-);
+pub const PROVIDER: Guid =
+    Guid::new(0xf4fa_f4d4, 0x2d04, 0x4fce, [0xb3, 0xe0, 0x47, 0x4a, 0x71, 0x3a, 0x3e, 0x84]);
+pub const IID: Guid =
+    Guid::new(0xd294_11df, 0x0794, 0x4553, [0x8b, 0x27, 0x95, 0xfc, 0x02, 0xd0, 0xf7, 0x5d]);
 
 /// As the title (2026) asks for it; it calls 0x20 (path) and 0x28
 /// (space) with the same arguments.
-pub const IID_2026: Guid = Guid::new(
-    0x41a4_e10c,
-    0x5a7e,
-    0x41d9,
-    [0x8c, 0x37, 0x37, 0xbd, 0xe6, 0x2a, 0x07, 0xd6],
-);
+pub const IID_2026: Guid =
+    Guid::new(0x41a4_e10c, 0x5a7e, 0x41d9, [0x8c, 0x37, 0x37, 0xbd, 0xe6, 0x2a, 0x07, 0xd6]);
 
 pub static OBJECT: Object = Object::new("persistent local storage", &VTABLE);
 pub const INTERFACES: &[Interface] = &[(PROVIDER, IID, &OBJECT), (PROVIDER, IID_2026, &OBJECT)];
@@ -148,11 +136,7 @@ static PROMPT: u8 = 0;
 
 /// There is nobody to ask: granted when the quota has room, else declined.
 extern "system" fn prompt_for_space(_: This, bytes: u64, block: *mut AsyncBlock) -> HRESULT {
-    let hr = if bytes <= space().total_free {
-        S_OK
-    } else {
-        E_ABORT
-    };
+    let hr = if bytes <= space().total_free { S_OK } else { E_ABORT };
     xasync::finished(block, (&raw const PROMPT).cast(), hr)
 }
 
@@ -209,17 +193,9 @@ mod tests {
         let mut attributes = [0u8; 36];
         let get_attributes = super::super::files::GetFileAttributesExW;
         let wide: Vec<u16> = path.encode_utf16().collect();
-        assert_ne!(
-            get_attributes(wide.as_ptr(), 0, attributes.as_mut_ptr().cast()),
-            0
-        );
+        assert_ne!(get_attributes(wide.as_ptr(), 0, attributes.as_mut_ptr().cast()), 0);
 
-        let mut info = SpaceInfo {
-            available_free: 0,
-            total_free: 0,
-            used: 0,
-            total: 0,
-        };
+        let mut info = SpaceInfo { available_free: 0, total_free: 0, used: 0, total: 0 };
         assert_eq!(method::<Space>(&OBJECT, 0x28)(this, &mut info), S_OK);
         assert_eq!((info.used, info.total_free, info.total), (100, 900, 1000));
 

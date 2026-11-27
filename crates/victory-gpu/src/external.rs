@@ -18,7 +18,11 @@ use crate::object::This;
 /// cannot take (see `host::legal_state`). What the list records next finds
 /// it there and must leave it there. The list holds the texture until it is
 /// reset. `None` for a buffer.
-pub(crate) fn host_texture(list: &HostList, resource: This, state: u32) -> Option<(ID3D12Resource, u32)> {
+pub(crate) fn host_texture(
+    list: &HostList,
+    resource: This,
+    state: u32,
+) -> Option<(ID3D12Resource, u32)> {
     let texture = crate::resource::host_resource(resource)?.clone();
     crate::list::ensure_state(list, resource, state);
     let state = crate::host::legal_state(&texture, state);
@@ -29,7 +33,8 @@ pub(crate) fn host_texture(list: &HostList, resource: This, state: u32) -> Optio
 /// rules a compute shader's resource view has in the renderer.
 pub(crate) fn prepare_input(list: &HostList, resource: This) -> Option<()> {
     let texture = crate::resource::host_resource(resource)?;
-    let aliased = crate::resource::alias_of(resource).is_some_and(|source| crate::texture::alias(list, resource, source));
+    let aliased = crate::resource::alias_of(resource)
+        .is_some_and(|source| crate::texture::alias(list, resource, source));
     if !aliased && crate::texture::title_written(texture) {
         crate::texture::upload_from(list, resource, 0);
     }

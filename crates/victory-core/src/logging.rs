@@ -14,11 +14,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 /// The most verbose level this build can log.
-const CAP: LevelFilter = if cfg!(feature = "diagnostics") {
-    LevelFilter::TRACE
-} else {
-    LevelFilter::INFO
-};
+const CAP: LevelFilter =
+    if cfg!(feature = "diagnostics") { LevelFilter::TRACE } else { LevelFilter::INFO };
 
 pub fn init(default_level: &str) {
     let filter = std::env::var("VICTORY_LOG")
@@ -38,7 +35,9 @@ pub fn init(default_level: &str) {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 }
                 Err(e) => {
-                    eprintln!("VICTORY_LOG_FILE: no log file ({e}); this run logs to this window only");
+                    eprintln!(
+                        "VICTORY_LOG_FILE: no log file ({e}); this run logs to this window only"
+                    );
                     return None;
                 }
             }
@@ -56,11 +55,7 @@ pub fn init(default_level: &str) {
     let _ = tracing_subscriber::registry()
         .with(CAP)
         .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(true)
-                .with_writer(std::io::stderr),
-        )
+        .with(tracing_subscriber::fmt::layer().with_target(true).with_writer(std::io::stderr))
         .with(file)
         .try_init();
 }

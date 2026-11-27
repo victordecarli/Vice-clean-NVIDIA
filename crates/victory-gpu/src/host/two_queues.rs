@@ -237,11 +237,7 @@ impl Plan {
         if self.recent.len() > REMEMBERED {
             self.recent.pop_front();
         }
-        Placed {
-            engine,
-            value: self.sent[q],
-            wait,
-        }
+        Placed { engine, value: self.sent[q], wait }
     }
 }
 
@@ -368,12 +364,7 @@ pub(crate) fn probe(runs: &[&super::HostList]) -> Probe {
     }
     textures.sort_unstable();
     textures.dedup();
-    Probe {
-        title: TITLE.get(),
-        holds,
-        textures,
-        tiles: TILES.load(Relaxed),
-    }
+    Probe { title: TITLE.get(), holds, textures, tiles: TILES.load(Relaxed) }
 }
 
 static PLAN: Mutex<Option<Plan>> = Mutex::new(None);
@@ -393,7 +384,14 @@ const WAITS: usize = 12;
 
 /// Places a submission ([`Plan::place`]): `number` as in [`Ask::number`],
 /// `card` and `steps` as there, `lists` its host lists, `finished` as there.
-pub(crate) fn place(probe: Probe, number: u64, card: bool, steps: bool, lists: usize, finished: u64) {
+pub(crate) fn place(
+    probe: Probe,
+    number: u64,
+    card: bool,
+    steps: bool,
+    lists: usize,
+    finished: u64,
+) {
     let title = probe.title.map(|t| t.0);
     let ask = Ask {
         number,
@@ -559,7 +557,11 @@ mod tests {
         let d = plan.place(&ask(4, COMPUTE_QUEUE), 0);
         assert_eq!(d.wait, None);
         let e = plan.place(&Ask { card: true, ..ask(5, DIRECT) }, 0);
-        assert_eq!(e.wait, Some((1, Why::Card)), "behind the compute queue's first, its only one with copies");
+        assert_eq!(
+            e.wait,
+            Some((1, Why::Card)),
+            "behind the compute queue's first, its only one with copies"
+        );
     }
 
     /// Steps on the card, tile mappings and submissions of ours come behind

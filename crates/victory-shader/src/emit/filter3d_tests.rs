@@ -16,18 +16,13 @@ const N: u32 = 4;
 /// texture whose texel (x, y, z) holds (x, 10 y, 100 z, 1).
 fn cases() -> Vec<([f32; 3], [f32; 4])> {
     let at = |p: f32| ((p * N as f32 - 0.5).clamp(0.0, (N - 1) as f32), p);
-    [
-        [0.3f32, 0.55, 0.8],
-        [0.125, 0.125, 0.125],
-        [0.01, 0.99, 0.5],
-        [0.7, 0.2, 0.33],
-    ]
-    .into_iter()
-    .map(|p| {
-        let [x, y, z] = p.map(|v| at(v).0);
-        (p, [x, 10.0 * y, 100.0 * z, 1.0])
-    })
-    .collect()
+    [[0.3f32, 0.55, 0.8], [0.125, 0.125, 0.125], [0.01, 0.99, 0.5], [0.7, 0.2, 0.33]]
+        .into_iter()
+        .map(|p| {
+            let [x, y, z] = p.map(|v| at(v).0);
+            (p, [x, 10.0 * y, 100.0 * z, 1.0])
+        })
+        .collect()
 }
 
 /// The program: the immediate sampler of the colour-grading tables
@@ -43,10 +38,7 @@ fn program() -> NativeProgram {
         0x7E1E_0280, // v_mov_b32 v15, 0: output byte offsets
     ];
     // s_mov_b32 s24..s27: the sampler words.
-    for (k, w) in [0x92u32, 0x00C0_0000, 0x1450_0000, 0]
-        .into_iter()
-        .enumerate()
-    {
+    for (k, w) in [0x92u32, 0x00C0_0000, 0x1450_0000, 0].into_iter().enumerate() {
         words.extend([0xBE98_03FF + ((k as u32) << 16), w]);
     }
     for (i, (p, _)) in cases().iter().enumerate() {
@@ -59,10 +51,7 @@ fn program() -> NativeProgram {
         words.extend([0xF000_0F10 | (0x27 << 18), 0x00C4_0A00]);
         for ch in 0..4u32 {
             // buffer_store_dword v<10+ch>, v15, s[12:15], 0 offen offset:...
-            words.extend([
-                0xE070_1000 | ((i as u32 * 4 + ch) * 4),
-                0x8003_000F | ((10 + ch) << 8),
-            ]);
+            words.extend([0xE070_1000 | ((i as u32 * 4 + ch) * 4), 0x8003_000F | ((10 + ch) << 8)]);
         }
     }
     words.push(0xBF81_0000); // s_endpgm
@@ -90,10 +79,7 @@ fn program() -> NativeProgram {
                 slot: 0,
             })
             .to_vec(),
-        io: StageIo::Cs(ComputeIo {
-            rsrc2: 2 << 1,
-            threads: [1, 1, 1],
-        }),
+        io: StageIo::Cs(ComputeIo { rsrc2: 2 << 1, threads: [1, 1, 1] }),
         code: words.into_iter().flat_map(u32::to_le_bytes).collect(),
     }
 }
@@ -104,11 +90,8 @@ fn translate(by_hand: bool) -> super::HostShader {
     TEST_FILTER_3D.set(was);
     let mut shader = built.expect("translates").0;
     // (The tests' builder leaves the root signature's samplers out.)
-    shader.static_samplers = shader
-        .samplers
-        .iter()
-        .map(|&w| super::StaticSampler::from_words(w))
-        .collect();
+    shader.static_samplers =
+        shader.samplers.iter().map(|&w| super::StaticSampler::from_words(w)).collect();
     shader
 }
 
@@ -128,14 +111,7 @@ fn the_switch_takes_the_other_form() {
 #[test]
 fn by_hand_and_by_the_card_agree() {
     let texels: Vec<[f32; 4]> = (0..N * N * N)
-        .map(|i| {
-            [
-                (i % N) as f32,
-                10.0 * (i / N % N) as f32,
-                100.0 * (i / (N * N)) as f32,
-                1.0,
-            ]
-        })
+        .map(|i| [(i % N) as f32, 10.0 * (i / N % N) as f32, 100.0 * (i / (N * N)) as f32, 1.0])
         .collect();
     let cases = cases();
     for (name, warp) in [("WARP", true), ("hardware", false)] {

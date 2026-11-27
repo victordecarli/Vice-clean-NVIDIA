@@ -28,10 +28,7 @@ pub(crate) fn expand_rects(src: &[u8], dst: &mut [u8], stride: usize, elements: 
     let (Some(in_rect), Some(out_rect)) = (stride.checked_mul(3), stride.checked_mul(6)) else {
         return;
     };
-    for (rect, out) in src
-        .chunks_exact(in_rect)
-        .zip(dst.chunks_exact_mut(out_rect))
-    {
+    for (rect, out) in src.chunks_exact(in_rect).zip(dst.chunks_exact_mut(out_rect)) {
         let v = |i: usize| &rect[i * stride..(i + 1) * stride];
         for (slot, i) in [0, 1, 2, 0, 2].into_iter().enumerate() {
             out[slot * stride..(slot + 1) * stride].copy_from_slice(v(i));
@@ -192,12 +189,8 @@ mod tests {
             v.extend([r, 0, 0, 255]);
             v
         };
-        let src: Vec<u8> = [
-            vertex(-1.0, 1.0, 0),
-            vertex(-1.0, -1.0, 100),
-            vertex(1.0, -1.0, 150),
-        ]
-        .concat();
+        let src: Vec<u8> =
+            [vertex(-1.0, 1.0, 0), vertex(-1.0, -1.0, 100), vertex(1.0, -1.0, 150)].concat();
         let mut dst = vec![0u8; 6 * 12];
         expand_rects(&src, &mut dst, 12, &[(0, 16), (8, 28)]);
         assert_eq!(dst[..36], src[..]);
@@ -218,10 +211,8 @@ mod tests {
         assert_eq!(f32_to_half(65520.0), 0x7c00, "past the largest half");
         // An R16_FLOAT element at 1.0, 2^-12 and 1.0: the fourth corner is
         // 2 - 2^-12, which rounds to 2.0.
-        let src: Vec<u8> = [0x3c00_u16, 0x0c00, 0x3c00]
-            .iter()
-            .flat_map(|h| h.to_le_bytes())
-            .collect();
+        let src: Vec<u8> =
+            [0x3c00_u16, 0x0c00, 0x3c00].iter().flat_map(|h| h.to_le_bytes()).collect();
         let mut dst = vec![0u8; 6 * 2];
         expand_rects(&src, &mut dst, 2, &[(0, 54)]);
         assert_eq!(dst[10..], 0x4000_u16.to_le_bytes());
@@ -244,13 +235,8 @@ mod tests {
     #[test]
     fn normalized_attributes_are_interpolated_in_their_own_range() {
         let vertex = |rg: [u8; 2], u16_value: u16, u8_value: u8, snorm8: i8, snorm16: i16| {
-            [
-                &rg[..],
-                &u16_value.to_le_bytes(),
-                &[u8_value, snorm8 as u8],
-                &snorm16.to_le_bytes(),
-            ]
-            .concat()
+            [&rg[..], &u16_value.to_le_bytes(), &[u8_value, snorm8 as u8], &snorm16.to_le_bytes()]
+                .concat()
         };
         let src = [
             vertex([3, 250], 1000, 10, i8::MIN, -23000),
@@ -259,12 +245,7 @@ mod tests {
         ]
         .concat();
         let mut dst = [0; 6 * 8];
-        expand_rects(
-            &src,
-            &mut dst,
-            8,
-            &[(0, 49), (2, 56), (4, 61), (5, 63), (6, 58)],
-        );
+        expand_rects(&src, &mut dst, 8, &[(0, 49), (2, 56), (4, 61), (5, 63), (6, 58)]);
         assert_eq!(dst[40..], vertex([15, 255], 10500, 107, -127, -32767));
     }
 
@@ -309,12 +290,7 @@ mod tests {
             b
         };
         let src = [
-            v(
-                10_000,
-                50_000,
-                [10, 200, 100, 255],
-                [0xDE, 0xAD, 0xBE, 0xEF],
-            ),
+            v(10_000, 50_000, [10, 200, 100, 255], [0xDE, 0xAD, 0xBE, 0xEF]),
             v(20_000, 10_000, [100, 50, 100, 255], [1, 2, 3, 4]),
             v(30_000, 20_000, [20, 200, 100, 255], [5, 6, 7, 8]),
         ]
@@ -358,9 +334,6 @@ mod tests {
         let mut dst = vec![0u8; 12 * 16];
         expand_rects(&src, &mut dst, 16, &[(0, 6), (12, 34)]);
         assert_eq!(&dst[5 * 16..6 * 16], &v([2.0, 1.0, 0.5], [1.0, 0.0])[..]);
-        assert_eq!(
-            &dst[11 * 16..12 * 16],
-            &v([14.0, 20.0, 1.0], [0.75, 0.5])[..]
-        );
+        assert_eq!(&dst[11 * 16..12 * 16], &v([14.0, 20.0, 1.0], [0.75, 0.5])[..]);
     }
 }

@@ -42,16 +42,15 @@ pub(crate) fn sources(data: &[u8]) -> Vec<Source<'_>> {
     if sgd5::is_sgd5(data) {
         out.extend(sgd5::records(data).map(Source::Packed));
     }
-    let raw = memchr::memmem::find_iter(data, b"DXBC")
-        .filter_map(|offset| {
-            let tail = &data[offset..];
-            // DXBC total size, validated below. Hash the container, not the
-            // rest of its carrier, so offline warming uses the runtime key.
-            let size = u32::from_le_bytes(tail.get(0x18..0x1c)?.try_into().ok()?) as usize;
-            let data = tail.get(..size)?;
-            Container::parse(data).ok()?;
-            Some(Source::Raw { offset, data })
-        });
+    let raw = memchr::memmem::find_iter(data, b"DXBC").filter_map(|offset| {
+        let tail = &data[offset..];
+        // DXBC total size, validated below. Hash the container, not the
+        // rest of its carrier, so offline warming uses the runtime key.
+        let size = u32::from_le_bytes(tail.get(0x18..0x1c)?.try_into().ok()?) as usize;
+        let data = tail.get(..size)?;
+        Container::parse(data).ok()?;
+        Some(Source::Raw { offset, data })
+    });
     out.extend(raw);
     out
 }
@@ -99,10 +98,7 @@ pub fn run(paths: Vec<PathBuf>, verbose: bool, disasm: bool) -> Result<()> {
     let paths = crate::default_paths(paths)?;
     let mut t = Totals::default();
     for root in &paths {
-        for entry in walkdir::WalkDir::new(root)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
+        for entry in walkdir::WalkDir::new(root).into_iter().filter_map(Result::ok) {
             if !entry.file_type().is_file() {
                 continue;
             }
@@ -206,10 +202,7 @@ pub fn run(paths: Vec<PathBuf>, verbose: bool, disasm: bool) -> Result<()> {
             t.files_with_shaders += usize::from(found_here > 0);
         }
     }
-    println!(
-        "containers found       {} (in {} files)",
-        t.containers, t.files_with_shaders
-    );
+    println!("containers found       {} (in {} files)", t.containers, t.files_with_shaders);
     println!("  with DXIL part       {}", t.with_dxil_part);
     println!("  with LLVM bitcode    {}", t.with_bitcode);
     println!("  PC-standard layout   {}", t.standard_layout);
@@ -226,10 +219,7 @@ pub fn run(paths: Vec<PathBuf>, verbose: bool, disasm: bool) -> Result<()> {
         println!("  native unreadable    {n}: {e}");
     }
     if t.with_native > 0 {
-        println!(
-            "  decoded programs     {} ({} instructions)",
-            t.decoded, t.instructions
-        );
+        println!("  decoded programs     {} ({} instructions)", t.decoded, t.instructions);
         for (e, n) in &t.decode_errors {
             println!("  decode failed        {n}: {e}");
         }

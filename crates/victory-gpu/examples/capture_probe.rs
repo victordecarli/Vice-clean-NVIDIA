@@ -23,11 +23,7 @@ use windows::Win32::Graphics::Direct3D12::*;
 use wire::*;
 
 fn half(h: u16) -> f32 {
-    let (sign, exp, man) = (
-        (h >> 15) as u32,
-        ((h >> 10) & 0x1f) as i32,
-        (h & 0x3ff) as f32,
-    );
+    let (sign, exp, man) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as i32, (h & 0x3ff) as f32);
     let v = match exp {
         0 => man * 2f32.powi(-24),
         31 => f32::INFINITY,
@@ -86,17 +82,10 @@ fn main() -> anyhow::Result<()> {
         frame.descriptor_heaps.iter().map(|h| (h.id, h)).collect();
     let pipes: HashMap<u32, &Pipeline> = frame.pipelines.iter().map(|p| (p.id, p)).collect();
     for h in &frame.descriptor_heaps {
-        println!(
-            "descriptor heap {} kind {} count {} flags {}",
-            h.id, h.kind, h.count, h.flags
-        );
+        println!("descriptor heap {} kind {} count {} flags {}", h.id, h.kind, h.count, h.flags);
     }
-    let wanted: Vec<u32> = frame
-        .pipelines
-        .iter()
-        .filter(|p| p.name.contains(text.as_str()))
-        .map(|p| p.id)
-        .collect();
+    let wanted: Vec<u32> =
+        frame.pipelines.iter().filter(|p| p.name.contains(text.as_str())).map(|p| p.id).collect();
     for p in &wanted {
         let pipe = pipes[p];
         println!("pipeline {p} '{}'", pipe.name);
@@ -129,14 +118,10 @@ fn main() -> anyhow::Result<()> {
     let mut deltas_file = std::fs::File::open(folder.join("deltas.bin"))?;
     // The bytes of buffer `res` at `at`, as the CPU last wrote them by now.
     let mut word_at = |deltas: &[Delta], res: u32, at: u64| -> Option<u32> {
-        let d = deltas
-            .iter()
-            .rev()
-            .find(|d| d.res == res && d.at <= at && at + 4 <= d.at + d.len)?;
+        let d =
+            deltas.iter().rev().find(|d| d.res == res && d.at <= at && at + 4 <= d.at + d.len)?;
         let mut b = [0u8; 4];
-        deltas_file
-            .seek(SeekFrom::Start(d.file + (at - d.at)))
-            .ok()?;
+        deltas_file.seek(SeekFrom::Start(d.file + (at - d.at))).ok()?;
         deltas_file.read_exact(&mut b).ok()?;
         Some(u32::from_le_bytes(b))
     };
@@ -169,19 +154,11 @@ fn main() -> anyhow::Result<()> {
                 match c {
                     Cmd::Pipeline { pso: p } => pso = p,
                     Cmd::Heaps { heaps } => heap = heaps.first().copied().unwrap_or(0),
-                    Cmd::RootSignature {
-                        graphics: true,
-                        root,
-                    } => {
+                    Cmd::RootSignature { graphics: true, root } => {
                         consts.clear();
                         list_root = root;
                     }
-                    Cmd::Constants {
-                        graphics: true,
-                        param,
-                        offset,
-                        values,
-                    } => {
+                    Cmd::Constants { graphics: true, param, offset, values } => {
                         let all = consts.entry(param).or_default();
                         let end = offset as usize + values.len();
                         if all.len() < end {
@@ -283,10 +260,8 @@ fn main() -> anyhow::Result<()> {
         match r.desc.format {
             41 => {
                 let n = (r.desc.width as usize).min(bytes.len() / 4);
-                let step = std::env::var("STEP")
-                    .ok()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(64usize);
+                let step =
+                    std::env::var("STEP").ok().and_then(|s| s.parse().ok()).unwrap_or(64usize);
                 for i in (0..n).step_by(step) {
                     println!("  [{i:4}] {}", f(i));
                 }
@@ -294,10 +269,7 @@ fn main() -> anyhow::Result<()> {
                 let mut distinct: Vec<u32> = (0..n).map(|i| f(i).to_bits()).collect();
                 distinct.dedup();
                 let jump = (1..n).map(|i| (f(i) - f(i - 1)).abs()).fold(0f32, f32::max);
-                println!(
-                    "  runs of equal values: {} of {n}; largest step {jump}",
-                    distinct.len()
-                );
+                println!("  runs of equal values: {} of {n}; largest step {jump}", distinct.len());
             }
             2 => {
                 for i in 0..(bytes.len() / 16).min(16) {
@@ -327,23 +299,15 @@ fn main() -> anyhow::Result<()> {
         if c.file == ZERO || r.desc.format != 10 {
             continue;
         }
-        let (w, h, d) = (
-            r.desc.width as usize,
-            r.desc.height as usize,
-            r.desc.depth as usize,
-        );
+        let (w, h, d) = (r.desc.width as usize, r.desc.height as usize, r.desc.depth as usize);
         let pitch = (w * 8).div_ceil(256) * 256;
         let mut bytes = vec![0u8; (pitch * h * d).min(c.len as usize)];
         file.seek(SeekFrom::Start(c.file))?;
         file.read_exact(&mut bytes)?;
         let texel = |x: usize, y: usize, z: usize| -> [f32; 4] {
             let at = z * pitch * h + y * pitch + x * 8;
-            [0, 1, 2, 3].map(|i| {
-                half(u16::from_le_bytes([
-                    bytes[at + 2 * i],
-                    bytes[at + 2 * i + 1],
-                ]))
-            })
+            [0, 1, 2, 3]
+                .map(|i| half(u16::from_le_bytes([bytes[at + 2 * i], bytes[at + 2 * i + 1]])))
         };
         let (my, mz) = (h / 2, d / 2);
         println!("  along x (y={my}, z={mz}):");

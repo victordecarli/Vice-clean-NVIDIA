@@ -35,7 +35,8 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
         // Names and line endings as they are in every checkout.
         let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-        let bytes: Vec<u8> = std::fs::read(path).unwrap_or_default().into_iter().filter(|&b| b != 13).collect();
+        let bytes: Vec<u8> =
+            std::fs::read(path).unwrap_or_default().into_iter().filter(|&b| b != 13).collect();
         hash.update(name.as_bytes());
         hash.update(&(bytes.len() as u64).to_le_bytes());
         hash.update(&bytes);

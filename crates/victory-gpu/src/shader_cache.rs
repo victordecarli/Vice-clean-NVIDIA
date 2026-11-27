@@ -163,14 +163,9 @@ fn cached(
     translate: impl Fn(&[u8]) -> Result<HostShader, String> + Send + Sync,
 ) -> Result<HostShader, String> {
     let input = [&build[..], container].concat();
-    let converter = Translate {
-        translate,
-        ran: AtomicBool::new(false),
-    };
+    let converter = Translate { translate, ran: AtomicBool::new(false) };
     for _ in 0..2 {
-        let path = cache
-            .get_or_convert(&converter, &input)
-            .map_err(|e| format!("{e:#}"))?;
+        let path = cache.get_or_convert(&converter, &input).map_err(|e| format!("{e:#}"))?;
         if let Some(shader) = std::fs::read(&path).ok().and_then(|b| decode(&b)) {
             let (counter, what) = if converter.ran.load(Ordering::Relaxed) {
                 (&MISSES, "translated and cached")
@@ -368,19 +363,9 @@ mod tests {
         HostShader {
             stage: HwStage::Ps,
             dxil: b"DXBC and the rest".to_vec(),
-            user_data: vec![UserData {
-                index: 8,
-                slot: 1,
-                root: RootType::Table,
-                dword: 0,
-            }],
+            user_data: vec![UserData { index: 8, slot: 1, root: RootType::Table, dword: 0 }],
             samplers: vec![[0x400, 0xc0_0000, 0x18f0_0000, 0]],
-            static_samplers: vec![StaticSampler::from_words([
-                0x400,
-                0xc0_0000,
-                0x18f0_0000,
-                0,
-            ])],
+            static_samplers: vec![StaticSampler::from_words([0x400, 0xc0_0000, 0x18f0_0000, 0])],
             root_cbvs: vec![2],
             root_srvs: vec![0, 3],
             root_uavs: vec![1],

@@ -258,17 +258,7 @@ impl Shader {
         let entry = m.new_block();
         Shader {
             m,
-            t: Types {
-                void,
-                i1,
-                i32,
-                f32,
-                handle,
-                props,
-                bind,
-                cbuf_ret,
-                res_ret,
-            },
+            t: Types { void, i1, i32, f32, handle, props, bind, cbuf_ret, res_ret },
             pixel,
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -318,9 +308,7 @@ impl Shader {
         params.extend(args.iter().map(|&a| self.m.type_of(a)));
         let fty = self.m.func_ty(ret, params);
         self.m.ptr(fty);
-        let f = self
-            .m
-            .function(&format!("dx.op.{name}"), fty, Some(attr), false);
+        let f = self.m.function(&format!("dx.op.{name}"), fty, Some(attr), false);
         let mut all = vec![self.m.i32(opcode)];
         all.extend(args);
         self.m.call(block, f, all)
@@ -441,25 +429,14 @@ impl Shader {
             217,
             &[bind, i, f],
         );
-        let cmp = if self.cmp_samplers >> n & 1 != 0 {
-            0x8000
-        } else {
-            0
-        };
+        let cmp = if self.cmp_samplers >> n & 1 != 0 { 0x8000 } else { 0 };
         self.annotate(block, h, 14 | cmp, 0)
     }
 
     pub fn annotate(&mut self, block: usize, h: V, props0: u32, props1: u32) -> V {
         let p = [self.m.i32(props0), self.m.i32(props1)];
         let p = self.m.aggregate(self.t.props, &p);
-        self.op(
-            block,
-            "annotateHandle",
-            Attr::ReadNone,
-            self.t.handle,
-            216,
-            &[h, p],
-        )
+        self.op(block, "annotateHandle", Attr::ReadNone, self.t.handle, 216, &[h, p])
     }
 
     /// A descriptor heap handle, annotated with `props`; `nonuniform` when
@@ -510,11 +487,7 @@ impl Shader {
         } else {
             index
         };
-        self.flags |= if sampler {
-            flags::SAMPLER_HEAP
-        } else {
-            flags::RESOURCE_HEAP
-        };
+        self.flags |= if sampler { flags::SAMPLER_HEAP } else { flags::RESOURCE_HEAP };
         self.nonuniform_handles += u32::from(nonuniform);
         let (s, n) = (self.m.bool(sampler), self.m.bool(nonuniform));
         let h = self.op(
@@ -540,7 +513,9 @@ impl Shader {
                 if unused.kind != 0 || unused.usage != 0 || unused.row.is_none() {
                     continue;
                 }
-                let mut modes = self.inputs.iter()
+                let mut modes = self
+                    .inputs
+                    .iter()
                     .filter(|e| e.row == unused.row && e.usage != 0)
                     .map(|e| e.interp);
                 if let Some(mode) = modes.next()
@@ -647,9 +622,7 @@ impl Shader {
             }
             let mut srvs = None;
             if !self.root_srvs.is_empty() {
-                let ty = self
-                    .m
-                    .named_struct("struct.ByteAddressBuffer", vec![self.t.i32]);
+                let ty = self.m.named_struct("struct.ByteAddressBuffer", vec![self.t.i32]);
                 let p = self.m.ptr(ty);
                 let u = self.m.undef(p);
                 let mut list = Vec::new();
@@ -677,9 +650,7 @@ impl Shader {
             }
             let mut uavs = None;
             if !self.root_uavs.is_empty() {
-                let ty = self
-                    .m
-                    .named_struct("struct.RWByteAddressBuffer", vec![self.t.i32]);
+                let ty = self.m.named_struct("struct.RWByteAddressBuffer", vec![self.t.i32]);
                 let p = self.m.ptr(ty);
                 let u = self.m.undef(p);
                 let no = self.m.bool(false);
@@ -773,11 +744,7 @@ impl Shader {
             for _ in 0..ni {
                 for k in 0..no.div_ceil(32) {
                     let bits = (no - 32 * k).min(32);
-                    view.push(if bits == 32 {
-                        u32::MAX
-                    } else {
-                        (1 << bits) - 1
-                    });
+                    view.push(if bits == 32 { u32::MAX } else { (1 << bits) - 1 });
                 }
             }
             // A geometry shader lists four streams: the other three have
@@ -829,13 +796,8 @@ impl Shader {
                 // primitives, topology, payload bytes.
                 Some(mesh) => {
                     props.push(i32c(&mut self, 9));
-                    let state = [
-                        mesh.max_vertices,
-                        mesh.max_primitives,
-                        mesh.topology.into(),
-                        0,
-                    ]
-                    .map(|n| Some(i32c(&mut self, n)));
+                    let state = [mesh.max_vertices, mesh.max_primitives, mesh.topology.into(), 0]
+                        .map(|n| Some(i32c(&mut self, n)));
                     let mut node = vec![Some(t)];
                     node.extend(state);
                     props.push(self.m.md_node(node));
@@ -855,9 +817,7 @@ impl Shader {
             (!props.is_empty()).then(|| self.m.md_node(props.into_iter().map(Some).collect()));
         let main = self.m.md_value(self.main);
         let name = self.m.md_str("main");
-        let entry = self
-            .m
-            .md_node(vec![Some(main), Some(name), sigs, resources, props]);
+        let entry = self.m.md_node(vec![Some(main), Some(name), sigs, resources, props]);
 
         let ident = self.m.md_str("victory");
         let ident = self.m.md_node(vec![Some(ident)]);

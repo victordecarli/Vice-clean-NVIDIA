@@ -97,12 +97,7 @@ pub struct Ray {
 impl Ray {
     /// A ray with the inverse direction a program computes by division.
     pub fn new(origin: [f32; 3], direction: [f32; 3], extent: f32) -> Self {
-        Self {
-            extent,
-            origin,
-            direction,
-            inverse: direction.map(|d| 1.0 / d),
-        }
+        Self { extent, origin, direction, inverse: direction.map(|d| 1.0 / d) }
     }
 }
 
@@ -244,11 +239,7 @@ pub fn triangle(p: &[[f32; 3]; 3], ray: &Ray) -> [f32; 4] {
     let sz = ray.inverse[kz];
     let (sx, sy) = (d[kx] * sz, d[ky] * sz);
     let sheared = |v: &[f32; 3]| {
-        let r = [
-            v[0] - ray.origin[0],
-            v[1] - ray.origin[1],
-            v[2] - ray.origin[2],
-        ];
+        let r = [v[0] - ray.origin[0], v[1] - ray.origin[1], v[2] - ray.origin[2]];
         (r[kx] - sx * r[kz], r[ky] - sy * r[kz], sz * r[kz])
     };
     let (ax, ay, az) = sheared(&p[0]);
@@ -262,11 +253,7 @@ pub fn triangle(p: &[[f32; 3]; 3], ray: &Ray) -> [f32; 4] {
     let det = u + (v + w);
     let t = (u * az + v * bz) + w * cz;
     let ahead = det > 0.0 && t >= 0.0 || det < 0.0 && t <= 0.0;
-    if !(behind && before) && ahead {
-        [t, det, v, w]
-    } else {
-        MISS
-    }
+    if !(behind && before) && ahead { [t, det, v, w] } else { MISS }
 }
 
 /// A 16-bit float as a 32-bit one (exact).
@@ -296,7 +283,12 @@ pub(crate) mod tests {
     fn an_empty_slot_is_never_entered() {
         let inside = |x: f32| [x - 1.0, -1.0, -1.0, x + 1.0, 1.0, 1.0];
         let (up, down) = (f32::INFINITY, f32::NEG_INFINITY);
-        let bounds = [inside(30.0), [up, up, up, down, down, down], inside(10.0), [up, up, up, down, down, down]];
+        let bounds = [
+            inside(30.0),
+            [up, up, up, down, down, down],
+            inside(10.0),
+            [up, up, up, down, down, down],
+        ];
         let ray = Ray::new([0.0; 3], [1.0, 0.0, 0.0], 100.0);
         assert_eq!(boxes(&[8, NONE, 16, NONE], &bounds, &ray, true), [16, 8, NONE, NONE]);
     }
@@ -336,11 +328,7 @@ pub(crate) mod tests {
         for (b, bx) in boxes.iter().enumerate() {
             for (k, x) in bx.iter().enumerate() {
                 let half = 6 * b + k;
-                let h = if x.is_nan() {
-                    0x7e00
-                } else {
-                    f32_to_half(*x, k >= 3)
-                };
+                let h = if x.is_nan() { 0x7e00 } else { f32_to_half(*x, k >= 3) };
                 w[4 + half / 2] |= u32::from(h) << (16 * (half % 2));
             }
         }
@@ -378,10 +366,7 @@ pub(crate) mod tests {
         // The 32-bit form: the base in the descriptor.
         let word0 = (structure >> 8) as u32;
         let word1 = (structure >> 40) as u32 | BOX_SORT;
-        assert_eq!(
-            node_address(word0, word1, 0x1000 >> 3 | 4),
-            structure + 0x1000
-        );
+        assert_eq!(node_address(word0, word1, 0x1000 >> 3 | 4), structure + 0x1000);
         // A base past 4 GiB of 256-byte units.
         assert_eq!(node_address(0, 0x8000_0001, 8), (1 << 40) + 64);
     }
@@ -417,24 +402,12 @@ pub(crate) mod tests {
         let ray = Ray::new([0.0; 3], [1.0, 0.0, 0.0], 1000.0);
         assert_eq!(intersect(&node, 5, &ray, true), [0x20c, 0x400, 0x105, NONE]);
         // Without sorting: child order, the miss in its place.
-        assert_eq!(
-            intersect(&node, 5, &ray, false),
-            [0x105, 0x20c, NONE, 0x400]
-        );
+        assert_eq!(intersect(&node, 5, &ray, false), [0x105, 0x20c, NONE, 0x400]);
         // The extent cuts the far ones off (entered at 9, 19, 29).
-        let short = Ray {
-            extent: 19.5,
-            ..ray
-        };
-        assert_eq!(
-            intersect(&node, 5, &short, true),
-            [0x20c, 0x400, NONE, NONE]
-        );
+        let short = Ray { extent: 19.5, ..ray };
+        assert_eq!(intersect(&node, 5, &short, true), [0x20c, 0x400, NONE, NONE]);
         // An entry exactly at the extent is no hit.
-        let exact = Ray {
-            extent: 19.0,
-            ..ray
-        };
+        let exact = Ray { extent: 19.0, ..ray };
         assert_eq!(intersect(&node, 5, &exact, true), [0x20c, NONE, NONE, NONE]);
         // Backwards: nothing.
         let back = Ray::new([0.0; 3], [-1.0, 0.0, 0.0], 1000.0);
@@ -443,18 +416,12 @@ pub(crate) mod tests {
 
     #[test]
     fn a_ray_starting_inside_a_box_enters_it_at_its_origin() {
-        let node = box32(
-            [8, 16, NONE, NONE],
-            [UNIT, moved(UNIT, [3.0, 0.0, 0.0]), OFF, OFF],
-        );
+        let node = box32([8, 16, NONE, NONE], [UNIT, moved(UNIT, [3.0, 0.0, 0.0]), OFF, OFF]);
         let ray = Ray::new([0.0; 3], [1.0, 0.0, 0.0], 100.0);
         // Box 0 is entered at -1 (behind the origin), box 1 at 2.
         assert_eq!(intersect(&node, 5, &ray, true), [8, 16, NONE, NONE]);
         // Even with a tiny extent the box around the origin is a hit.
-        let tiny = Ray {
-            extent: 1e-6,
-            ..ray
-        };
+        let tiny = Ray { extent: 1e-6, ..ray };
         assert_eq!(intersect(&node, 5, &tiny, true), [8, NONE, NONE, NONE]);
     }
 
@@ -482,10 +449,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_box_switched_off_and_a_missing_child_return_none() {
-        let node = box32(
-            [8, NONE, 24, 32],
-            [UNIT, UNIT, [f32::NAN, -1.0, -1.0, 1.0, 1.0, 1.0], OFF],
-        );
+        let node =
+            box32([8, NONE, 24, 32], [UNIT, UNIT, [f32::NAN, -1.0, -1.0, 1.0, 1.0, 1.0], OFF]);
         let ray = Ray::new([-5.0, 0.0, 0.0], [1.0, 0.0, 0.0], 100.0);
         // Child 1 is hit but is not there: its pointer is what "none" is.
         assert_eq!(intersect(&node, 5, &ray, true), [8, NONE, NONE, NONE]);
@@ -585,12 +550,7 @@ pub(crate) mod tests {
     #[test]
     fn a_ray_through_a_shared_edge_misses_neither_triangle() {
         // Two triangles of a quad sharing the diagonal, wound alike.
-        let quad = [
-            [-1.0, -1.0, 4.0],
-            [-1.0, 1.0, 4.0],
-            [1.0, 1.0, 4.0],
-            [1.0, -1.0, 4.0],
-        ];
+        let quad = [[-1.0, -1.0, 4.0], [-1.0, 1.0, 4.0], [1.0, 1.0, 4.0], [1.0, -1.0, 4.0]];
         let first = triangles(&[quad[0], quad[1], quad[2]], 9);
         let second = triangles(&[quad[0], quad[2], quad[3]], 9);
         // A fan of rays crossing the diagonal, some exactly on it.
@@ -603,10 +563,7 @@ pub(crate) mod tests {
                     let ray = Ray::new([ox - d[0] * s, oy - d[1] * s, 0.0], d, 100.0);
                     let a = hit(intersect(&first, 0, &ray, true));
                     let b = hit(intersect(&second, 0, &ray, true));
-                    assert!(
-                        a.is_some() || b.is_some(),
-                        "a hole at {ox} {oy} along {d:?}"
-                    );
+                    assert!(a.is_some() || b.is_some(), "a hole at {ox} {oy} along {d:?}");
                     for h in [a, b].into_iter().flatten() {
                         assert!((h.0 - s).abs() < 1e-5 && h.3, "{h:?}");
                     }
@@ -695,11 +652,8 @@ pub(crate) mod tests {
         for axis in 0..3 {
             for flip in [false, true] {
                 let p = TRIANGLE.map(|v| turn(v, axis, flip));
-                let r = Ray::new(
-                    turn(ray.origin, axis, flip),
-                    turn(ray.direction, axis, flip),
-                    100.0,
-                );
+                let r =
+                    Ray::new(turn(ray.origin, axis, flip), turn(ray.direction, axis, flip), 100.0);
                 let h = hit(triangle(&p, &r).map(f32::to_bits)).expect("a hit");
                 assert!((h.0 - base.0).abs() < 1e-5, "{axis} {flip}: {h:?} {base:?}");
                 assert!((h.1 - base.1).abs() < 1e-5 && (h.2 - base.2).abs() < 1e-5);

@@ -95,17 +95,9 @@ impl<'a> Container<'a> {
             let body = data
                 .get(offset + 8..offset + 8 + size)
                 .ok_or(ShaderError::Malformed("part data out of bounds"))?;
-            parts.push(Part {
-                fourcc,
-                offset,
-                data: body,
-            });
+            parts.push(Part { fourcc, offset, data: body });
         }
-        Ok(Container {
-            digest,
-            version,
-            parts,
-        })
+        Ok(Container { digest, version, parts })
     }
 
     pub fn part(&self, fourcc: FourCC) -> Option<&Part<'a>> {

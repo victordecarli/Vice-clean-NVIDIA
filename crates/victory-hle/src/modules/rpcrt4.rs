@@ -231,16 +231,7 @@ fn assemble(digits: &[u8; 32]) -> Guid {
         data1: u32::from_be_bytes([byte(0), byte(1), byte(2), byte(3)]),
         data2: u16::from_be_bytes([byte(4), byte(5)]),
         data3: u16::from_be_bytes([byte(6), byte(7)]),
-        data4: [
-            byte(8),
-            byte(9),
-            byte(10),
-            byte(11),
-            byte(12),
-            byte(13),
-            byte(14),
-            byte(15),
-        ],
+        data4: [byte(8), byte(9), byte(10), byte(11), byte(12), byte(13), byte(14), byte(15)],
     }
 }
 
@@ -312,10 +303,7 @@ mod tests {
             [0x80, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde],
         );
         let text = format(&g);
-        assert_eq!(
-            std::str::from_utf8(&text).unwrap(),
-            "1234abcd-00ef-4a5b-8012-3456789abcde"
-        );
+        assert_eq!(std::str::from_utf8(&text).unwrap(), "1234abcd-00ef-4a5b-8012-3456789abcde");
         assert_eq!(parse(text.iter().copied()), Some(g));
         // Upper case and braces are what `UuidFromString` also takes.
         let upper: Vec<u8> = std::iter::once(b'{')
@@ -328,14 +316,8 @@ mod tests {
     #[test]
     fn garbage_is_refused() {
         assert_eq!(parse(b"1234".iter().copied()), None);
-        assert_eq!(
-            parse(b"1234abcd-00ef-4a5b-8012-3456789abcde-".iter().copied()),
-            None
-        );
-        assert_eq!(
-            parse(b"1234abcd-00ef-4a5b-8012-3456789abcdeZ".iter().copied()),
-            None
-        );
+        assert_eq!(parse(b"1234abcd-00ef-4a5b-8012-3456789abcde-".iter().copied()), None);
+        assert_eq!(parse(b"1234abcd-00ef-4a5b-8012-3456789abcdeZ".iter().copied()), None);
     }
 
     #[test]
@@ -398,16 +380,11 @@ mod tests {
             )
         );
         // The wide call takes the same text.
-        let wide: Vec<u16> = "1234abcd-00ef-4a5b-8012-3456789abcde\0"
-            .chars()
-            .map(|c| c as u16)
-            .collect();
+        let wide: Vec<u16> =
+            "1234abcd-00ef-4a5b-8012-3456789abcde\0".chars().map(|c| c as u16).collect();
         let mut w = Guid::new(0, 0, 0, [0; 8]);
         assert_eq!(UuidFromStringW(wide.as_ptr(), &mut w), OK);
         assert_eq!(w, g);
-        assert_eq!(
-            UuidFromStringA(c"nope".as_ptr().cast(), &mut w),
-            INVALID_STRING_UUID
-        );
+        assert_eq!(UuidFromStringA(c"nope".as_ptr().cast(), &mut w), INVALID_STRING_UUID);
     }
 }

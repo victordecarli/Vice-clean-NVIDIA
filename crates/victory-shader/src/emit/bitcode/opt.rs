@@ -150,11 +150,7 @@ fn mask(bits: u32) -> u64 {
 
 /// `x` of `bits` bits as a signed number.
 fn signed(bits: u32, x: u64) -> i64 {
-    if bits < 64 && x >> (bits - 1) & 1 != 0 {
-        (x | !mask(bits)) as i64
-    } else {
-        x as i64
-    }
+    if bits < 64 && x >> (bits - 1) & 1 != 0 { (x | !mask(bits)) as i64 } else { x as i64 }
 }
 
 /// What `v` stands for after the replacements so far.
@@ -344,11 +340,7 @@ impl Module {
         for &b in &order[1..] {
             children[idom[b]].push(b);
         }
-        Tree {
-            order,
-            children,
-            preds,
-        }
+        Tree { order, children, preds }
     }
 
     /// Notes that `v` (an i1) is `holds` in the block being walked, and what
@@ -469,10 +461,13 @@ impl Module {
                         (Some(x), Some(y)) => Some(x.max(y)),
                         _ => {
                             let other = if code == 35 { 36 } else { 35 };
-                            let (inner, k) = if self.float_k(*b).is_some() { (*a, *b) } else { (*b, *a) };
+                            let (inner, k) =
+                                if self.float_k(*b).is_some() { (*a, *b) } else { (*b, *a) };
                             let k = self.float_k(k).and_then(|_| of(k))?;
                             let V::Inst(j) = inner else { return None };
-                            let Op::Call(_, inner) = &self.insts[j as usize].op else { return None };
+                            let Op::Call(_, inner) = &self.insts[j as usize].op else {
+                                return None;
+                            };
                             let (_, code) = self.int_k(*inner.first()?)?;
                             let low = inner[1..].iter().find(|x| self.float_k(**x).is_some())?;
                             (code == other).then_some(())?;
@@ -671,11 +666,7 @@ impl Module {
                     Cast::ZExt | Cast::SExt | Cast::Trunc => {
                         let to = self.int_bits(ty)?;
                         if let Some((bits, k)) = self.int_k(x) {
-                            let k = if op == Cast::SExt {
-                                signed(bits, k) as u64
-                            } else {
-                                k
-                            };
+                            let k = if op == Cast::SExt { signed(bits, k) as u64 } else { k };
                             return Some(self.k(ty, to, k));
                         }
                         // Widened and narrowed again.
@@ -732,11 +723,7 @@ impl Module {
                 // two NaNs gives is the hardware's choice by operand).
                 let commutes = matches!(op, Bin::Add | Bin::Mul | Bin::And | Bin::Or | Bin::Xor)
                     && self.int_bits(inst.ty).is_some();
-                let (a, b) = if commutes && b < a {
-                    (*b, *a)
-                } else {
-                    (*a, *b)
-                };
+                let (a, b) = if commutes && b < a { (*b, *a) } else { (*a, *b) };
                 Key::Bin(*op as u8, a, b)
             }
             Op::Cast(op, v) => Key::Cast(*op as u8, inst.ty, *v),
@@ -852,10 +839,8 @@ impl Module {
                     let Op::Phi(incoming) = &self.insts[p as usize].op else {
                         continue;
                     };
-                    let mut key: Vec<(usize, V)> = incoming
-                        .iter()
-                        .map(|&(v, from)| (from, resolve(&repl, v)))
-                        .collect();
+                    let mut key: Vec<(usize, V)> =
+                        incoming.iter().map(|&(v, from)| (from, resolve(&repl, v))).collect();
                     key.sort();
                     // The type too: an undefined value of one type is not
                     // that of another.
@@ -1036,9 +1021,7 @@ impl Module {
             }
         }
         while let Some(i) = work.pop() {
-            for_each_operand(&self.insts[i as usize].op, |v| {
-                mark(&mut live, &mut work, v)
-            });
+            for_each_operand(&self.insts[i as usize].op, |v| mark(&mut live, &mut work, v));
         }
         for (b, blk) in self.blocks.iter_mut().enumerate() {
             if reached[b] {
@@ -1074,10 +1057,7 @@ impl Module {
             let Const::Aggregate(fields) = &self.consts[props as usize].1 else {
                 return None;
             };
-            match (
-                &self.consts[fields[0] as usize].1,
-                &self.consts[fields[1] as usize].1,
-            ) {
+            match (&self.consts[fields[0] as usize].1, &self.consts[fields[1] as usize].1) {
                 (Const::Int(kind), Const::Int(components)) => Some((*kind, *components)),
                 _ => None,
             }
@@ -1190,12 +1170,8 @@ impl Module {
             old += 1;
             used[old - 1]
         });
-        self.func_ids = self
-            .funcs
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (f.name.clone(), i as u32))
-            .collect();
+        self.func_ids =
+            self.funcs.iter().enumerate().map(|(i, f)| (f.name.clone(), i as u32)).collect();
         // Instructions that left their block keep a stale number: nothing
         // reads them again.
         for inst in &mut self.insts {
@@ -1239,13 +1215,7 @@ mod tests {
         m.ptr(main_ty);
         m.function("main", main_ty, None, true);
         let b = m.new_block();
-        Kit {
-            m,
-            b,
-            pure,
-            reads,
-            writes,
-        }
+        Kit { m, b, pure, reads, writes }
     }
 
     fn body(m: &Module, b: usize) -> usize {
@@ -1254,13 +1224,7 @@ mod tests {
 
     #[test]
     fn unread_results_without_effect_are_dropped() {
-        let Kit {
-            mut m,
-            b,
-            pure,
-            reads,
-            writes,
-        } = kit();
+        let Kit { mut m, b, pure, reads, writes } = kit();
         let (one, two) = (m.i32(1), m.i32(2));
         let used = m.call(b, reads, vec![one, two]);
         let dead = m.call(b, reads, vec![two, one]);
@@ -1277,13 +1241,7 @@ mod tests {
 
     #[test]
     fn branch_conditions_and_phi_cycles() {
-        let Kit {
-            mut m,
-            b,
-            reads,
-            writes,
-            ..
-        } = kit();
+        let Kit { mut m, b, reads, writes, .. } = kit();
         let i32t = m.int(32);
         let (zero, one) = (m.i32(0), m.i32(1));
         let (head, exit) = (m.new_block(), m.new_block());
@@ -1312,14 +1270,8 @@ mod tests {
         let mut k = kit();
         let i32t = k.m.int(32);
         let fty = k.m.func_ty(i32t, vec![i32t, i32t]);
-        let first = k.m.function(
-            "dx.op.waveReadLaneFirst.i32",
-            fty,
-            Some(Attr::NoUnwind),
-            false,
-        );
-        let barrier =
-            k.m.function("dx.op.barrier", fty, Some(Attr::NoDuplicate), false);
+        let first = k.m.function("dx.op.waveReadLaneFirst.i32", fty, Some(Attr::NoUnwind), false);
+        let barrier = k.m.function("dx.op.barrier", fty, Some(Attr::NoDuplicate), false);
         let one = k.m.i32(1);
         k.m.call(k.b, first, vec![one, one]);
         k.m.call(k.b, barrier, vec![one, one]);
@@ -1353,13 +1305,7 @@ mod tests {
 
     #[test]
     fn constants_and_identities_fold() {
-        let Kit {
-            mut m,
-            b,
-            reads,
-            writes,
-            ..
-        } = kit();
+        let Kit { mut m, b, reads, writes, .. } = kit();
         let (i32t, f32t) = (m.int(32), m.float());
         let (zero, one, all) = (m.i32(0), m.i32(1), m.i32(u32::MAX));
         let x = m.call(b, reads, vec![one, one]);
@@ -1401,9 +1347,7 @@ mod tests {
 
     #[test]
     fn float_arithmetic_is_not_folded() {
-        let Kit {
-            mut m, b, writes, ..
-        } = kit();
+        let Kit { mut m, b, writes, .. } = kit();
         let f32t = m.float();
         let fty = m.func_ty(f32t, vec![f32t, f32t]);
         let input = m.function("dx.op.loadInput.f32", fty, Some(Attr::ReadNone), false);
@@ -1455,35 +1399,13 @@ mod tests {
         k.m.terminate(then, Term::Br(join));
         k.m.terminate(other, Term::Br(join));
         k.m.terminate(join, Term::Ret);
-        Diamond {
-            k,
-            x,
-            y,
-            c,
-            then,
-            other,
-            join,
-        }
+        Diamond { k, x, y, c, then, other, join }
     }
 
     #[test]
     fn a_value_is_reused_below_its_block_and_not_beside_it() {
-        let Diamond {
-            k:
-                Kit {
-                    mut m,
-                    b,
-                    pure,
-                    writes,
-                    ..
-                },
-            x,
-            y,
-            then,
-            other,
-            join,
-            ..
-        } = diamond();
+        let Diamond { k: Kit { mut m, b, pure, writes, .. }, x, y, then, other, join, .. } =
+            diamond();
         // The entry's value again in a branch; a branch's value again in
         // the other branch and in the join (neither is on every path).
         let top = m.call(b, pure, vec![x, y]);
@@ -1505,22 +1427,8 @@ mod tests {
 
     #[test]
     fn a_branch_taken_says_what_its_condition_is() {
-        let Diamond {
-            k:
-                Kit {
-                    mut m,
-                    b,
-                    reads,
-                    writes,
-                    ..
-                },
-            x,
-            y,
-            c,
-            then,
-            other,
-            join,
-        } = diamond();
+        let Diamond { k: Kit { mut m, b, reads, writes, .. }, x, y, c, then, other, join } =
+            diamond();
         let three = m.i32(3);
         let d = m.call(b, reads, vec![three, three]);
         let d = m.cmp(b, pred::NE, d, three);
@@ -1540,9 +1448,7 @@ mod tests {
         m.optimise(FOLD | FACTS);
         // then: select(d, x, y) and the store; other: y is stored.
         assert_eq!(body(&m, then), 2);
-        let V::Inst(sel) = stores(&m, then)[0][0] else {
-            panic!()
-        };
+        let V::Inst(sel) = stores(&m, then)[0][0] else { panic!() };
         assert!(matches!(m.insts[sel as usize].op, Op::Select(g, a, z) if (g, a, z) == (d, x, y)));
         assert_eq!(stores(&m, other), [[y, y]]);
         assert_eq!(body(&m, join), 2);
@@ -1550,20 +1456,7 @@ mod tests {
         m.write();
 
         // Both terms of an `and` that held hold behind it.
-        let Diamond {
-            k:
-                Kit {
-                    mut m,
-                    b,
-                    reads,
-                    writes,
-                    ..
-                },
-            x,
-            y,
-            c,
-            ..
-        } = diamond();
+        let Diamond { k: Kit { mut m, b, reads, writes, .. }, x, y, c, .. } = diamond();
         let three = m.i32(3);
         let d = m.call(b, reads, vec![three, three]);
         let d = m.cmp(b, pred::NE, d, three);
@@ -1586,17 +1479,7 @@ mod tests {
 
     #[test]
     fn a_branch_on_a_constant_goes_one_way() {
-        let Diamond {
-            k: Kit {
-                mut m, b, writes, ..
-            },
-            x,
-            y,
-            c,
-            then,
-            other,
-            join,
-        } = diamond();
+        let Diamond { k: Kit { mut m, b, writes, .. }, x, y, c, then, other, join } = diamond();
         let i32t = m.int(32);
         // Behind the branch the same test again: its other side is never
         // run, and the join behind it has one value.
@@ -1617,9 +1500,7 @@ mod tests {
         assert_eq!(stores(&m, meet), [[x, x]]);
         assert!(m.blocks[meet].phis.is_empty());
         assert_eq!(body(&m, never), 0, "emptied: nothing reaches it");
-        let Op::Phi(incoming) = &m.insts[m.blocks[join].phis[0] as usize].op else {
-            panic!()
-        };
+        let Op::Phi(incoming) = &m.insts[m.blocks[join].phis[0] as usize].op else { panic!() };
         assert_eq!(incoming, &vec![(x, meet), (y, other)]);
         let _ = b;
         m.write();
@@ -1627,20 +1508,7 @@ mod tests {
 
     #[test]
     fn a_read_is_reused_within_its_block_until_a_store() {
-        let Diamond {
-            k:
-                Kit {
-                    mut m,
-                    b,
-                    reads,
-                    writes,
-                    ..
-                },
-            x,
-            y,
-            then,
-            ..
-        } = diamond();
+        let Diamond { k: Kit { mut m, b, reads, writes, .. }, x, y, then, .. } = diamond();
         let i32t = m.int(32);
         // The entry reads (1, 1) for x: again in the entry it is x; in the
         // next block it is read again.
@@ -1655,12 +1523,7 @@ mod tests {
         m.call(then, writes, vec![below, below]);
         // A constant buffer cannot change: one load for the function.
         let cfty = m.func_ty(i32t, vec![i32t, i32t]);
-        let cb = m.function(
-            "dx.op.cbufferLoadLegacy.i32",
-            cfty,
-            Some(Attr::ReadOnly),
-            false,
-        );
+        let cb = m.function("dx.op.cbufferLoadLegacy.i32", cfty, Some(Attr::ReadOnly), false);
         let top = m.call(b, cb, vec![one, one]);
         m.call(b, writes, vec![top, top]);
         let under = m.call(then, cb, vec![one, one]);
@@ -1674,24 +1537,13 @@ mod tests {
             "read again after the store, once"
         );
         assert_eq!(stores[2], [top, top]);
-        assert_eq!(
-            super::tests::stores(&m, then),
-            [vec![below, below], vec![top, top]]
-        );
+        assert_eq!(super::tests::stores(&m, then), [vec![below, below], vec![top, top]]);
         m.write();
     }
 
     #[test]
     fn a_join_of_one_value_and_two_equal_joins() {
-        let Diamond {
-            k: Kit { mut m, writes, .. },
-            x,
-            y,
-            then,
-            other,
-            join,
-            ..
-        } = diamond();
+        let Diamond { k: Kit { mut m, writes, .. }, x, y, then, other, join, .. } = diamond();
         let i32t = m.int(32);
         let one = m.phi(join, i32t);
         m.set_phi(one, vec![(x, then), (x, other)]);
@@ -1745,13 +1597,9 @@ mod tests {
                 .phis
                 .iter()
                 .map(|&p| {
-                    let Op::Phi(incoming) = &m.insts[p as usize].op else {
-                        panic!("a join")
-                    };
-                    let v = incoming
-                        .iter()
-                        .find(|x| x.1 == from)
-                        .expect("a value for the edge taken");
+                    let Op::Phi(incoming) = &m.insts[p as usize].op else { panic!("a join") };
+                    let v =
+                        incoming.iter().find(|x| x.1 == from).expect("a value for the edge taken");
                     (p, eval(&vals, v.0))
                 })
                 .collect();
@@ -1935,14 +1783,10 @@ mod tests {
                     return self.conds[n];
                 }
                 1 if self.conds.len() > 1 => {
-                    let (a, b) = (
-                        self.next(self.conds.len() as u64),
-                        self.next(self.conds.len() as u64),
-                    );
+                    let (a, b) =
+                        (self.next(self.conds.len() as u64), self.next(self.conds.len() as u64));
                     let op = [Bin::And, Bin::Or, Bin::Xor][self.next(3) as usize];
-                    self.k
-                        .m
-                        .bin(c, op, self.conds[a as usize], self.conds[b as usize])
+                    self.k.m.bin(c, op, self.conds[a as usize], self.conds[b as usize])
                 }
                 2 if !self.conds.is_empty() => {
                     let n = self.next(self.conds.len() as u64) as usize;
@@ -2053,11 +1897,8 @@ mod tests {
         fn branch(&mut self, depth: u32) {
             let c = self.cond();
             let i32t = self.k.m.int(32);
-            let (then, other, join) = (
-                self.k.m.new_block(),
-                self.k.m.new_block(),
-                self.k.m.new_block(),
-            );
+            let (then, other, join) =
+                (self.k.m.new_block(), self.k.m.new_block(), self.k.m.new_block());
             self.k.m.terminate(self.cur, Term::CondBr(c, then, other));
             let (before, known) = (self.regs.clone(), self.conds.len());
             self.cur = then;
@@ -2076,9 +1917,7 @@ mod tests {
             self.conds.truncate(known);
             for (r, &t) in then_regs.iter().enumerate() {
                 let p = self.k.m.phi(join, i32t);
-                self.k
-                    .m
-                    .set_phi(p, vec![(t, then_end), (self.regs[r], other_end)]);
+                self.k.m.set_phi(p, vec![(t, then_end), (self.regs[r], other_end)]);
                 self.regs[r] = p;
             }
             self.cur = join;
@@ -2093,9 +1932,7 @@ mod tests {
             let before = self.cur;
             self.k.m.terminate(before, Term::Br(head));
             let entering = self.regs.clone();
-            let joins: Vec<V> = (0..self.regs.len())
-                .map(|_| self.k.m.phi(head, i32t))
-                .collect();
+            let joins: Vec<V> = (0..self.regs.len()).map(|_| self.k.m.phi(head, i32t)).collect();
             let count = self.k.m.phi(head, i32t);
             self.regs = joins.clone();
             let known = self.conds.len();
@@ -2114,9 +1951,7 @@ mod tests {
             let latch = self.cur;
             self.k.m.terminate(latch, Term::CondBr(more, head, exit));
             for (r, &p) in joins.iter().enumerate() {
-                self.k
-                    .m
-                    .set_phi(p, vec![(entering[r], before), (self.regs[r], latch)]);
+                self.k.m.set_phi(p, vec![(entering[r], before), (self.regs[r], latch)]);
             }
             let zero = self.k.m.i32(0);
             self.k.m.set_phi(count, vec![(zero, before), (next, latch)]);
@@ -2130,20 +1965,9 @@ mod tests {
         let mut k = kit();
         let i32t = k.m.int(32);
         let fty = k.m.func_ty(i32t, vec![i32t, i32t]);
-        let input =
-            k.m.function("dx.op.loadInput.i32", fty, Some(Attr::ReadNone), false);
-        let table = k.m.function(
-            "dx.op.cbufferLoadLegacy.i32",
-            fty,
-            Some(Attr::ReadOnly),
-            false,
-        );
-        let wave = k.m.function(
-            "dx.op.waveReadLaneFirst.i32",
-            fty,
-            Some(Attr::NoUnwind),
-            false,
-        );
+        let input = k.m.function("dx.op.loadInput.i32", fty, Some(Attr::ReadNone), false);
+        let table = k.m.function("dx.op.cbufferLoadLegacy.i32", fty, Some(Attr::ReadOnly), false);
+        let wave = k.m.function("dx.op.waveReadLaneFirst.i32", fty, Some(Attr::NoUnwind), false);
         let b = k.b;
         let mut g = Gen {
             k,
@@ -2185,9 +2009,7 @@ mod tests {
                             1 => i,
                             2 => u32::MAX - i,
                             _ => {
-                                (seed as u32 ^ n)
-                                    .wrapping_mul(0x9E37_79B9)
-                                    .rotate_left(i * 5)
+                                (seed as u32 ^ n).wrapping_mul(0x9E37_79B9).rotate_left(i * 5)
                                     ^ (i << 28)
                             }
                         })
@@ -2195,21 +2017,9 @@ mod tests {
                 })
                 .collect();
             let expected: Vec<_> = inputs.iter().map(|i| run(&plain, i)).collect();
-            let written: usize = plain
-                .blocks
-                .iter()
-                .map(|b| b.body.len() + b.phis.len())
-                .sum();
-            for passes in [
-                DEAD,
-                FOLD,
-                REUSE,
-                FACTS,
-                LOADS,
-                FOLD | FACTS,
-                FOLD | REUSE | DEAD,
-                ALL,
-            ] {
+            let written: usize = plain.blocks.iter().map(|b| b.body.len() + b.phis.len()).sum();
+            for passes in [DEAD, FOLD, REUSE, FACTS, LOADS, FOLD | FACTS, FOLD | REUSE | DEAD, ALL]
+            {
                 let mut m = random_program(seed);
                 m.optimise(passes);
                 for (i, want) in inputs.iter().zip(&expected) {

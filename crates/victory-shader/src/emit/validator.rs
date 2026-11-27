@@ -15,18 +15,10 @@ type Hresult = i32;
 #[repr(C)]
 struct Guid(u32, u16, u16, [u8; 8]);
 
-const CLSID_DXC_VALIDATOR: Guid = Guid(
-    0x8ca3_e215,
-    0xf728,
-    0x4cf3,
-    [0x8c, 0xdd, 0x88, 0xaf, 0x91, 0x75, 0x87, 0xa1],
-);
-const IID_IDXC_VALIDATOR: Guid = Guid(
-    0xa6e8_2bd2,
-    0x1fd7,
-    0x4826,
-    [0x98, 0x11, 0x28, 0x57, 0xe7, 0x97, 0xf4, 0x9a],
-);
+const CLSID_DXC_VALIDATOR: Guid =
+    Guid(0x8ca3_e215, 0xf728, 0x4cf3, [0x8c, 0xdd, 0x88, 0xaf, 0x91, 0x75, 0x87, 0xa1]);
+const IID_IDXC_VALIDATOR: Guid =
+    Guid(0xa6e8_2bd2, 0x1fd7, 0x4826, [0x98, 0x11, 0x28, 0x57, 0xe7, 0x97, 0xf4, 0x9a]);
 /// `DxcValidatorFlags_InPlaceEdit`: sign the container we pass.
 const IN_PLACE_EDIT: u32 = 1;
 
@@ -100,13 +92,8 @@ struct BlobVtable {
     len: unsafe extern "system" fn(*mut Blob) -> usize,
 }
 
-static BLOB_VTABLE: BlobVtable = BlobVtable {
-    qi: blob_qi,
-    add_ref: blob_ref,
-    release: blob_ref,
-    ptr: blob_ptr,
-    len: blob_len,
-};
+static BLOB_VTABLE: BlobVtable =
+    BlobVtable { qi: blob_qi, add_ref: blob_ref, release: blob_ref, ptr: blob_ptr, len: blob_len };
 
 pub struct Validator {
     object: Object,
@@ -155,20 +142,15 @@ impl Validator {
             if hr < 0 || object.is_null() {
                 return Err(format!("DxcCreateInstance(validator) failed: {hr:#x}"));
             }
-            Ok(Validator {
-                object: object.cast(),
-            })
+            Ok(Validator { object: object.cast() })
         }
     }
 
     /// Validates `container` and signs it in place; the error text if it
     /// is rejected.
     pub fn validate(&mut self, container: &mut [u8]) -> Result<(), String> {
-        let mut blob = Blob {
-            vtable: &BLOB_VTABLE,
-            data: container.as_mut_ptr(),
-            len: container.len(),
-        };
+        let mut blob =
+            Blob { vtable: &BLOB_VTABLE, data: container.as_mut_ptr(), len: container.len() };
         // SAFETY: IDxcValidator::Validate (slot 3) with our blob; then
         // IDxcOperationResult GetStatus (3) and GetErrorBuffer (5), and
         // IDxcBlob GetBufferPointer (3) / GetBufferSize (4).
@@ -197,10 +179,7 @@ impl Validator {
                     let ptr: unsafe extern "system" fn(Object) -> *const u8 = method(errors, 3);
                     let len: unsafe extern "system" fn(Object) -> usize = method(errors, 4);
                     let bytes = std::slice::from_raw_parts(ptr(errors), len(errors));
-                    text = String::from_utf8_lossy(bytes)
-                        .trim_end_matches('\0')
-                        .trim()
-                        .into();
+                    text = String::from_utf8_lossy(bytes).trim_end_matches('\0').trim().into();
                     release(errors);
                 }
                 if text.is_empty() {

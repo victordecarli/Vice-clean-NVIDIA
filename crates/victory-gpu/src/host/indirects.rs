@@ -45,7 +45,14 @@ impl Indirects {
     /// An indirect execution of `kind` (the argument's type) of at most
     /// `count` records with `pipeline` (a host object) and user data.
     /// A direct mesh dispatch of `count` groups is of kind [`DIRECT`].
-    pub(crate) fn note(&mut self, pipeline: usize, name: &str, kind: u32, count: u32, user: &[u32]) {
+    pub(crate) fn note(
+        &mut self,
+        pipeline: usize,
+        name: &str,
+        kind: u32,
+        count: u32,
+        user: &[u32],
+    ) {
         self.names.entry(pipeline).or_insert_with(|| name.to_owned());
         let used = user.len().min(WORDS);
         let mut words = [0; WORDS];
@@ -74,9 +81,15 @@ impl Indirects {
         let words = &ran.words[..usize::from(ran.used)];
         Some((
             if direct {
-                format!("{name} (a mesh dispatch of {} groups, the list's {nth}, user data {words:x?})", ran.count)
+                format!(
+                    "{name} (a mesh dispatch of {} groups, the list's {nth}, user data {words:x?})",
+                    ran.count
+                )
             } else {
-                format!("{name} (indirect kind {} max {}, the list's indirect execution {nth}, user data {words:x?})", ran.kind, ran.count)
+                format!(
+                    "{name} (indirect kind {} max {}, the list's indirect execution {nth}, user data {words:x?})",
+                    ran.kind, ran.count
+                )
             },
             words,
         ))

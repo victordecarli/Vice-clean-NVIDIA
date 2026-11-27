@@ -173,7 +173,9 @@ fn effect(inst: &Inst) -> bool {
         || name.contains("store")
         || name.contains("atomic")
         || matches!(inst.fields, Fields::Ds { .. })
-            && !(name.starts_with("ds_read") || name.starts_with("ds_swizzle") || name.contains("permute"))
+            && !(name.starts_with("ds_read")
+                || name.starts_with("ds_swizzle")
+                || name.contains("permute"))
         || matches!(name, "s_barrier" | "s_sendmsg" | "s_sendmsghalt")
 }
 
@@ -219,15 +221,7 @@ impl Ctx<'_> {
         }
         let idom = crate::ir::idoms(&p.blocks, &order, &index);
         let sections = (0..p.blocks.len()).map(|b| wave::sections(p, b)).collect();
-        Ctx {
-            p,
-            st,
-            users,
-            def,
-            live,
-            idom,
-            sections,
-        }
+        Ctx { p, st, users, def, live, idom, sections }
     }
 
     fn inst(&self, u: (usize, usize)) -> &Inst {
@@ -276,7 +270,9 @@ impl Ctx<'_> {
             .into_iter()
             .flatten()
             .filter_map(|u| match *u {
-                User::Phi(b, k) if self.live.contains(&self.p.blocks[b].phis[k].value) => Some((b, k)),
+                User::Phi(b, k) if self.live.contains(&self.p.blocks[b].phis[k].value) => {
+                    Some((b, k))
+                }
                 _ => None,
             })
             .collect();
@@ -288,12 +284,8 @@ impl Ctx<'_> {
     /// The loop of header `h`: the blocks that reach one of its back edges without passing it.
     fn natural_loop(&self, h: usize) -> Vec<bool> {
         let mut inside = vec![false; self.p.blocks.len()];
-        let mut work: Vec<usize> = self.p.blocks[h]
-            .preds
-            .iter()
-            .copied()
-            .filter(|&q| self.dominates(h, q))
-            .collect();
+        let mut work: Vec<usize> =
+            self.p.blocks[h].preds.iter().copied().filter(|&q| self.dominates(h, q)).collect();
         if work.is_empty() {
             return inside;
         }
@@ -364,9 +356,11 @@ impl Ctx<'_> {
         // an unguarded copy
         let copy = |u: (usize, usize)| -> Option<Value> {
             let i = self.inst(u);
-            (matches!(i.name(), "v_mov_b32" | "s_mov_b32") && args(i).len() == 1 && st.guards[u.0][u.1].is_none())
-                .then(|| result(i))
-                .flatten()
+            (matches!(i.name(), "v_mov_b32" | "s_mov_b32")
+                && args(i).len() == 1
+                && st.guards[u.0][u.1].is_none())
+            .then(|| result(i))
+            .flatten()
         };
         let mut init = vec![t];
         // (SCC, whether it is set when the OR is empty)
@@ -450,7 +444,9 @@ impl Ctx<'_> {
             }
             match (name, &args(i)[..]) {
                 ("s_ff1_i32_b32", [Arg::Val(_)]) if idx.is_none() => idx = result(i),
-                ("s_xor_b32", _) | ("s_andn2_b32", [Arg::Val(_), Arg::Val(_)]) if next.is_none() => {
+                ("s_xor_b32", _) | ("s_andn2_b32", [Arg::Val(_), Arg::Val(_)])
+                    if next.is_none() =>
+                {
                     let bit = match (name, &args(i)[..]) {
                         ("s_andn2_b32", [Arg::Val(c), Arg::Val(b)]) if *c == cur && *b != cur => *b,
                         ("s_xor_b32", _) => match other(i, cur) {
@@ -499,7 +495,9 @@ impl Ctx<'_> {
         };
         let by_idx = shifted.is_some_and(|sh| {
             sh == idx
-                || made(sh).is_some_and(|(_, i)| i.name() == "s_and_b32" && other(i, idx) == Some(Arg::K(31)))
+                || made(sh).is_some_and(|(_, i)| {
+                    i.name() == "s_and_b32" && other(i, idx) == Some(Arg::K(31))
+                })
         });
         if !by_idx {
             return Err((head, SHAPE));
@@ -601,7 +599,10 @@ impl Ctx<'_> {
         let mut tests: Vec<(Atom, usize, usize)> = Vec::new();
         for u in self.readers(bit) {
             let i = self.inst(u);
-            if i.name() != "v_and_b32" || other(i, bit) != Some(Arg::Val(x)) || st.guards[u.0][u.1].is_some() {
+            if i.name() != "v_and_b32"
+                || other(i, bit) != Some(Arg::Val(x))
+                || st.guards[u.0][u.1].is_some()
+            {
                 continue;
             }
             let Some(y) = result(i) else { continue };
@@ -609,8 +610,14 @@ impl Ctx<'_> {
                 let ci = self.inst(c);
                 if matches!(
                     ci.name(),
-                    "v_cmp_ne_u32" | "v_cmpx_ne_u32" | "v_cmp_lg_u32" | "v_cmpx_lg_u32" | "v_cmp_ne_i32" | "v_cmpx_ne_i32"
-                        | "v_cmp_lg_i32" | "v_cmpx_lg_i32"
+                    "v_cmp_ne_u32"
+                        | "v_cmpx_ne_u32"
+                        | "v_cmp_lg_u32"
+                        | "v_cmpx_lg_u32"
+                        | "v_cmp_ne_i32"
+                        | "v_cmpx_ne_i32"
+                        | "v_cmp_lg_i32"
+                        | "v_cmpx_lg_i32"
                 ) && other(ci, y) == Some(Arg::K(0))
                     && lp[c.0]
                 {
@@ -634,7 +641,8 @@ impl Ctx<'_> {
                 || lp[b]
                     && st.guards[b][i].is_some_and(|g| {
                         tests.iter().enumerate().any(|(j, &(a, tb, ti))| {
-                            (b == tb && i > ti || b != tb && self.dominates(tb, b)) && self.implied(g, a, &mut memo[j])
+                            (b == tb && i > ti || b != tb && self.dominates(tb, b))
+                                && self.implied(g, a, &mut memo[j])
                         })
                     })
         };
@@ -646,7 +654,10 @@ impl Ctx<'_> {
                 }
                 let u = (b, i);
                 for &(reg, w) in &inst.writes {
-                    if rem.contains(&w) || is_mask(w) || matches!(reg, Reg::S(c) if c == EXEC || c == EXEC + 1) {
+                    if rem.contains(&w)
+                        || is_mask(w)
+                        || matches!(reg, Reg::S(c) if c == EXEC || c == EXEC + 1)
+                    {
                         continue;
                     }
                     for user in self.users.get(&w).into_iter().flatten() {
@@ -709,9 +720,7 @@ impl Ctx<'_> {
         }
         let mut seen: HashMap<Bool, bool> = HashMap::new();
         let mut tainted = |b: Bool| -> bool {
-            *seen
-                .entry(b)
-                .or_insert_with(|| st.bools.support(b).iter().any(|a| dep.contains(a)))
+            *seen.entry(b).or_insert_with(|| st.bools.support(b).iter().any(|a| dep.contains(a)))
         };
         for b in 0..n {
             if lp[b] && tests.iter().any(|&(_, tb, _)| self.dominates(tb, b)) {
@@ -730,7 +739,9 @@ impl Ctx<'_> {
             for user in self.users.get(&v).into_iter().flatten() {
                 let outside = match *user {
                     User::Inst(b2, _) => !lp[b2],
-                    User::Phi(b2, k2) => !lp[b2] && self.live.contains(&p.blocks[b2].phis[k2].value),
+                    User::Phi(b2, k2) => {
+                        !lp[b2] && self.live.contains(&p.blocks[b2].phis[k2].value)
+                    }
                 };
                 if outside {
                     return Err((head, STALE));
@@ -760,7 +771,8 @@ pub(super) fn find(p: &Program, st: &Structured, why: bool) -> OwnBits {
                 };
                 let ctx = ctx.get_or_insert_with(|| Ctx::new(p, st));
                 // (values only the section itself reads are not results)
-                let inside = |u: &User| matches!(*u, User::Inst(b2, i) if b2 == b && i > s && i < sec.end);
+                let inside =
+                    |u: &User| matches!(*u, User::Inst(b2, i) if b2 == b && i > s && i < sec.end);
                 if ctx.users.get(&t).is_none_or(|us| us.iter().all(inside)) {
                     continue;
                 }
@@ -827,8 +839,8 @@ mod tests {
         w.push(0xBEFE_040C); // s_mov_b64 exec, s[12:13]
         w.extend_from_slice(latch);
         w.extend_from_slice(&[
-            0x8909_080B,                            // s_xor_b32 s9, s11, s8
-            0xBF06_0B08,                            // s_cmp_eq_u32 s8, s11
+            0x8909_080B,                                // s_xor_b32 s9, s11, s8
+            0xBF06_0B08,                                // s_cmp_eq_u32 s8, s11
             0xBF84_0000 | (0x1_0000 - head - 1) as u32, // s_cbranch_scc0 again
         ]);
         w.extend_from_slice(after);
@@ -859,7 +871,13 @@ mod tests {
             assert!(names.contains(&n), "{n} in {names:?}");
         }
         // a loop: its last branch goes back to the copy of the bits still to visit
-        assert!(p.blocks.iter().enumerate().any(|(b, blk)| blk.exit.successors().iter().any(|&s| s < b)));
+        assert!(
+            p.blocks.iter().enumerate().any(|(b, blk)| blk
+                .exit
+                .successors()
+                .iter()
+                .any(|&s| s < b))
+        );
         let own = found(&p);
         // the OR is the section's last lane read, and the bits still to visit (v3) are alike
         let total = insts()

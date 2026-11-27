@@ -42,9 +42,5 @@ pub fn set(console: Console) {
 }
 
 pub fn current() -> Console {
-    if SERIES_S.load(Ordering::Relaxed) {
-        Console::SeriesS
-    } else {
-        Console::SeriesX
-    }
+    if SERIES_S.load(Ordering::Relaxed) { Console::SeriesS } else { Console::SeriesX }
 }

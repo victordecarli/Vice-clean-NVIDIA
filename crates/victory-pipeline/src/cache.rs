@@ -83,11 +83,7 @@ fn create_tempfile_in(dir: &Path, counter: &AtomicU64) -> io::Result<(PathBuf, F
     for _ in 0..128 {
         let n = counter.fetch_add(1, Ordering::Relaxed);
         let path = dir.join(format!(".tmp-{}-{n}", std::process::id()));
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
             Ok(file) => return Ok((path, file)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e),
@@ -126,10 +122,7 @@ mod tests {
     fn converts_once_then_hits() {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Cache::open(tmp.path().join("cache")).unwrap();
-        let conv = Upper {
-            version: 1,
-            runs: AtomicUsize::new(0),
-        };
+        let conv = Upper { version: 1, runs: AtomicUsize::new(0) };
         let a = cache.get_or_convert(&conv, b"abc").unwrap();
         let b = cache.get_or_convert(&conv, b"abc").unwrap();
         assert_eq!(a, b);
@@ -141,19 +134,13 @@ mod tests {
     fn failed_publication_removes_the_staging_file() {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Cache::open(tmp.path().join("cache")).unwrap();
-        let conv = Upper {
-            version: 1,
-            runs: AtomicUsize::new(0),
-        };
+        let conv = Upper { version: 1, runs: AtomicUsize::new(0) };
         let path = cache.path_for(&CacheKey::new(&conv, b"abc"));
         std::fs::create_dir_all(&path).unwrap();
 
         assert!(cache.get_or_convert(&conv, b"abc").is_err());
         assert!(path.is_dir());
-        assert_eq!(
-            std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
-            1
-        );
+        assert_eq!(std::fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
     }
 
     #[test]
@@ -161,20 +148,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let counter = AtomicU64::new(0);
         for n in 0..2 {
-            std::fs::write(
-                dir.path().join(format!(".tmp-{}-{n}", std::process::id())),
-                b"stale",
-            )
-            .unwrap();
+            std::fs::write(dir.path().join(format!(".tmp-{}-{n}", std::process::id())), b"stale")
+                .unwrap();
         }
 
         let (path, mut file) = create_tempfile_in(dir.path(), &counter).unwrap();
         file.write_all(b"fresh").unwrap();
         drop(file);
-        assert_eq!(
-            path.file_name().unwrap(),
-            format!(".tmp-{}-2", std::process::id()).as_str()
-        );
+        assert_eq!(path.file_name().unwrap(), format!(".tmp-{}-2", std::process::id()).as_str());
         assert_eq!(std::fs::read(&path).unwrap(), b"fresh");
         for n in 0..2 {
             assert_eq!(
@@ -190,11 +171,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let counter = AtomicU64::new(0);
         for n in 0..128 {
-            std::fs::write(
-                dir.path().join(format!(".tmp-{}-{n}", std::process::id())),
-                b"stale",
-            )
-            .unwrap();
+            std::fs::write(dir.path().join(format!(".tmp-{}-{n}", std::process::id())), b"stale")
+                .unwrap();
         }
 
         let error = create_tempfile_in(dir.path(), &counter).unwrap_err();
@@ -217,14 +195,8 @@ mod tests {
 
     #[test]
     fn version_bump_invalidates() {
-        let v1 = Upper {
-            version: 1,
-            runs: AtomicUsize::new(0),
-        };
-        let v2 = Upper {
-            version: 2,
-            runs: AtomicUsize::new(0),
-        };
+        let v1 = Upper { version: 1, runs: AtomicUsize::new(0) };
+        let v2 = Upper { version: 2, runs: AtomicUsize::new(0) };
         assert_ne!(CacheKey::new(&v1, b"x"), CacheKey::new(&v2, b"x"));
     }
 

@@ -126,9 +126,7 @@ impl ImageInfo {
     pub fn parse(data: &[u8]) -> Result<Self, PeError> {
         let kind = object::FileKind::parse(data)?;
         if kind != object::FileKind::Pe64 {
-            return Err(PeError::Unsupported(format!(
-                "expected PE32+, found {kind:?}"
-            )));
+            return Err(PeError::Unsupported(format!("expected PE32+, found {kind:?}")));
         }
         let file = PeFile64::parse(data)?;
         let nt = file.nt_headers();
@@ -137,9 +135,7 @@ impl ImageInfo {
 
         let machine = fh.machine.get(LE).0;
         if machine != MACHINE_AMD64 {
-            return Err(PeError::Unsupported(format!(
-                "machine 0x{machine:04x} is not AMD64"
-            )));
+            return Err(PeError::Unsupported(format!("machine 0x{machine:04x} is not AMD64")));
         }
 
         let sections: Vec<SectionInfo> = file
@@ -215,10 +211,7 @@ impl ImageInfo {
             exports,
             tls,
             has_relocations: dir_present(dir::BASERELOC)
-                && !has_flag(
-                    fh.characteristics.get(LE).0,
-                    layout::file_flags::RELOCS_STRIPPED,
-                ),
+                && !has_flag(fh.characteristics.get(LE).0, layout::file_flags::RELOCS_STRIPPED),
             has_exception_table: dir_present(dir::EXCEPTION),
             has_load_config: dir_present(dir::LOAD_CONFIG),
             codeview,
@@ -271,10 +264,7 @@ fn utf8(bytes: &[u8]) -> String {
 fn convert_import(import: Import<'_>) -> ImportSymbol {
     match import {
         Import::Ordinal(o) => ImportSymbol::Ordinal(o),
-        Import::Name(hint, name) => ImportSymbol::Name {
-            hint,
-            name: utf8(name),
-        },
+        Import::Name(hint, name) => ImportSymbol::Name { hint, name: utf8(name) },
     }
 }
 
@@ -341,10 +331,7 @@ fn entries<'data>(
             .ok_or_else(|| {
                 PeError::Malformed(format!("IAT at {iat_rva:#x} runs outside the image"))
             })?;
-        entries.push(ImportEntry {
-            symbol: convert_import(import(thunk)?),
-            iat_slot_rva,
-        });
+        entries.push(ImportEntry { symbol: convert_import(import(thunk)?), iat_slot_rva });
     }
     Ok(entries)
 }
@@ -381,12 +368,7 @@ fn parse_exports(file: &PeFile64<'_>, image_base: u64) -> Result<Vec<ExportInfo>
                 }
                 _ => (None, None),
             };
-            Ok(ExportInfo {
-                name,
-                ordinal,
-                rva,
-                forward,
-            })
+            Ok(ExportInfo { name, ordinal, rva, forward })
         })
         .collect()
 }
@@ -424,11 +406,7 @@ fn parse_tls(
             callback_rvas.push(va_to_rva(va, image_base)?);
         }
     }
-    Ok(Some(TlsInfo {
-        directory_rva,
-        callbacks_va,
-        callback_rvas,
-    }))
+    Ok(Some(TlsInfo { directory_rva, callbacks_va, callback_rvas }))
 }
 
 fn va_to_rva(va: u64, image_base: u64) -> Result<u32, PeError> {
@@ -498,16 +476,11 @@ mod tests {
         let mut data = own_image();
         let dd = layout::data_directory_offset(&data, dir::IMPORT).unwrap();
         let import_rva = layout::read_u32(&data, dd).unwrap();
-        let desc = ImageInfo::parse(&data)
-            .unwrap()
-            .rva_to_file_offset(import_rva)
-            .unwrap() as usize;
+        let desc =
+            ImageInfo::parse(&data).unwrap().rva_to_file_offset(import_rva).unwrap() as usize;
         // First descriptor's FirstThunk, at the 4 GiB limit: used to overflow.
         data[desc + 16..desc + 20].copy_from_slice(&0xFFFF_FFF8u32.to_le_bytes());
-        assert!(matches!(
-            ImageInfo::parse(&data),
-            Err(PeError::Malformed(_))
-        ));
+        assert!(matches!(ImageInfo::parse(&data), Err(PeError::Malformed(_))));
     }
     /// A minimal PE32+ image: one section at RVA 0x1000 holding `body`, with
     /// the export directory (RVA 0x1000, 0x80 bytes) pointing at it.
@@ -551,10 +524,7 @@ mod tests {
         data[opt + 112..opt + 120].fill(0);
 
         // Verify the baseline PE is accepted.
-        assert!(
-            ImageInfo::parse(&data).is_ok(),
-            "baseline synthetic image must be valid"
-        );
+        assert!(ImageInfo::parse(&data).is_ok(), "baseline synthetic image must be valid");
 
         // The section header starts after the 240-byte optional header.
         let sec = opt + 240;
@@ -564,10 +534,7 @@ mod tests {
         data[sec + 16..sec + 20].copy_from_slice(&0x1000u32.to_le_bytes());
 
         // Investigate whether the parser rejects this malformed image.
-        assert!(
-            ImageInfo::parse(&data).is_err(),
-            "section extends beyond physical file bounds"
-        );
+        assert!(ImageInfo::parse(&data).is_err(), "section extends beyond physical file bounds");
     }
 
     #[test]
@@ -581,10 +548,7 @@ mod tests {
         // Raw section: offset 0x200 + size 0x200 = file length 0x400.
         let info = ImageInfo::parse(&data);
 
-        assert!(
-            info.is_ok(),
-            "section ending exactly at EOF should be accepted"
-        );
+        assert!(info.is_ok(), "section ending exactly at EOF should be accepted");
     }
 
     #[test]
@@ -603,10 +567,7 @@ mod tests {
 
         let info = ImageInfo::parse(&data);
 
-        assert!(
-            info.is_ok(),
-            "section with zero raw size should be accepted"
-        );
+        assert!(info.is_ok(), "section with zero raw size should be accepted");
     }
 
     #[test]
@@ -635,18 +596,9 @@ mod tests {
         body[0x4A..0x50].copy_from_slice(b"gamma\0");
 
         let info = ImageInfo::parse(&synthetic_image(&body)).unwrap();
-        let exports: Vec<_> = info
-            .exports
-            .iter()
-            .map(|e| (e.name.as_deref(), e.ordinal, e.rva))
-            .collect();
-        assert_eq!(
-            exports,
-            [
-                (Some("alpha"), 1, Some(0x1200)),
-                (Some("gamma"), 3, Some(0x1204))
-            ]
-        );
+        let exports: Vec<_> =
+            info.exports.iter().map(|e| (e.name.as_deref(), e.ordinal, e.rva)).collect();
+        assert_eq!(exports, [(Some("alpha"), 1, Some(0x1200)), (Some("gamma"), 3, Some(0x1204))]);
     }
 
     #[test]
@@ -678,11 +630,8 @@ mod tests {
         body[0x5C..0x62].copy_from_slice(b"gamma\0");
 
         let info = ImageInfo::parse(&synthetic_image(&body)).unwrap();
-        let exports: Vec<_> = info
-            .exports
-            .iter()
-            .map(|e| (e.name.as_deref(), e.ordinal, e.rva))
-            .collect();
+        let exports: Vec<_> =
+            info.exports.iter().map(|e| (e.name.as_deref(), e.ordinal, e.rva)).collect();
         assert_eq!(
             exports,
             [

@@ -77,9 +77,7 @@ pub(crate) fn signature(elements: &[SigElement], input: bool) -> Vec<u8> {
     let mut next = 8 + 32 * elements.len() as u32;
     let mut names = Vec::new();
     for (i, e) in elements.iter().enumerate() {
-        let shared = (e.kind != 0)
-            .then(|| (0..i).find(|&j| elements[j].kind == e.kind))
-            .flatten();
+        let shared = (e.kind != 0).then(|| (0..i).find(|&j| elements[j].kind == e.kind)).flatten();
         match shared {
             Some(j) => offsets.push(offsets[j]),
             None => {
@@ -95,14 +93,7 @@ pub(crate) fn signature(elements: &[SigElement], input: bool) -> Vec<u8> {
         let (e, offset) = (&elements[i], offsets[i]);
         let used = e.usage << e.col;
         let rw = if input { used } else { !used & 0xf };
-        for v in [
-            0,
-            offset,
-            e.index,
-            e.system_value(),
-            e.sig_comp(),
-            e.row.unwrap_or(u32::MAX),
-        ] {
+        for v in [0, offset, e.index, e.system_value(), e.sig_comp(), e.row.unwrap_or(u32::MAX)] {
             out.extend(v.to_le_bytes());
         }
         out.extend([e.mask(), rw, 0, 0]);
@@ -165,13 +156,8 @@ pub(crate) struct Psv<'a> {
 
 /// `PSV0` with runtime info version 2 (validator 1.6).
 pub(crate) fn psv(p: &Psv) -> Vec<u8> {
-    let vectors = |els: &[SigElement]| {
-        els.iter()
-            .filter_map(|e| e.row)
-            .map(|r| r + 1)
-            .max()
-            .unwrap_or(0)
-    };
+    let vectors =
+        |els: &[SigElement]| els.iter().filter_map(|e| e.row).map(|r| r + 1).max().unwrap_or(0);
     let (in_vectors, out_vectors) = (vectors(p.inputs), vectors(p.outputs));
     let mut out = Vec::new();
     let u32s = |out: &mut Vec<u8>, vs: &[u32]| {
@@ -185,11 +171,7 @@ pub(crate) fn psv(p: &Psv) -> Vec<u8> {
     if p.stage == 0 {
         // PSInfo.SampleFrequency: an input interpolated per sample, or the
         // sample index.
-        info[1] = u8::from(
-            p.inputs
-                .iter()
-                .any(|e| matches!(e.interp, 6 | 7) || e.kind == 12),
-        );
+        info[1] = u8::from(p.inputs.iter().any(|e| matches!(e.interp, 6 | 7) || e.kind == 12));
     }
     let (min, max) = p.wave_size.map_or((0, u32::MAX), |n| (n, n));
     info[16..20].copy_from_slice(&min.to_le_bytes());
@@ -224,10 +206,7 @@ pub(crate) fn psv(p: &Psv) -> Vec<u8> {
     if !p.bindings.is_empty() {
         u32s(&mut out, &[24]);
         for b in p.bindings {
-            u32s(
-                &mut out,
-                &[b.kind, b.space, b.register, b.register, b.dxil_kind, 0],
-            );
+            u32s(&mut out, &[b.kind, b.space, b.register, b.register, b.dxil_kind, 0]);
         }
     }
     // Names of arbitrary semantics (system values use ""), then indices.
@@ -285,16 +264,8 @@ pub(crate) fn psv(p: &Psv) -> Vec<u8> {
         let per = (out_vectors * 4).div_ceil(32);
         for i in 0..in_vectors * 4 {
             for k in 0..per {
-                let bits = if i < ni {
-                    no.saturating_sub(32 * k).min(32)
-                } else {
-                    0
-                };
-                let mask = if bits == 32 {
-                    u32::MAX
-                } else {
-                    (1u32 << bits) - 1
-                };
+                let bits = if i < ni { no.saturating_sub(32 * k).min(32) } else { 0 };
+                let mask = if bits == 32 { u32::MAX } else { (1u32 << bits) - 1 };
                 u32s(&mut out, &[mask]);
             }
         }
@@ -352,12 +323,7 @@ pub(crate) fn hash(data: &[u8]) -> [u8; 16] {
     }
     tail.extend(((len as u32) << 1 | 1).to_le_bytes());
     let mut state = [0x6745_2301u32, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476];
-    for block in data[..len - left]
-        .as_chunks::<64>()
-        .0
-        .iter()
-        .chain(tail.as_chunks::<64>().0)
-    {
+    for block in data[..len - left].as_chunks::<64>().0.iter().chain(tail.as_chunks::<64>().0) {
         md5_block(&mut state, block);
     }
     let mut out = [0; 16];
@@ -370,30 +336,73 @@ pub(crate) fn hash(data: &[u8]) -> [u8; 16] {
 fn md5_block(state: &mut [u32; 4], block: &[u8; 64]) {
     const S: [u32; 16] = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
     const K: [u32; 64] = [
-        0xd76a_a478, 0xe8c7_b756, 0x2420_70db, 0xc1bd_ceee,
-        0xf57c_0faf, 0x4787_c62a, 0xa830_4613, 0xfd46_9501,
-        0x6980_98d8, 0x8b44_f7af, 0xffff_5bb1, 0x895c_d7be,
-        0x6b90_1122, 0xfd98_7193, 0xa679_438e, 0x49b4_0821,
-        0xf61e_2562, 0xc040_b340, 0x265e_5a51, 0xe9b6_c7aa,
-        0xd62f_105d, 0x0244_1453, 0xd8a1_e681, 0xe7d3_fbc8,
-        0x21e1_cde6, 0xc337_07d6, 0xf4d5_0d87, 0x455a_14ed,
-        0xa9e3_e905, 0xfcef_a3f8, 0x676f_02d9, 0x8d2a_4c8a,
-        0xfffa_3942, 0x8771_f681, 0x6d9d_6122, 0xfde5_380c,
-        0xa4be_ea44, 0x4bde_cfa9, 0xf6bb_4b60, 0xbebf_bc70,
-        0x289b_7ec6, 0xeaa1_27fa, 0xd4ef_3085, 0x0488_1d05,
-        0xd9d4_d039, 0xe6db_99e5, 0x1fa2_7cf8, 0xc4ac_5665,
-        0xf429_2244, 0x432a_ff97, 0xab94_23a7, 0xfc93_a039,
-        0x655b_59c3, 0x8f0c_cc92, 0xffef_f47d, 0x8584_5dd1,
-        0x6fa8_7e4f, 0xfe2c_e6e0, 0xa301_4314, 0x4e08_11a1,
-        0xf753_7e82, 0xbd3a_f235, 0x2ad7_d2bb, 0xeb86_d391,
+        0xd76a_a478,
+        0xe8c7_b756,
+        0x2420_70db,
+        0xc1bd_ceee,
+        0xf57c_0faf,
+        0x4787_c62a,
+        0xa830_4613,
+        0xfd46_9501,
+        0x6980_98d8,
+        0x8b44_f7af,
+        0xffff_5bb1,
+        0x895c_d7be,
+        0x6b90_1122,
+        0xfd98_7193,
+        0xa679_438e,
+        0x49b4_0821,
+        0xf61e_2562,
+        0xc040_b340,
+        0x265e_5a51,
+        0xe9b6_c7aa,
+        0xd62f_105d,
+        0x0244_1453,
+        0xd8a1_e681,
+        0xe7d3_fbc8,
+        0x21e1_cde6,
+        0xc337_07d6,
+        0xf4d5_0d87,
+        0x455a_14ed,
+        0xa9e3_e905,
+        0xfcef_a3f8,
+        0x676f_02d9,
+        0x8d2a_4c8a,
+        0xfffa_3942,
+        0x8771_f681,
+        0x6d9d_6122,
+        0xfde5_380c,
+        0xa4be_ea44,
+        0x4bde_cfa9,
+        0xf6bb_4b60,
+        0xbebf_bc70,
+        0x289b_7ec6,
+        0xeaa1_27fa,
+        0xd4ef_3085,
+        0x0488_1d05,
+        0xd9d4_d039,
+        0xe6db_99e5,
+        0x1fa2_7cf8,
+        0xc4ac_5665,
+        0xf429_2244,
+        0x432a_ff97,
+        0xab94_23a7,
+        0xfc93_a039,
+        0x655b_59c3,
+        0x8f0c_cc92,
+        0xffef_f47d,
+        0x8584_5dd1,
+        0x6fa8_7e4f,
+        0xfe2c_e6e0,
+        0xa301_4314,
+        0x4e08_11a1,
+        0xf753_7e82,
+        0xbd3a_f235,
+        0x2ad7_d2bb,
+        0xeb86_d391,
     ];
     let x: [u32; 16] = std::array::from_fn(|i| {
-        u32::from_le_bytes([
-            block[4 * i],
-            block[4 * i + 1],
-            block[4 * i + 2],
-            block[4 * i + 3],
-        ])
+        u32::from_le_bytes([block[4 * i], block[4 * i + 1], block[4 * i + 2], block[4 * i + 3]])
     });
     let [mut a, mut b, mut c, mut d] = *state;
     for (i, &k) in K.iter().enumerate() {
@@ -433,20 +442,10 @@ mod tests {
             usage: 3,
             half: false,
         };
-        let flat_float = SigElement {
-            name: "COLOR".into(),
-            index: 0,
-            comp: 9,
-            col: 0,
-            ..integer.clone()
-        };
-        let smooth_float = SigElement {
-            index: 2,
-            row: Some(1),
-            interp: 2,
-            comp: 9,
-            ..integer.clone()
-        };
+        let flat_float =
+            SigElement { name: "COLOR".into(), index: 0, comp: 9, col: 0, ..integer.clone() };
+        let smooth_float =
+            SigElement { index: 2, row: Some(1), interp: 2, comp: 9, ..integer.clone() };
         let outputs = [integer, flat_float, smooth_float];
         let mut recovered = super::super::signature(&signature(&outputs, false)).unwrap();
         // DXC orders the row by semantic-name offset even though TEXCOORD
@@ -469,8 +468,10 @@ mod tests {
         recovered[1].interp = 2;
         super::super::vertex_output_interpolation(&psv, &mut recovered).unwrap();
         assert_eq!(recovered.iter().map(|e| e.interp).collect::<Vec<_>>(), [1, 1, 2]);
-        assert!(super::super::vertex_output_interpolation(&psv[..psv.len() - 1], &mut recovered)
-            .is_err());
+        assert!(
+            super::super::vertex_output_interpolation(&psv[..psv.len() - 1], &mut recovered)
+                .is_err()
+        );
     }
 
     #[test]
@@ -482,11 +483,8 @@ mod tests {
         block.extend(24u64.to_le_bytes());
         let mut state = [0x6745_2301u32, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476];
         md5_block(&mut state, block.as_slice().try_into().unwrap());
-        let hex: String = state
-            .iter()
-            .flat_map(|s| s.to_le_bytes())
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let hex: String =
+            state.iter().flat_map(|s| s.to_le_bytes()).map(|b| format!("{b:02x}")).collect();
         assert_eq!(hex, "900150983cd24fb0d6963f7d28e17f72");
     }
 }

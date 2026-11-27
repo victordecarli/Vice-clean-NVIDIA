@@ -70,10 +70,9 @@ pub(super) fn colours(format: DXGI_FORMAT) -> Option<[&'static [u8]; 2]> {
         DXGI_FORMAT_R8G8B8A8_UNORM | DXGI_FORMAT_B8G8R8A8_UNORM => [&[0, 0, 0, 0xFF], &[0xFF; 4]],
         DXGI_FORMAT_R10G10B10A2_UNORM => [&[0, 0, 0, 0xC0], &[0xFF; 4]],
         // Halves of 0 and 1.
-        DXGI_FORMAT_R16G16B16A16_FLOAT => [
-            &[0, 0, 0, 0, 0, 0, 0, 0x3C],
-            &[0, 0x3C, 0, 0x3C, 0, 0x3C, 0, 0x3C],
-        ],
+        DXGI_FORMAT_R16G16B16A16_FLOAT => {
+            [&[0, 0, 0, 0, 0, 0, 0, 0x3C], &[0, 0x3C, 0, 0x3C, 0, 0x3C, 0, 0x3C]]
+        }
         _ => return None,
     })
 }

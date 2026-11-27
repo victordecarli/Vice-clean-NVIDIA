@@ -138,7 +138,12 @@ fn on_card() -> bool {
 fn memory(host: &Host, size: u64) -> Option<Memory> {
     {
         let mut spare = SPARE.lock().unwrap_or_else(|e| e.into_inner());
-        let fit = spare.iter().enumerate().filter(|(_, m)| m.size >= size).min_by_key(|(_, m)| m.size).map(|(i, _)| i);
+        let fit = spare
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.size >= size)
+            .min_by_key(|(_, m)| m.size)
+            .map(|(i, _)| i);
         if let Some(i) = fit {
             return Some(spare.swap_remove(i));
         }
@@ -152,11 +157,7 @@ fn memory(host: &Host, size: u64) -> Option<Memory> {
         None => host.upload_buffer(size)?,
     };
     name(&buffer, || "bytes a submission sends up".into());
-    Some(Memory {
-        buffer,
-        data: data as usize,
-        size,
-    })
+    Some(Memory { buffer, data: data as usize, size })
 }
 
 /// The submission has run.
@@ -171,7 +172,8 @@ pub(super) fn give_back(memory: Memory) {
 
 /// Since the last frame-rate line: bytes copied, runs copied, words stored,
 /// microseconds of taking them out of the CPU sides.
-pub(super) static STATS: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
+pub(super) static STATS: [std::sync::atomic::AtomicU64; 4] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 4];
 
 /// One copy's sends: ranges copied (offset in the copy, in the memory,
 /// bytes), and its pairs (where in the memory, how many).
@@ -190,7 +192,10 @@ pub(super) struct Own {
 const RUNS_AT_A_TIME: usize = 4096;
 
 /// Takes what `dirty` sends up out of the CPU sides.
-pub(super) fn take(host: &Host, dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)]) -> Option<Own> {
+pub(super) fn take(
+    host: &Host,
+    dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)],
+) -> Option<Own> {
     let began = std::time::Instant::now();
     pass(host)?;
     // Runs of whole words of the copy: only those are pairs. (A byte beside
@@ -274,7 +279,15 @@ impl Own {
         for ((shadow, _), copy) in dirty.iter().zip(&self.copies) {
             for &(a, from, n) in &copy.runs {
                 // SAFETY: the caller's; live buffers, ranges inside them.
-                unsafe { list.CopyBufferRegion(&shadow.buffer, a as u64, &self.memory.buffer, from, n as u64) };
+                unsafe {
+                    list.CopyBufferRegion(
+                        &shadow.buffer,
+                        a as u64,
+                        &self.memory.buffer,
+                        from,
+                        n as u64,
+                    )
+                };
             }
             let mut state = (looked(shadow) || !copy.runs.is_empty()).then_some(dest);
             if copy.pairs.1 > 0 {
@@ -302,7 +315,9 @@ impl Own {
                 list.SetComputeRootSignature(&pass.root);
                 list.SetPipelineState(&pass.pso);
                 list.SetComputeRootShaderResourceView(1, self.memory.buffer.GetGPUVirtualAddress());
-                for ((shadow, _), copy) in dirty.iter().zip(&self.copies).filter(|(_, c)| c.pairs.1 > 0) {
+                for ((shadow, _), copy) in
+                    dirty.iter().zip(&self.copies).filter(|(_, c)| c.pairs.1 > 0)
+                {
                     list.SetComputeRootUnorderedAccessView(2, shadow.buffer.GetGPUVirtualAddress());
                     const MOST: u32 = 64 * D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION;
                     let (at, words) = copy.pairs;

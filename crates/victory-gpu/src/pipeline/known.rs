@@ -74,7 +74,11 @@ fn book() -> Option<&'static Mutex<Book>> {
                 let _ = f.set_len(end);
             }
         }
-        tracing::info!(pipelines = keys.len(), shaders = shaders.len(), "title pipelines known from earlier runs");
+        tracing::info!(
+            pipelines = keys.len(),
+            shaders = shaders.len(),
+            "title pipelines known from earlier runs"
+        );
         let spawned = std::thread::Builder::new().name("victory-known".into()).spawn(|| {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -486,7 +490,10 @@ mod tests {
         shader.extend_from_slice(&shader.clone()[..20]);
         std::fs::write(dir.join(SHADERS), &shader).unwrap();
         let mut seen = Vec::new();
-        assert_eq!(walk_shaders(&dir, |stage, hash, at, len| seen.push((stage, hash[0], at, len))), one);
+        assert_eq!(
+            walk_shaders(&dir, |stage, hash, at, len| seen.push((stage, hash[0], at, len))),
+            one
+        );
         assert_eq!(seen, [(5, 9, 37, 4)]);
         let _ = std::fs::remove_dir_all(&dir);
     }

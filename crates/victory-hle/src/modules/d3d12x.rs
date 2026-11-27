@@ -105,10 +105,7 @@ pub(crate) fn module() -> HleModule {
                 address: victory_gpu::root::create_deserializer as *const () as usize,
             },
             // A data import: the title reads the id at this address.
-            HleExport {
-                name: "IID_ID3D12Device",
-                address: (&raw const device::IID) as usize,
-            },
+            HleExport { name: "IID_ID3D12Device", address: (&raw const device::IID) as usize },
         ],
     }
 }
@@ -123,10 +120,7 @@ mod tests {
 
     #[test]
     fn the_interface_id_import_is_bound_to_data() {
-        let symbol = ImportSymbol::Name {
-            hint: 0,
-            name: "IID_ID3D12Device".into(),
-        };
+        let symbol = ImportSymbol::Name { hint: 0, name: "IID_ID3D12Device".into() };
         let r = HleResolver::new(HostPolicy::none());
         let Resolution::Found { address, .. } = r.resolve("d3d12_xs.dll", &symbol) else {
             panic!("not bound");

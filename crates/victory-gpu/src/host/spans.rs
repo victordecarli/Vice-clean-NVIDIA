@@ -117,17 +117,30 @@ impl Host {
                 &mut heap,
             )?;
             let heap = heap.ok_or_else(windows::core::Error::empty)?;
-            let back = self.read_back_buffer(16 * SPANS as u64).ok_or_else(windows::core::Error::empty)?;
+            let back =
+                self.read_back_buffer(16 * SPANS as u64).ok_or_else(windows::core::Error::empty)?;
             let mut data = std::ptr::null_mut();
             back.Map(0, None, Some(&mut data))?;
             std::ptr::write_bytes(data.cast::<u8>(), 0, 16 * SPANS);
-            let allocator: ID3D12CommandAllocator = device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
+            let allocator: ID3D12CommandAllocator =
+                device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
             let mut lists = Vec::with_capacity(2 * SPANS);
             for i in 0..2 * SPANS as u32 {
-                let list: ID3D12GraphicsCommandList =
-                    device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None)?;
+                let list: ID3D12GraphicsCommandList = device.CreateCommandList(
+                    0,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    &allocator,
+                    None,
+                )?;
                 list.EndQuery(&heap, D3D12_QUERY_TYPE_TIMESTAMP, i);
-                list.ResolveQueryData(&heap, D3D12_QUERY_TYPE_TIMESTAMP, i, 1, &back, u64::from(i) * 8);
+                list.ResolveQueryData(
+                    &heap,
+                    D3D12_QUERY_TYPE_TIMESTAMP,
+                    i,
+                    1,
+                    &back,
+                    u64::from(i) * 8,
+                );
                 list.Close()?;
                 lists.push(list.cast()?);
             }

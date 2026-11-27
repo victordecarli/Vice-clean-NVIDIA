@@ -25,18 +25,12 @@ const VIEWS: u32 = 1_500_000;
 fn buffer(device: &ID3D12Device, kind: u32, size: u64) -> (ID3D12Resource, *mut u8) {
     let (heap, state, flags) = match kind {
         0 => (
-            D3D12_HEAP_PROPERTIES {
-                Type: D3D12_HEAP_TYPE_DEFAULT,
-                ..Default::default()
-            },
+            D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() },
             D3D12_RESOURCE_STATE_COMMON,
             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
         ),
         1 => (
-            D3D12_HEAP_PROPERTIES {
-                Type: D3D12_HEAP_TYPE_UPLOAD,
-                ..Default::default()
-            },
+            D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_UPLOAD, ..Default::default() },
             D3D12_RESOURCE_STATE_GENERIC_READ,
             D3D12_RESOURCE_FLAG_NONE,
         ),
@@ -57,10 +51,7 @@ fn buffer(device: &ID3D12Device, kind: u32, size: u64) -> (ID3D12Resource, *mut 
         Height: 1,
         DepthOrArraySize: 1,
         MipLevels: 1,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
         Flags: flags,
         ..Default::default()
@@ -106,10 +97,7 @@ fn barrier(
 
 /// A number from the environment.
 fn number(name: &str, otherwise: usize) -> usize {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(otherwise)
+    std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(otherwise)
 }
 
 struct Big {
@@ -129,10 +117,8 @@ struct Big {
 impl Big {
     fn new(device: &ID3D12Device, textures: usize) -> Big {
         let texture = |size: u32, flags, state| {
-            let heap = D3D12_HEAP_PROPERTIES {
-                Type: D3D12_HEAP_TYPE_DEFAULT,
-                ..Default::default()
-            };
+            let heap =
+                D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() };
             let desc = D3D12_RESOURCE_DESC {
                 Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
                 Width: u64::from(size),
@@ -140,10 +126,7 @@ impl Big {
                 DepthOrArraySize: 1,
                 MipLevels: if size == 256 { 9 } else { 1 },
                 Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 Flags: flags,
                 ..Default::default()
             };
@@ -173,9 +156,8 @@ impl Big {
                 .unwrap();
             let lists = (0..SUBMITS)
                 .map(|_| {
-                    let a: ID3D12CommandAllocator = device
-                        .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                        .unwrap();
+                    let a: ID3D12CommandAllocator =
+                        device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
                     let l: ID3D12GraphicsCommandList = device
                         .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &a, None)
                         .unwrap();
@@ -197,17 +179,11 @@ impl Big {
             let start = views.GetCPUDescriptorHandleForHeapStart().ptr;
             let textures: Vec<ID3D12Resource> = (0..textures)
                 .map(|_| {
-                    texture(
-                        256,
-                        D3D12_RESOURCE_FLAG_NONE,
-                        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
-                    )
+                    texture(256, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE)
                 })
                 .collect();
             for i in 0..VIEWS as usize {
-                let at = D3D12_CPU_DESCRIPTOR_HANDLE {
-                    ptr: start + i * step,
-                };
+                let at = D3D12_CPU_DESCRIPTOR_HANDLE { ptr: start + i * step };
                 device.CreateShaderResourceView(&textures[i % textures.len()], None, at);
             }
             let shared: Vec<(ID3D12Resource, *mut u8)> =
@@ -228,9 +204,7 @@ impl Big {
                 device.CreateShaderResourceView(
                     b,
                     Some(&desc),
-                    D3D12_CPU_DESCRIPTOR_HANDLE {
-                        ptr: start + i * step,
-                    },
+                    D3D12_CPU_DESCRIPTOR_HANDLE { ptr: start + i * step },
                 );
             }
             Big {
@@ -240,9 +214,7 @@ impl Big {
                 value: 0,
                 lists,
                 _textures: textures,
-                card: (0..number("BIG_CARD", 600))
-                    .map(|_| buffer(device, 0, 1 << 20).0)
-                    .collect(),
+                card: (0..number("BIG_CARD", 600)).map(|_| buffer(device, 0, 1 << 20).0).collect(),
                 shared,
                 upload: (0..1000).map(|_| buffer(device, 1, 1 << 20)).collect(),
                 views,
@@ -345,12 +317,7 @@ fn a_frame_of_a_titles_size() {
     }
     let dir = tempfile::tempdir().unwrap();
     let folder = std::env::var_os("BIG_FOLDER").map_or(dir.path().to_owned(), Into::into);
-    let settings = Settings {
-        folder,
-        at: At::Frame(4),
-        frames: 1,
-        always: false,
-    };
+    let settings = Settings { folder, at: At::Frame(4), frames: 1, always: false };
     let folder = record::start(settings, &device).unwrap();
     let began = Instant::now();
     let mut big = Big::new(&device, textures);
@@ -359,38 +326,20 @@ fn a_frame_of_a_titles_size() {
         let began = Instant::now();
         big.frame(n);
         timed(
-            [
-                "frame",
-                "frame, lists recorded",
-                "frame, captured",
-                "frame, after",
-            ][[0, 0, 0, 0, 1, 1, 2, 3][n]],
+            ["frame", "frame, lists recorded", "frame, captured", "frame, after"]
+                [[0, 0, 0, 0, 1, 1, 2, 3][n]],
             began,
         );
     }
     assert_eq!(record::finished(), Some(folder.clone()));
     drop(big);
     record::unhook(&device);
-    println!(
-        "{}",
-        std::fs::read_to_string(folder.join("notes.txt")).unwrap()
-    );
+    println!("{}", std::fs::read_to_string(folder.join("notes.txt")).unwrap());
     for f in std::fs::read_dir(&folder).unwrap().flatten() {
-        println!(
-            "{:>8} MB {}",
-            f.metadata().unwrap().len() >> 20,
-            f.file_name().to_string_lossy()
-        );
+        println!("{:>8} MB {}", f.metadata().unwrap().len() >> 20, f.file_name().to_string_lossy());
     }
     let began = Instant::now();
-    let reports = play::replay(
-        &folder,
-        &Options {
-            loops: 3,
-            ..Default::default()
-        },
-    )
-    .unwrap();
+    let reports = play::replay(&folder, &Options { loops: 3, ..Default::default() }).unwrap();
     timed("loaded and replayed", began);
     for (what, r) in &reports {
         println!("{}", r.text(what));

@@ -145,7 +145,9 @@ fn apply_mouse_sample(
 
 /// Host input, or a fake in tests.
 trait Source: Send {
-    fn mouse(&mut self) -> Option<MouseState> { None }
+    fn mouse(&mut self) -> Option<MouseState> {
+        None
+    }
     /// The pad in host slot `slot`, `None` when the slot is empty.
     fn pad(&mut self, slot: usize) -> Option<PadState>;
     /// Keys held down; none while the title's window lacks focus.
@@ -156,11 +158,7 @@ trait Source: Send {
 
 fn fallback(keys: &[KeyState]) -> PadState {
     let on = |vk: u8| {
-        if keys.iter().any(|k| k.virtual_key == vk) {
-            1.0
-        } else {
-            0.0
-        }
+        if keys.iter().any(|k| k.virtual_key == vk) { 1.0 } else { 0.0 }
     };
     PadState {
         buttons: FALLBACK_BUTTONS
@@ -249,12 +247,10 @@ struct DeviceInfo {
 const _: () = assert!(std::mem::offset_of!(DeviceInfo, id) == 0x20);
 
 fn kind(index: usize) -> u32 {
-    if index == MOUSE { return MOUSE_KIND; }
-    if index == KEYBOARD {
-        KEYBOARD_KIND
-    } else {
-        GAMEPAD_KIND
+    if index == MOUSE {
+        return MOUSE_KIND;
     }
+    if index == KEYBOARD { KEYBOARD_KIND } else { GAMEPAD_KIND }
 }
 
 impl Device {
@@ -271,12 +267,7 @@ impl Device {
             rumble_motors: if index <= FALLBACK { 0x3 } else { 0 },
             ..Default::default()
         };
-        Device {
-            vtable: &DEVICE,
-            hub: std::ptr::null(),
-            index,
-            info,
-        }
+        Device { vtable: &DEVICE, hub: std::ptr::null(), index, info }
     }
 
     fn hub(&self) -> &'static Hub {
@@ -361,13 +352,7 @@ impl Registration {
     }
 
     fn event(&self, device: usize, timestamp: u64, current: u32, previous: u32) -> Event {
-        Event {
-            registration: *self,
-            device,
-            timestamp,
-            current,
-            previous,
-        }
+        Event { registration: *self, device, timestamp, current, previous }
     }
 }
 
@@ -428,10 +413,7 @@ fn now() -> u64 {
 impl Hub {
     fn new(source: Box<dyn Source>, one_pad: bool) -> &'static Hub {
         let hub = Box::into_raw(Box::new(Hub {
-            object: Object {
-                vtable: &INPUT,
-                hub: std::ptr::null(),
-            },
+            object: Object { vtable: &INPUT, hub: std::ptr::null() },
             devices: std::array::from_fn(Device::new),
             source: Mutex::new(source),
             one_pad,
@@ -575,11 +557,8 @@ impl State {
         }
         if was != slot.connected {
             tracing::info!(device = index, connected = !was, "input device");
-            let (current, previous) = if was {
-                (0, STATUS_CONNECTED)
-            } else {
-                (STATUS_CONNECTED, 0)
-            };
+            let (current, previous) =
+                if was { (0, STATUS_CONNECTED) } else { (STATUS_CONNECTED, 0) };
             events.extend(
                 self.callbacks
                     .iter()
@@ -674,12 +653,7 @@ extern "system" fn current_reading(
 ) -> HRESULT {
     let hub = hub(this);
     let state = hub.state();
-    let newest = |i: usize| {
-        state.slots[i]
-            .history
-            .back()
-            .filter(|r| r.kind() & kind != 0)
-    };
+    let newest = |i: usize| state.slots[i].history.back().filter(|r| r.kind() & kind != 0);
     let found = if device.is_null() {
         (0..DEVICES)
             .filter(|&i| state.slots[i].connected)
@@ -727,24 +701,14 @@ fn relative(
     }
     let state = hub.state();
     let history = &state.slots[index].history;
-    if history
-        .front()
-        .is_none_or(|oldest| reference.sequence < oldest.sequence)
-    {
+    if history.front().is_none_or(|oldest| reference.sequence < oldest.sequence) {
         return fail(out, REFERENCE_TOO_OLD);
     }
     let wanted = |r: &&Ref| r.kind() & kind != 0;
     let found = if forward {
-        history
-            .iter()
-            .filter(|r| r.sequence > reference.sequence)
-            .find(wanted)
+        history.iter().filter(|r| r.sequence > reference.sequence).find(wanted)
     } else {
-        history
-            .iter()
-            .rev()
-            .filter(|r| r.sequence < reference.sequence)
-            .find(wanted)
+        history.iter().rev().filter(|r| r.sequence < reference.sequence).find(wanted)
     };
     hand(out, found)
 }
@@ -925,8 +889,9 @@ extern "system" fn find_by_id(this: This, id: *const [u8; 32], out: Out) -> HRES
     }
     // SAFETY: checked non-null; the title passes a device id.
     let id = unsafe { &*id };
-    match hub(this).devices.iter().find(|d| d.info.id == *id
-        && (d.index != MOUSE || hub(this).state().slots[MOUSE].connected)) {
+    match hub(this).devices.iter().find(|d| {
+        d.info.id == *id && (d.index != MOUSE || hub(this).state().slots[MOUSE].connected)
+    }) {
         Some(device) => {
             // SAFETY: checked non-null.
             unsafe { out.write((device as *const Device).cast()) };
@@ -983,11 +948,7 @@ extern "system" fn device_info(this: *const Device) -> *const DeviceInfo {
 extern "system" fn device_status(this: *const Device) -> u32 {
     // SAFETY: one of our devices.
     let device = unsafe { &*this };
-    if device.hub().state().slots[device.index].connected {
-        STATUS_CONNECTED
-    } else {
-        0
-    }
+    if device.hub().state().slots[device.index].connected { STATUS_CONNECTED } else { 0 }
 }
 // shortcut: trigger motors are dropped (XInput has none). The host API that
 // drives them without a redistributable is Windows.Gaming.Input (WinRT
@@ -1020,10 +981,7 @@ extern "system" fn set_rumble(this: *const Device, params: *const [f32; 4]) {
     }
 }
 extern "system" fn unsupported<const SLOT: usize>(_: *const c_void) -> HRESULT {
-    tracing::warn!(
-        slot = format_args!("{SLOT:#x}"),
-        "input device method not implemented"
-    );
+    tracing::warn!(slot = format_args!("{SLOT:#x}"), "input device method not implemented");
     E_NOTIMPL
 }
 
@@ -1071,11 +1029,7 @@ extern "system" fn input_kind(this: *const Reading) -> u32 {
 }
 extern "system" fn sequence_number(this: *const Reading, kind: u32) -> u64 {
     let reading = reading(this);
-    if reading.kind() & kind != 0 {
-        reading.sequence
-    } else {
-        0
-    }
+    if reading.kind() & kind != 0 { reading.sequence } else { 0 }
 }
 extern "system" fn reading_timestamp(this: *const Reading) -> u64 {
     reading(this).timestamp
@@ -1115,7 +1069,9 @@ extern "system" fn gamepad_state(this: *const Reading, out: *mut PadState) -> bo
     }
 }
 extern "system" fn mouse_state(this: *const Reading, out: *mut MouseState) -> bool {
-    if let Value::Mouse(state) = &reading(this).value && !out.is_null() {
+    if let Value::Mouse(state) = &reading(this).value
+        && !out.is_null()
+    {
         // SAFETY: the caller supplies room for one v0 mouse state.
         unsafe { out.write(*state) };
         return true;
@@ -1160,10 +1116,7 @@ pub(crate) fn module() -> HleModule {
         name: "gameinput",
         dlls: &["gameinput.dll"],
         // Titles import it by ordinal only.
-        exports: vec![HleExport {
-            name: "#1",
-            address: GameInputCreate as *const () as usize,
-        }],
+        exports: vec![HleExport { name: "#1", address: GameInputCreate as *const () as usize }],
     }
 }
 
@@ -1255,13 +1208,18 @@ mod host {
     impl Source for Host {
         fn mouse(&mut self) -> Option<MouseState> {
             let delta = crate::modules::lifecycle::captured_mouse_delta()?;
-            let menu_open = victory_gpu::SETTINGS_MENU_OPEN.load(std::sync::atomic::Ordering::Relaxed);
+            let menu_open =
+                victory_gpu::SETTINGS_MENU_OPEN.load(std::sync::atomic::Ordering::Relaxed);
             let buttons = if menu_open {
                 0
             } else {
-                [0x01, 0x02, 0x04, 0x05, 0x06].into_iter().enumerate()
+                [0x01, 0x02, 0x04, 0x05, 0x06]
+                    .into_iter()
+                    .enumerate()
                     // SAFETY: virtual-key state query.
-                    .fold(0, |bits, (i, vk)| bits | ((unsafe { GetAsyncKeyState(vk) } < 0) as u32) << i)
+                    .fold(0, |bits, (i, vk)| {
+                        bits | ((unsafe { GetAsyncKeyState(vk) } < 0) as u32) << i
+                    })
             };
             Some(super::apply_mouse_sample(&mut self.mouse, delta, buttons, menu_open))
         }
@@ -1284,7 +1242,9 @@ mod host {
             // to the pad (the title's start screen) saw nothing.
             if slot == 0 {
                 for vk in scripted() {
-                    if let Some(&(_, button)) = super::FALLBACK_BUTTONS.iter().find(|(key, _)| *key == vk) {
+                    if let Some(&(_, button)) =
+                        super::FALLBACK_BUTTONS.iter().find(|(key, _)| *key == vk)
+                    {
                         pad.buttons |= button;
                     }
                 }
@@ -1321,10 +1281,7 @@ mod host {
         }
 
         fn rumble(&mut self, slot: usize, low: u16, high: u16) {
-            let speeds = XINPUT_VIBRATION {
-                wLeftMotorSpeed: low,
-                wRightMotorSpeed: high,
-            };
+            let speeds = XINPUT_VIBRATION { wLeftMotorSpeed: low, wRightMotorSpeed: high };
             // SAFETY: a valid vibration; an empty slot just fails.
             unsafe { XInputSetState(slot as u32, &speeds) };
         }
@@ -1342,7 +1299,9 @@ mod host {
             "Down" => 0x28,
             "Left" => 0x25,
             "Right" => 0x27,
-            k if k.len() == 1 && k.as_bytes()[0].is_ascii_alphanumeric() => k.as_bytes()[0].to_ascii_uppercase(),
+            k if k.len() == 1 && k.as_bytes()[0].is_ascii_alphanumeric() => {
+                k.as_bytes()[0].to_ascii_uppercase()
+            }
             _ => return None,
         })
     }
@@ -1395,7 +1354,12 @@ mod host {
     fn live_line(line: &str, read: Instant) -> Option<LiveKey> {
         let mut words = line.split_whitespace();
         let vk = key_code(words.next()?)?;
-        let mut seconds = || words.next().and_then(|w| w.parse::<f64>().ok()).and_then(|s| Duration::try_from_secs_f64(s).ok());
+        let mut seconds = || {
+            words
+                .next()
+                .and_then(|w| w.parse::<f64>().ok())
+                .and_then(|s| Duration::try_from_secs_f64(s).ok())
+        };
         let hold = seconds().unwrap_or(Duration::from_millis(200)).min(Duration::from_secs(60));
         let after = seconds().unwrap_or_default().min(Duration::from_secs(600));
         Some(LiveKey { from: read + after, hold, vk })
@@ -1464,7 +1428,10 @@ mod host {
         let k = live_line("  w 3  ", t).unwrap();
         assert_eq!((k.vk, k.hold), (b'W', Duration::from_secs(3)));
         let k = live_line("Up 0.5 2", t).unwrap();
-        assert_eq!((k.vk, k.from, k.hold), (0x26, t + Duration::from_secs(2), Duration::from_millis(500)));
+        assert_eq!(
+            (k.vk, k.from, k.hold),
+            (0x26, t + Duration::from_secs(2), Duration::from_millis(500))
+        );
         // Holds are kept to a minute; unknown keys and bad numbers say nothing or fall back.
         assert_eq!(live_line("S 999", t).unwrap().hold, Duration::from_secs(60));
         assert_eq!(live_line("D x", t).unwrap().hold, Duration::from_millis(200));
@@ -1494,12 +1461,7 @@ mod host {
         let state = convert(&pad);
         assert_eq!(state.buttons, A | MENU | LEFT);
         assert_eq!(
-            (
-                state.left_trigger,
-                state.left_x,
-                state.left_y,
-                state.right_x
-            ),
+            (state.left_trigger, state.left_x, state.left_y, state.right_x),
             (1.0, -1.0, 1.0, 0.0)
         );
     }
@@ -1526,7 +1488,9 @@ mod tests {
     struct Fake(Arc<Mutex<FakeHost>>);
 
     impl Source for Fake {
-        fn mouse(&mut self) -> Option<MouseState> { self.0.lock().unwrap().mouse }
+        fn mouse(&mut self) -> Option<MouseState> {
+            self.0.lock().unwrap().mouse
+        }
         fn pad(&mut self, slot: usize) -> Option<PadState> {
             self.0.lock().unwrap().pads[slot]
         }
@@ -1550,11 +1514,7 @@ mod tests {
     }
 
     fn key(virtual_key: u8) -> KeyState {
-        KeyState {
-            scan_code: u32::from(virtual_key) + 0x100,
-            virtual_key,
-            ..Default::default()
-        }
+        KeyState { scan_code: u32::from(virtual_key) + 0x100, virtual_key, ..Default::default() }
     }
 
     fn slot<F: Copy, T>(object: *const T, offset: usize) -> F {
@@ -1660,10 +1620,7 @@ mod tests {
     #[test]
     fn ordinal_one_resolves_to_create() {
         let r = HleResolver::new(HostPolicy::none());
-        assert_eq!(
-            r.classify("GameInput.dll", &ImportSymbol::Ordinal(1)),
-            Some(Provenance::Hle)
-        );
+        assert_eq!(r.classify("GameInput.dll", &ImportSymbol::Ordinal(1)), Some(Provenance::Hle));
         assert_eq!(r.classify("GameInput.dll", &ImportSymbol::Ordinal(2)), None);
     }
 
@@ -1674,12 +1631,14 @@ mod tests {
             let log = Log::default();
             register(hub, MOUSE_KIND, 2, &log);
             assert!(log.lock().unwrap().is_empty());
-            let sample = MouseState { position_x: 30, position_y: -12, buttons: 1, ..Default::default() };
+            let sample =
+                MouseState { position_x: 30, position_y: -12, buttons: 1, ..Default::default() };
             host.lock().unwrap().mouse = Some(sample);
             hub.poll();
             let r = current(hub, MOUSE_KIND, MOUSE).unwrap();
             let mut got = MouseState::default();
-            let get = slot::<extern "system" fn(*const Reading, *mut MouseState) -> bool, _>(r, 0x80);
+            let get =
+                slot::<extern "system" fn(*const Reading, *mut MouseState) -> bool, _>(r, 0x80);
             assert!(get(r, &mut got));
             assert_eq!(got, sample);
             assert!(!get(r, std::ptr::null_mut()));
@@ -1687,7 +1646,10 @@ mod tests {
             host.lock().unwrap().mouse = None;
             hub.poll();
             assert_eq!(current(hub, MOUSE_KIND, MOUSE), Err(DEVICE_DISCONNECTED));
-            assert_eq!(*log.lock().unwrap(), [(MOUSE, STATUS_CONNECTED, 0), (MOUSE, 0, STATUS_CONNECTED)]);
+            assert_eq!(
+                *log.lock().unwrap(),
+                [(MOUSE, STATUS_CONNECTED, 0), (MOUSE, 0, STATUS_CONNECTED)]
+            );
         }
     }
 
@@ -1695,15 +1657,24 @@ mod tests {
     fn mouse_motion_and_buttons_are_suppressed_while_settings_menu_is_open() {
         let mut mouse = MouseState::default();
         let active = apply_mouse_sample(&mut mouse, (12, -5), 0b11, false);
-        assert_eq!(active, MouseState { position_x: 12, position_y: -5, buttons: 0b11, ..Default::default() });
+        assert_eq!(
+            active,
+            MouseState { position_x: 12, position_y: -5, buttons: 0b11, ..Default::default() }
+        );
 
         // Opening the F1 menu drops motion deltas and clears buttons while keeping position.
         let paused = apply_mouse_sample(&mut mouse, (40, 25), 0b01, true);
-        assert_eq!(paused, MouseState { position_x: 12, position_y: -5, buttons: 0, ..Default::default() });
+        assert_eq!(
+            paused,
+            MouseState { position_x: 12, position_y: -5, buttons: 0, ..Default::default() }
+        );
 
         // Closing the F1 menu resumes cleanly from the preserved position with no jump.
         let resumed = apply_mouse_sample(&mut mouse, (3, 4), 0b10, false);
-        assert_eq!(resumed, MouseState { position_x: 15, position_y: -1, buttons: 0b10, ..Default::default() });
+        assert_eq!(
+            resumed,
+            MouseState { position_x: 15, position_y: -1, buttons: 0b10, ..Default::default() }
+        );
     }
 
     #[test]
@@ -1715,11 +1686,8 @@ mod tests {
         // host pad the keyboard's stand-in is the only one.
         assert_eq!(*log.lock().unwrap(), [(FALLBACK, STATUS_CONNECTED, 0)]);
 
-        host.lock().unwrap().pads[1] = Some(PadState {
-            buttons: A,
-            left_x: 0.5,
-            ..Default::default()
-        });
+        host.lock().unwrap().pads[1] =
+            Some(PadState { buttons: A, left_x: 0.5, ..Default::default() });
         hub.poll();
         assert_eq!(
             log.lock().unwrap()[1..],
@@ -1818,7 +1786,8 @@ mod tests {
         assert_eq!(pad(hub).left_x, 1.0);
         // A pad is switched on, in any slot: its input arrives, beside the
         // keyboard's, and no device comes or goes.
-        host.lock().unwrap().pads[2] = Some(PadState { buttons: A, left_y: -0.5, ..Default::default() });
+        host.lock().unwrap().pads[2] =
+            Some(PadState { buttons: A, left_y: -0.5, ..Default::default() });
         hub.poll();
         let p = pad(hub);
         assert_eq!((p.buttons, p.left_x, p.left_y), (A, 1.0, -0.5));
@@ -1889,7 +1858,16 @@ mod tests {
         let mut token = 0;
         let context = (&raw const hub.object).cast_mut().cast();
         assert_eq!(
-            register(&hub.object, std::ptr::null(), GAMEPAD_KIND, 1, 0, context, Some(slow), &mut token),
+            register(
+                &hub.object,
+                std::ptr::null(),
+                GAMEPAD_KIND,
+                1,
+                0,
+                context,
+                Some(slow),
+                &mut token
+            ),
             S_OK
         );
         host.lock().unwrap().pads[1] = Some(PadState::default());

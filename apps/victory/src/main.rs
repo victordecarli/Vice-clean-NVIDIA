@@ -48,11 +48,7 @@ unsafe impl Sync for SdkPath {}
 pub static D3D12SDKPath: SdkPath = SdkPath(c".\\D3D12\\".as_ptr());
 
 #[derive(Parser)]
-#[command(
-    name = "victory",
-    version,
-    about = "Run an Xbox Series title natively on Windows"
-)]
+#[command(name = "victory", version, about = "Run an Xbox Series title natively on Windows")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -268,13 +264,15 @@ fn main() -> Result<()> {
     }
     // Started with nothing after its name (a double click): play.
     let bare = std::env::args_os().len() == 1;
-    let cli = if bare && cfg!(windows) { Cli::parse_from(["victory", "play"]) } else { Cli::parse() };
+    let cli =
+        if bare && cfg!(windows) { Cli::parse_from(["victory", "play"]) } else { Cli::parse() };
     // Play puts its settings into the environment and names its log file
     // before anything else is set up.
     #[cfg(windows)]
     if let Command::Play(options) = &cli.command {
         // (Read before `prepare` clears the `VICTORY_...` variables: the menu's restart sets it.)
-        let preload = options.preload || std::env::var_os("VICTORY_PRELOAD").is_some_and(|v| v == "1");
+        let preload =
+            options.preload || std::env::var_os("VICTORY_PRELOAD").is_some_and(|v| v == "1");
         let done = play::prepare(options).and_then(|ready| {
             if preload {
                 play::preload(&ready.exe);
@@ -295,30 +293,13 @@ fn main() -> Result<()> {
     }
     victory_core::logging::init("info");
     match cli.command {
-        Command::Inspect {
-            file,
-            imports,
-            exports,
-        } => inspect::run(&file, imports, exports),
-        Command::Census {
-            paths,
-            strict,
-            missing,
-        } => census::run(paths, strict, missing),
+        Command::Inspect { file, imports, exports } => inspect::run(&file, imports, exports),
+        Command::Census { paths, strict, missing } => census::run(paths, strict, missing),
         Command::LibExports { lib, list } => inspect::lib_exports(&lib, list),
-        Command::ShaderInfo {
-            paths,
-            verbose,
-            disasm,
-        } => shader::run(paths, verbose || disasm, disasm),
-        Command::Translate {
-            paths,
-            validate,
-            pipelines,
-            list,
-            jobs,
-            warm,
-        } => {
+        Command::ShaderInfo { paths, verbose, disasm } => {
+            shader::run(paths, verbose || disasm, disasm)
+        }
+        Command::Translate { paths, validate, pipelines, list, jobs, warm } => {
             // `VICTORY_VIEW_LIMIT=<null slot>`: translate as on a host whose view heap is capped
             if let Some(n) = std::env::var("VICTORY_VIEW_LIMIT").ok().and_then(|v| v.parse().ok()) {
                 victory_shader::emit::set_view_heap_limit(n);
@@ -334,7 +315,9 @@ fn main() -> Result<()> {
         }
         Command::Shaders { paths, jobs } => translate::precompile(paths, jobs),
         #[cfg(windows)]
-        Command::Warm { jobs, limit, again, used, these } => warm::run(jobs, limit, again, used, these),
+        Command::Warm { jobs, limit, again, used, these } => {
+            warm::run(jobs, limit, again, used, these)
+        }
         #[cfg(windows)]
         Command::Preload { paths } => {
             play::explain_preload();
@@ -364,14 +347,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Command::Run {
-            exe,
-            unimplemented,
-            strict,
-            execute,
-            console,
-            title_args,
-        } => {
+        Command::Run { exe, unimplemented, strict, execute, console, title_args } => {
             victory_hle::runtime::set_title_args(title_args);
             run::run(&exe, unimplemented, strict, execute, console)
         }
@@ -401,9 +377,7 @@ fn show_config() -> Result<()> {
     };
     println!(
         "config file : {}",
-        cfg.source
-            .as_ref()
-            .map_or("(none)".into(), |p| p.display().to_string())
+        cfg.source.as_ref().map_or("(none)".into(), |p| p.display().to_string())
     );
     println!("game_dir    : {}", status(&cfg.game_dir));
     println!("cache_dir   : {}", cfg.cache_dir.display());
@@ -411,12 +385,7 @@ fn show_config() -> Result<()> {
     for t in &cfg.test_titles {
         println!("test_title  : {}", status(&Some(t.clone())));
     }
-    for p in cfg
-        .game_dir
-        .iter()
-        .chain(&cfg.test_titles)
-        .chain([&cfg.cache_dir, &cfg.data_dir])
-    {
+    for p in cfg.game_dir.iter().chain(&cfg.test_titles).chain([&cfg.cache_dir, &cfg.data_dir]) {
         if let Err(e) = victory_core::ensure_outside_repo(p) {
             println!("POLICY VIOLATION: {e}");
         }

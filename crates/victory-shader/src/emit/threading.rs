@@ -42,12 +42,7 @@ pub(super) fn constant_edges(p: &Program, st: &Structured) -> Vec<(usize, usize,
     }
     let mut edges = Vec::new();
     for (join, block) in p.blocks.iter().enumerate() {
-        let LaneExit::Branch {
-            when,
-            taken,
-            not_taken,
-        } = st.exits[join]
-        else {
+        let LaneExit::Branch { when, taken, not_taken } = st.exits[join] else {
             continue;
         };
         if when == Bool::TRUE || when == Bool::FALSE {
@@ -84,21 +79,12 @@ pub(super) fn constant_edges(p: &Program, st: &Structured) -> Vec<(usize, usize,
         let LaneExit::Branch { when: entry, .. } = st.exits[fork] else {
             continue;
         };
-        if !st
-            .bools
-            .support(entry)
-            .iter()
-            .all(|a| matches!(a, Atom::Uniform(_)))
-        {
+        if !st.bools.support(entry).iter().all(|a| matches!(a, Atom::Uniform(_))) {
             continue;
         }
         for (edge, &pred) in block.preds.iter().enumerate() {
             let value = |v: Value| {
-                let input = block
-                    .phis
-                    .iter()
-                    .find(|p| p.value == v)
-                    .map_or(v, |p| p.args[edge]);
+                let input = block.phis.iter().find(|p| p.value == v).map_or(v, |p| p.args[edge]);
                 constants.get(&input).copied()
             };
             // Restrict the branch's decision diagram to known comparisons.
@@ -106,10 +92,8 @@ pub(super) fn constant_edges(p: &Program, st: &Structured) -> Vec<(usize, usize,
             // other arm, which may still go either way.
             let mut cond = when;
             while let Some((Atom::Lane(id), lo, hi)) = st.bools.node(cond) {
-                let Some(inst) = block
-                    .insts
-                    .iter()
-                    .find(|i| i.writes.iter().any(|&(_, v)| v == id))
+                let Some(inst) =
+                    block.insts.iter().find(|i| i.writes.iter().any(|&(_, v)| v == id))
                 else {
                     break;
                 };
@@ -135,11 +119,7 @@ pub(super) fn constant_edges(p: &Program, st: &Structured) -> Vec<(usize, usize,
                 cond = if yes { hi } else { lo };
             }
             if cond == Bool::TRUE || cond == Bool::FALSE {
-                edges.push((
-                    pred,
-                    join,
-                    if cond == Bool::TRUE { taken } else { not_taken },
-                ));
+                edges.push((pred, join, if cond == Bool::TRUE { taken } else { not_taken }));
                 break;
             }
         }
@@ -171,15 +151,8 @@ mod tests {
     ];
 
     fn program(words: &[u32]) -> Program {
-        ir::build(
-            &words
-                .iter()
-                .flat_map(|w| w.to_le_bytes())
-                .collect::<Vec<_>>(),
-            false,
-            4,
-        )
-        .unwrap()
+        ir::build(&words.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<_>>(), false, 4)
+            .unwrap()
     }
 
     #[test]
@@ -191,13 +164,7 @@ mod tests {
         let p = ir::thread_edges(&p, &edges).unwrap();
         let load = &p.blocks[1].insts[0];
         assert_eq!(p.blocks[3].insts[0].read(Reg::S(8)), load.write(Reg::S(8)));
-        assert_eq!(
-            p.blocks[0].exit,
-            Exit::Branch {
-                taken: 6,
-                not_taken: 1
-            }
-        );
+        assert_eq!(p.blocks[0].exit, Exit::Branch { taken: 6, not_taken: 1 });
         assert_eq!(p.blocks[6].exit, Exit::Jump(4));
         assert_eq!(p.blocks[6].insts.len(), p.blocks[2].insts.len());
     }

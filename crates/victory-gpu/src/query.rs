@@ -6,12 +6,7 @@ use crate::object::{self, E_INVALIDARG, HRESULT, Iid, Object, QUERY_HEAP, Table,
 use crate::resource::PAGEABLE_IIDS;
 
 const HEAP_IIDS: [Iid; 4] = [
-    guid(
-        0x0d9658ae,
-        0xed45,
-        0x469e,
-        [0xa6, 0x1d, 0x97, 0x0e, 0xc5, 0x83, 0xca, 0xb4],
-    ),
+    guid(0x0d9658ae, 0xed45, 0x469e, [0xa6, 0x1d, 0x97, 0x0e, 0xc5, 0x83, 0xca, 0xb4]),
     PAGEABLE_IIDS[0],
     PAGEABLE_IIDS[1],
     PAGEABLE_IIDS[2],
@@ -43,20 +38,12 @@ pub(crate) extern "system" fn create(
         return E_INVALIDARG;
     };
     tracing::debug!(?desc, "query heap");
-    let heap = Box::new(Heap {
-        object: Object::new(&FUNCTIONS),
-        desc,
-    });
+    let heap = Box::new(Heap { object: Object::new(&FUNCTIONS), desc });
     object::hand_out(QUERY_HEAP, heap, iid, &HEAP_IIDS, out)
 }
 
 extern "system" fn query(this: This, iid: *const Iid, out: *mut This) -> HRESULT {
-    object::answer(
-        QUERY_HEAP,
-        iid,
-        object::is(iid, &HEAP_IIDS).then_some(this),
-        out,
-    )
+    object::answer(QUERY_HEAP, iid, object::is(iid, &HEAP_IIDS).then_some(this), out)
 }
 extern "system" fn release(this: This) -> u32 {
     object::release_boxed::<Heap>(this)
@@ -87,12 +74,7 @@ mod tests {
         // The description is checked first: a probe with no room for the
         // heap fails on it rather than answering S_FALSE.
         assert_eq!(
-            create(
-                std::ptr::null(),
-                std::ptr::null(),
-                &HEAP_IIDS[0],
-                std::ptr::null_mut()
-            ),
+            create(std::ptr::null(), std::ptr::null(), &HEAP_IIDS[0], std::ptr::null_mut()),
             E_INVALIDARG
         );
     }
@@ -106,16 +88,10 @@ mod tests {
         };
         // A known interface with no out pointer asks whether creation would
         // succeed; the heap is dropped instead of handed out.
-        assert_eq!(
-            create(std::ptr::null(), &desc, &HEAP_IIDS[0], std::ptr::null_mut()),
-            S_FALSE
-        );
+        assert_eq!(create(std::ptr::null(), &desc, &HEAP_IIDS[0], std::ptr::null_mut()), S_FALSE);
         // A null interface id is tolerated: no interface, no heap.
         let mut heap = std::ptr::null();
-        assert_eq!(
-            create(std::ptr::null(), &desc, std::ptr::null(), &mut heap),
-            E_NOINTERFACE
-        );
+        assert_eq!(create(std::ptr::null(), &desc, std::ptr::null(), &mut heap), E_NOINTERFACE);
         assert!(heap.is_null());
     }
 

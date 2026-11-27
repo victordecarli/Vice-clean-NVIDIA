@@ -19,7 +19,5 @@ pub const KNOWN_BUILDS: &[KnownBuild] = &[];
 
 /// Looks up a build by the BLAKE3 hash of its executable.
 pub fn identify(blake3_hex: &str) -> Option<&'static KnownBuild> {
-    KNOWN_BUILDS
-        .iter()
-        .find(|b| b.blake3.eq_ignore_ascii_case(blake3_hex))
+    KNOWN_BUILDS.iter().find(|b| b.blake3.eq_ignore_ascii_case(blake3_hex))
 }

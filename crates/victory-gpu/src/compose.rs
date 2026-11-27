@@ -1,4 +1,4 @@
-﻿//! Two presented planes as one image: the console's display puts the second
+//! Two presented planes as one image: the console's display puts the second
 //! (the interface) over the first (the scene), each scaled to the screen.
 //! Grand Theft Auto VI presents so on Series S.
 
@@ -66,10 +66,7 @@ fn compile(entry: PCSTR, target: PCSTR) -> windows::core::Result<ID3DBlob> {
 
 impl Composer {
     pub(crate) fn new(host: &Host, format: DXGI_FORMAT) -> windows::core::Result<Self> {
-        let (vs, ps) = (
-            compile(s!("vs"), s!("vs_5_1"))?,
-            compile(s!("ps"), s!("ps_5_1"))?,
-        );
+        let (vs, ps) = (compile(s!("vs"), s!("vs_5_1"))?, compile(s!("ps"), s!("ps_5_1"))?);
         // SAFETY: the blobs' own bytes, alive through the calls.
         unsafe {
             let bytes = |b: &ID3DBlob| {
@@ -93,10 +90,7 @@ impl Composer {
                 },
                 PrimitiveTopologyType: D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
                 NumRenderTargets: 1,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 ..Default::default()
             };
             desc.RTVFormats[0] = format;
@@ -127,13 +121,12 @@ impl Composer {
     ) -> windows::core::Result<()> {
         while self.views.len() <= slot {
             let heap = unsafe {
-                host.device
-                    .CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
-                        Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                        NumDescriptors: 2,
-                        Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-                        NodeMask: 0,
-                    })?
+                host.device.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
+                    Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                    NumDescriptors: 2,
+                    Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+                    NodeMask: 0,
+                })?
             };
             self.views.push(heap);
         }
@@ -146,22 +139,16 @@ impl Composer {
                 views.GetGPUDescriptorHandleForHeapStart(),
             );
             for (i, plane) in planes.iter().enumerate() {
-                let at = D3D12_CPU_DESCRIPTOR_HANDLE {
-                    ptr: cpu.ptr + (i * self.step as usize),
-                };
+                let at = D3D12_CPU_DESCRIPTOR_HANDLE { ptr: cpu.ptr + (i * self.step as usize) };
                 let desc = D3D12_SHADER_RESOURCE_VIEW_DESC {
                     Format: plane.1,
                     ViewDimension: D3D12_SRV_DIMENSION_TEXTURE2D,
                     Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
                     Anonymous: D3D12_SHADER_RESOURCE_VIEW_DESC_0 {
-                        Texture2D: D3D12_TEX2D_SRV {
-                            MipLevels: 1,
-                            ..Default::default()
-                        },
+                        Texture2D: D3D12_TEX2D_SRV { MipLevels: 1, ..Default::default() },
                     },
                 };
-                host.device
-                    .CreateShaderResourceView(Some(plane.0), Some(&desc), at);
+                host.device.CreateShaderResourceView(Some(plane.0), Some(&desc), at);
             }
             let rtv = host.rtv(Some(back), None);
             list.OMSetRenderTargets(1, Some(&rtv), false, None);
@@ -232,10 +219,7 @@ mod tests {
                 DepthOrArraySize: 1,
                 MipLevels: 1,
                 Format: format,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
                 ..Default::default()
             };
@@ -267,11 +251,7 @@ mod tests {
         unsafe {
             cmds.ClearRenderTargetView(host.rtv(Some(&base), None), &[0.5, 0.0, 0.0, 1.0], None);
             let overlay_rtv = host.rtv(Some(&overlay), None);
-            let colors = [
-                [0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.5, 0.0, 0.5],
-                [0.0, 0.0, 1.0, 1.0],
-            ];
+            let colors = [[0.0, 0.0, 0.0, 0.0], [0.0, 0.5, 0.0, 0.5], [0.0, 0.0, 1.0, 1.0]];
             for (i, color) in colors.iter().enumerate() {
                 let rect = windows::Win32::Foundation::RECT {
                     left: i as i32,
@@ -286,14 +266,7 @@ mod tests {
                 crate::host::transition(&overlay, target, read),
             ]);
             compositor
-                .record(
-                    host,
-                    0,
-                    cmds,
-                    [(&base, format), (&overlay, format)],
-                    &output,
-                    (3, 1),
-                )
+                .record(host, 0, cmds, [(&base, format), (&overlay, format)], &output, (3, 1))
                 .unwrap();
             cmds.ResourceBarrier(&[crate::host::transition(
                 &output,
@@ -310,14 +283,10 @@ mod tests {
             let start = mapped.cast::<u8>().add(footprint.Offset as usize);
             let pixels: [u8; 12] = std::slice::from_raw_parts(start, 12).try_into().unwrap();
             buffer.Unmap(0, None);
-            for (actual, expected) in pixels
-                .iter()
-                .zip([128, 0, 0, 255, 64, 128, 0, 255, 0, 0, 255, 255])
+            for (actual, expected) in
+                pixels.iter().zip([128, 0, 0, 255, 64, 128, 0, 255, 0, 0, 255, 255])
             {
-                assert!(
-                    actual.abs_diff(expected) <= 1,
-                    "unexpected composite {pixels:?}"
-                );
+                assert!(actual.abs_diff(expected) <= 1, "unexpected composite {pixels:?}");
             }
             eprintln!("D3D12 display-plane readback RGBA: {pixels:?}");
         }

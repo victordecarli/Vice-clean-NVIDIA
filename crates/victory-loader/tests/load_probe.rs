@@ -69,16 +69,10 @@ impl ImportResolver for TestResolver {
             _ => None,
         };
         if let Some(address) = hle {
-            return Resolution::Found {
-                address,
-                provenance: Provenance::Hle,
-            };
+            return Resolution::Found { address, provenance: Provenance::Hle };
         }
         host(&dll, name)
-            .map(|address| Resolution::Found {
-                address,
-                provenance: Provenance::Host,
-            })
+            .map(|address| Resolution::Found { address, provenance: Provenance::Host })
             .unwrap_or(Resolution::Missing)
     }
 }
@@ -102,20 +96,10 @@ fn loads_binds_and_calls_probe() {
     let original = std::fs::read(&dll).unwrap();
     let prepared = prepare(&original).unwrap();
 
-    let imports: Vec<_> = prepared
-        .info
-        .imports
-        .iter()
-        .map(|m| m.dll.to_ascii_lowercase())
-        .collect();
-    assert!(
-        imports.contains(&"xgameruntime.dll".to_owned()),
-        "{imports:?}"
-    );
-    assert!(
-        imports.contains(&"victory-probe-missing.dll".to_owned()),
-        "{imports:?}"
-    );
+    let imports: Vec<_> =
+        prepared.info.imports.iter().map(|m| m.dll.to_ascii_lowercase()).collect();
+    assert!(imports.contains(&"xgameruntime.dll".to_owned()), "{imports:?}");
+    assert!(imports.contains(&"victory-probe-missing.dll".to_owned()), "{imports:?}");
     assert!(
         prepared
             .info
@@ -140,19 +124,13 @@ fn loads_binds_and_calls_probe() {
             .unwrap();
     let names: Vec<_> = dlls.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(names, ["victory-probe-title.dll"]);
-    let resolver = WithTitleDlls {
-        inner: &TestResolver,
-        dlls: &dlls,
-    };
+    let resolver = WithTitleDlls { inner: &TestResolver, dlls: &dlls };
     for (_, dll) in &dlls {
-        dll.bind_imports(&resolver, UnimplementedPolicy::ReturnZero)
-            .unwrap();
+        dll.bind_imports(&resolver, UnimplementedPolicy::ReturnZero).unwrap();
         // SAFETY: its imports are bound, and it depends on no other title DLL.
         unsafe { dll.attach() }.unwrap();
     }
-    let report = image
-        .bind_imports(&resolver, UnimplementedPolicy::ReturnZero)
-        .unwrap();
+    let report = image.bind_imports(&resolver, UnimplementedPolicy::ReturnZero).unwrap();
     assert_eq!(report.title, 1);
 
     assert_eq!(report.hle, 3);
@@ -186,13 +164,7 @@ fn loads_binds_and_calls_probe() {
 
         // Once attached, every thread start reaches its TLS callback and
         // DllMain (other tests may start threads too, hence at least one).
-        assert!(
-            image
-                .info()
-                .tls
-                .as_ref()
-                .is_some_and(|t| !t.callback_rvas.is_empty())
-        );
+        assert!(image.info().tls.as_ref().is_some_and(|t| !t.callback_rvas.is_empty()));
         image.attach().unwrap();
         let f: extern "system" fn() -> u64 = std::mem::transmute(call("probe_thread_starts"));
         let before = f();
@@ -222,19 +194,10 @@ fn loads_binds_and_calls_probe() {
         WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
         let after = f();
-        assert!(
-            after >> 32 > before >> 32,
-            "TLS callback: {before:#x} → {after:#x}"
-        );
-        assert!(
-            after as u32 > before as u32,
-            "DllMain: {before:#x} → {after:#x}"
-        );
+        assert!(after >> 32 > before >> 32, "TLS callback: {before:#x} → {after:#x}");
+        assert!(after as u32 > before as u32, "DllMain: {before:#x} → {after:#x}");
         // It has static TLS, so Windows would refuse too.
-        assert_eq!(
-            victory_loader::disable_thread_calls(image.base()),
-            Some(false)
-        );
+        assert_eq!(victory_loader::disable_thread_calls(image.base()), Some(false));
         assert_eq!(victory_loader::disable_thread_calls(1), None);
 
         // `FreeLibrary`'s notice, as a failed late load sends it.
@@ -251,11 +214,7 @@ fn maps_a_title_dll_the_title_loads_itself() {
     let title_dir = tempfile::tempdir().unwrap();
     let cache = tempfile::tempdir().unwrap();
     // Any real DLL will do; it imports only host DLLs, which are not in the folder.
-    std::fs::copy(
-        r"C:\Windows\System32\version.dll",
-        title_dir.path().join("Late.dll"),
-    )
-    .unwrap();
+    std::fs::copy(r"C:\Windows\System32\version.dll", title_dir.path().join("Late.dll")).unwrap();
     let load = |name: &str, wanted: &dyn Fn(&str) -> bool| {
         victory_loader::load_title_dll(name, title_dir.path(), cache.path(), wanted).unwrap()
     };

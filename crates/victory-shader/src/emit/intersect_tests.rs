@@ -149,10 +149,7 @@ fn native(words: &[u32]) -> NativeProgram {
             },
         ],
         used: vec![table(ResourceType::Srv, 0), table(ResourceType::Uav, 8)],
-        io: StageIo::Cs(ComputeIo {
-            rsrc2: 5 << 1,
-            threads: [THREADS, 1, 1],
-        }),
+        io: StageIo::Cs(ComputeIo { rsrc2: 5 << 1, threads: [THREADS, 1, 1] }),
         code: words.iter().flat_map(|w| w.to_le_bytes()).collect(),
     }
 }
@@ -215,10 +212,7 @@ struct Scene {
 
 impl Scene {
     fn new() -> Self {
-        Self {
-            words: Vec::new(),
-            starts: Vec::new(),
-        }
+        Self { words: Vec::new(), starts: Vec::new() }
     }
 
     /// Adds a node of `dwords` (16 or 32) and returns its index.
@@ -251,10 +245,7 @@ struct Numbers(u64);
 
 impl Numbers {
     fn next(&mut self) -> u32 {
-        self.0 = self
-            .0
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         (self.0 >> 33) as u32
     }
 
@@ -264,11 +255,7 @@ impl Numbers {
     }
 
     fn vector(&mut self, scale: f32) -> [f32; 3] {
-        [
-            self.unit() * scale,
-            self.unit() * scale,
-            self.unit() * scale,
-        ]
+        [self.unit() * scale, self.unit() * scale, self.unit() * scale]
     }
 }
 
@@ -292,19 +279,21 @@ fn scene() -> (Scene, Vec<Vec<Case>>) {
     box_nodes.push((s.add(nodes::box32(ids, lined), 32), 5));
     box_nodes.push((s.add(nodes::box16(ids, lined), 16), 4));
     // Boxes around the origin, one switched off, one child missing.
-    let around = [
-        UNIT,
-        moved(UNIT, [0.5, 0.5, 0.5]),
-        off,
-        [-4.0, -0.25, -0.25, 4.0, 0.25, 0.25],
-    ];
+    let around = [UNIT, moved(UNIT, [0.5, 0.5, 0.5]), off, [-4.0, -0.25, -0.25, 4.0, 0.25, 0.25]];
     let ids2 = [8, bvh::NONE, 24, 0x1fff_fffc];
     box_nodes.push((s.add(nodes::box32(ids2, around), 32), 5));
     box_nodes.push((s.add(nodes::box16(ids2, around), 16), 4));
     // A child that is not there with inverted infinite bounds (the title's
     // builder leaves such slots): every ray "enters" it at minus infinity.
     let mut empty = lined;
-    empty[1] = [f32::INFINITY, f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY];
+    empty[1] = [
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+    ];
     let ids3 = [0x105, bvh::NONE, 0x304, 0x400];
     box_nodes.push((s.add(nodes::box32(ids3, empty), 32), 5));
     // Random boxes.
@@ -327,20 +316,12 @@ fn scene() -> (Scene, Vec<Vec<Case>>) {
     let front = [[0.0, 2.0, 5.0], [2.0, -2.0, 5.0], [-2.0, -2.0, 5.0]];
     triangle_nodes.push((s.add(nodes::triangles(&front, 9), 16), 0));
     let pair = s.add(
-        nodes::triangles(
-            &[front[0], front[1], front[2], [2.0, 2.0, 5.0]],
-            9 | 0x80 | 6 << 8,
-        ),
+        nodes::triangles(&[front[0], front[1], front[2], [2.0, 2.0, 5.0]], 9 | 0x80 | 6 << 8),
         16,
     );
     triangle_nodes.extend([(pair, 0), (pair, 1)]);
-    let five = [
-        [-3.0, -1.0, 6.0],
-        [-1.0, 2.0, 6.5],
-        [1.0, -1.0, 6.0],
-        [3.0, 2.0, 6.5],
-        [5.0, -1.0, 7.0],
-    ];
+    let five =
+        [[-3.0, -1.0, 6.0], [-1.0, 2.0, 6.5], [1.0, -1.0, 6.0], [3.0, 2.0, 6.5], [5.0, -1.0, 7.0]];
     // I and J per triangle: (1, 2), (2, 0), (0, 1), (1, 2).
     let full = s.add(nodes::triangles(&five, 9 | 2 << 8 | 4 << 16 | 9 << 24), 16);
     triangle_nodes.extend((0..4).map(|k| (full, k)));
@@ -372,11 +353,7 @@ fn scene() -> (Scene, Vec<Vec<Case>>) {
     // Random rays at every box node, half of them aimed at a box.
     for &(n, kind) in &box_nodes {
         let words = s.node(n);
-        let boxes = if kind == 5 {
-            bvh::boxes32(&words)
-        } else {
-            bvh::boxes16(&words)
-        };
+        let boxes = if kind == 5 { bvh::boxes32(&words) } else { bvh::boxes16(&words) };
         for k in 0..12 {
             let origin = g.vector(12.0);
             let direction = if k % 2 == 0 {
@@ -439,17 +416,10 @@ fn scene() -> (Scene, Vec<Vec<Case>>) {
         Some((triangle_nodes[0].0, 6, ray)),
         Some((triangle_nodes[0].0, 7, ray)),
         None,
-        Some((
-            box_nodes[0].0,
-            5,
-            Ray::new([0.0; 3], [1.0, 0.0, 0.0], 1000.0),
-        )),
+        Some((box_nodes[0].0, 5, Ray::new([0.0; 3], [1.0, 0.0, 0.0], 1000.0))),
         None,
     ]);
-    let batches = cases
-        .chunks(THREADS as usize)
-        .map(<[Case]>::to_vec)
-        .collect();
+    let batches = cases.chunks(THREADS as usize).map(<[Case]>::to_vec).collect();
     (s, batches)
 }
 
@@ -526,23 +496,14 @@ fn run(wide: bool, descriptor: Descriptor, pointers: u64, sort: bool) {
             })
             .count()
     };
-    assert!(
-        boxes(0) > 5 && boxes(1) > 5 && boxes(2) > 5 && boxes(3) > 0,
-        "box cases"
-    );
-    assert!(
-        triangles(true) > 30 && triangles(false) > 30,
-        "triangle cases"
-    );
+    assert!(boxes(0) > 5 && boxes(1) > 5 && boxes(2) > 5 && boxes(3) > 0, "box cases");
+    assert!(triangles(true) > 30 && triangles(false) > 30, "triangle cases");
     // Sorting must matter to some case, or the unsorted run proves nothing.
     assert!(
-        all.iter()
-            .any(|c| expected(&scene, c, true) != expected(&scene, c, false)),
+        all.iter().any(|c| expected(&scene, c, true) != expected(&scene, c, false)),
         "no case tells sorted from unsorted"
     );
-    let _one = super::valu_tests::ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let mut ran = 0;
     for (label, warp) in [("hardware", false), ("warp", true)] {
         let Ok(host) = Host::new(warp) else {
@@ -561,10 +522,7 @@ fn run(wide: bool, descriptor: Descriptor, pointers: u64, sort: bool) {
                     &Dispatch {
                         roots: vec![(0, Root::Constants(vec![0; 5]))],
                         views: &[
-                            View::Buffer {
-                                data: &data,
-                                stride: Stride::Raw,
-                            },
+                            View::Buffer { data: &data, stride: Stride::Raw },
                             View::RawUav(4 * THREADS),
                         ],
                         samplers: &[],
@@ -601,10 +559,7 @@ fn run(wide: bool, descriptor: Descriptor, pointers: u64, sort: bool) {
 fn the_64_bit_node_test_in_a_host_buffer_matches_the_reference_on_the_card() {
     // Pointers count from the buffer's start.
     run(true, Descriptor::Table, u64::from(NODES), true);
-    assert_eq!(
-        build(true, Descriptor::Table).unwrap().1.bvh[0].1,
-        BvhNodes::Resource
-    );
+    assert_eq!(build(true, Descriptor::Table).unwrap().1.bvh[0].1, BvhNodes::Resource);
 }
 
 #[test]
@@ -634,10 +589,8 @@ fn the_32_bit_node_test_over_title_memory_matches_the_reference_on_the_card() {
     let descriptor = Descriptor::Numbers((structure >> 8) as u32, (structure >> 40) as u32);
     run(false, descriptor, 0, false);
     // And sorted.
-    let descriptor = Descriptor::Numbers(
-        (structure >> 8) as u32,
-        (structure >> 40) as u32 | bvh::BOX_SORT,
-    );
+    let descriptor =
+        Descriptor::Numbers((structure >> 8) as u32, (structure >> 40) as u32 | bvh::BOX_SORT);
     run(false, descriptor, 0, true);
 }
 
@@ -652,13 +605,7 @@ fn a_descriptor_of_numbers_is_title_memory_read_through_the_directory() {
         // ray-tracing structure. No resource is taken for it: the buffer
         // loads' and the store's descriptors are all there is.
         assert_eq!(res.bvh.len(), 1);
-        assert_eq!(
-            res.bvh[0].1,
-            BvhNodes::Memory {
-                word1: 0x8000_0000,
-                word3: 0x8900_03ff
-            }
-        );
+        assert_eq!(res.bvh[0].1, BvhNodes::Memory { word1: 0x8000_0000, word3: 0x8900_03ff });
         assert_eq!(res.descriptors.len(), 5);
         // Without the tests' stand-in the nodes are read as the title's
         // programs will read them: through the host's directory of title

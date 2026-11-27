@@ -80,10 +80,7 @@ fn dxc(source: &str) -> Vec<u8> {
         std::path::PathBuf::from,
     );
     let dir = std::env::temp_dir();
-    let (hlsl, cso) = (
-        dir.join("lut3d_probe66.hlsl"),
-        dir.join("lut3d_probe66.cso"),
-    );
+    let (hlsl, cso) = (dir.join("lut3d_probe66.hlsl"), dir.join("lut3d_probe66.cso"));
     std::fs::write(&hlsl, source).expect("hlsl written");
     let out = std::process::Command::new(exe)
         .args(["-T", "cs_6_6", "-E", "probe", "-Fo"])
@@ -91,11 +88,7 @@ fn dxc(source: &str) -> Vec<u8> {
         .arg(&hlsl)
         .output()
         .expect("dxc.exe runs");
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     std::fs::read(&cso).expect("cso")
 }
 
@@ -153,10 +146,7 @@ fn main() -> windows::core::Result<()> {
         // SHIFT=<n>: n root signatures with static point samplers of their own made (and
         // kept) before the probe's, so its sampler lands elsewhere in the card's table.
         let mut shifted: Vec<ID3D12RootSignature> = Vec::new();
-        let shift = std::env::var("SHIFT")
-            .ok()
-            .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(0);
+        let shift = std::env::var("SHIFT").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
         for i in 0..shift {
             let sampler = D3D12_STATIC_SAMPLER_DESC {
                 Filter: D3D12_FILTER_MIN_MAG_MIP_POINT,
@@ -237,10 +227,7 @@ fn main() -> windows::core::Result<()> {
         // MANY_ROOTS=<n>: n more root signatures, each with one static point sampler of
         // its own (a distinct LOD bias), and a pipeline for each; MANY_SAME=1: all alike.
         let mut many: Vec<(ID3D12RootSignature, ID3D12PipelineState)> = Vec::new();
-        if let Some(n) = std::env::var("MANY_ROOTS")
-            .ok()
-            .and_then(|v| v.parse::<u32>().ok())
-        {
+        if let Some(n) = std::env::var("MANY_ROOTS").ok().and_then(|v| v.parse::<u32>().ok()) {
             let same = std::env::var_os("MANY_SAME").is_some();
             let nop_src = "[numthreads(1, 1, 1)] void nop() {}";
             let mut code: Option<ID3DBlob> = None;
@@ -265,10 +252,8 @@ fn main() -> windows::core::Result<()> {
             .to_vec();
             // MANY_TWIN=k: first k root signatures with a sampler just like the probe's
             // (as the HLSL string gives it), made and let go.
-            let twins = std::env::var("MANY_TWIN")
-                .ok()
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(0);
+            let twins =
+                std::env::var("MANY_TWIN").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
             for _ in 0..twins {
                 let sampler = D3D12_STATIC_SAMPLER_DESC {
                     Filter: D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT,
@@ -373,10 +358,7 @@ fn main() -> windows::core::Result<()> {
             }
             println!("made {n} more root signatures with static point samplers (alike: {same})");
         }
-        let heap_props = |t| D3D12_HEAP_PROPERTIES {
-            Type: t,
-            ..Default::default()
-        };
+        let heap_props = |t| D3D12_HEAP_PROPERTIES { Type: t, ..Default::default() };
         let mut tex: Option<ID3D12Resource> = None;
         device.CreateCommittedResource(
             &heap_props(D3D12_HEAP_TYPE_DEFAULT),
@@ -388,10 +370,7 @@ fn main() -> windows::core::Result<()> {
                 DepthOrArraySize: 33,
                 MipLevels: 1,
                 Format: DXGI_FORMAT_R16G16B16A16_FLOAT,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
                     | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 ..Default::default()
@@ -412,10 +391,7 @@ fn main() -> windows::core::Result<()> {
                     Height: 1,
                     DepthOrArraySize: 1,
                     MipLevels: 1,
-                    SampleDesc: DXGI_SAMPLE_DESC {
-                        Count: 1,
-                        Quality: 0,
-                    },
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                     Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
                     Flags: flags,
                     ..Default::default()
@@ -453,11 +429,7 @@ fn main() -> windows::core::Result<()> {
             ViewDimension: D3D12_UAV_DIMENSION_TEXTURE3D,
             ..Default::default()
         };
-        uav.Anonymous.Texture3D = D3D12_TEX3D_UAV {
-            MipSlice: 0,
-            FirstWSlice: 0,
-            WSize: 33,
-        };
+        uav.Anonymous.Texture3D = D3D12_TEX3D_UAV { MipSlice: 0, FirstWSlice: 0, WSize: 33 };
         device.CreateUnorderedAccessView(&tex, None, Some(&uav), cpu);
         let mut srv = D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format: DXGI_FORMAT_R16G16B16A16_FLOAT,
@@ -465,17 +437,12 @@ fn main() -> windows::core::Result<()> {
             Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
             ..Default::default()
         };
-        srv.Anonymous.Texture3D = D3D12_TEX3D_SRV {
-            MostDetailedMip: 0,
-            MipLevels: 1,
-            ResourceMinLODClamp: 0.0,
-        };
+        srv.Anonymous.Texture3D =
+            D3D12_TEX3D_SRV { MostDetailedMip: 0, MipLevels: 1, ResourceMinLODClamp: 0.0 };
         device.CreateShaderResourceView(
             &tex,
             Some(&srv),
-            D3D12_CPU_DESCRIPTOR_HANDLE {
-                ptr: cpu.ptr + step,
-            },
+            D3D12_CPU_DESCRIPTOR_HANDLE { ptr: cpu.ptr + step },
         );
         let queue: ID3D12CommandQueue = device.CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
             Type: D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -504,10 +471,8 @@ fn main() -> windows::core::Result<()> {
                 let start = h.GetCPUDescriptorHandleForHeapStart().ptr;
                 // PAST=<k>: also k point samplers written past the heap's end (as a
                 // handle computed beyond it would).
-                let past = std::env::var("PAST")
-                    .ok()
-                    .and_then(|v| v.parse::<usize>().ok())
-                    .unwrap_or(0);
+                let past =
+                    std::env::var("PAST").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
                 for i in 0..n as usize + past {
                     device.CreateSampler(
                         &D3D12_SAMPLER_DESC {
@@ -518,9 +483,7 @@ fn main() -> windows::core::Result<()> {
                             MaxLOD: 12.0,
                             ..Default::default()
                         },
-                        D3D12_CPU_DESCRIPTOR_HANDLE {
-                            ptr: start + i * sstep,
-                        },
+                        D3D12_CPU_DESCRIPTOR_HANDLE { ptr: start + i * sstep },
                     );
                 }
                 println!("bound a sampler heap of {n} point samplers");

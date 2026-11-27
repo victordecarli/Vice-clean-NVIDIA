@@ -85,7 +85,8 @@ const STOCK_RENDERER_SELECTION: [u8; 8] = [0xb8, 6, 0, 0, 0, 0x0f, 0x45, 0xc1];
 /// (`movzx eax, al; mov [r14+0x90], eax; test al, al; jne`), whose scale
 /// multiplies the output size.
 const UPSCALER_SIZING: u32 = 0x028e_f69a;
-const STOCK_UPSCALER_SIZING: [u8; 14] = [0x0f, 0xb6, 0xc0, 0x41, 0x89, 0x86, 0x90, 0, 0, 0, 0x84, 0xc0, 0x75, 0x0a];
+const STOCK_UPSCALER_SIZING: [u8; 14] =
+    [0x0f, 0xb6, 0xc0, 0x41, 0x89, 0x86, 0x90, 0, 0, 0, 0x84, 0xc0, 0x75, 0x0a];
 /// The native branch's load of 1.0, and the scaled branch's of the scale.
 const NATIVE_LOAD: u32 = 0x028e_f6a8;
 const STOCK_NATIVE_LOAD: [u8; 10] = [0xc5, 0xfa, 0x10, 0x05, 0x28, 0x78, 0x6d, 0x03, 0xeb, 0x08];
@@ -112,11 +113,26 @@ pub(super) fn prepare_upscaler(image: &mut PreparedImage, mode: Mode) -> Result<
         image.original_hash.to_hex().as_str() == RETAIL_BUILD,
         "the upscaler path is only known for the retail build {RETAIL_BUILD}"
     );
-    ensure!(*field::<8>(image, RENDERER_SELECTION)? == STOCK_RENDERER_SELECTION, "unexpected renderer selection");
-    ensure!(*field::<14>(image, UPSCALER_SIZING)? == STOCK_UPSCALER_SIZING, "unexpected upscaler render size selection");
-    ensure!(*field::<10>(image, NATIVE_LOAD)? == STOCK_NATIVE_LOAD, "unexpected upscaler native scale load");
-    ensure!(*field::<8>(image, SCALED_LOAD)? == STOCK_SCALED_LOAD, "unexpected upscaler scaled load");
-    ensure!(*field::<4>(image, UPSCALER_SCALE)? == (2.0f32 / 3.0).to_le_bytes(), "unexpected upscaler scale");
+    ensure!(
+        *field::<8>(image, RENDERER_SELECTION)? == STOCK_RENDERER_SELECTION,
+        "unexpected renderer selection"
+    );
+    ensure!(
+        *field::<14>(image, UPSCALER_SIZING)? == STOCK_UPSCALER_SIZING,
+        "unexpected upscaler render size selection"
+    );
+    ensure!(
+        *field::<10>(image, NATIVE_LOAD)? == STOCK_NATIVE_LOAD,
+        "unexpected upscaler native scale load"
+    );
+    ensure!(
+        *field::<8>(image, SCALED_LOAD)? == STOCK_SCALED_LOAD,
+        "unexpected upscaler scaled load"
+    );
+    ensure!(
+        *field::<4>(image, UPSCALER_SCALE)? == (2.0f32 / 3.0).to_le_bytes(),
+        "unexpected upscaler scale"
+    );
     let temporal = f32::from_le_bytes(*field::<4>(image, TEMPORAL_SCALE)?);
     ensure!(
         temporal == 2.0 / 3.0 || temporal == 1.0,
@@ -125,7 +141,8 @@ pub(super) fn prepare_upscaler(image: &mut PreparedImage, mode: Mode) -> Result<
     // Renderer 7 every time it is asked (the console check has run).
     *field::<8>(image, RENDERER_SELECTION)? = [0xb8, 7, 0, 0, 0, 0x90, 0x90, 0x90];
     // `mov eax, mode; mov [r14+0x90], eax; jmp scaled`.
-    *field::<14>(image, UPSCALER_SIZING)? = [0xb8, mode.ffx_mode(), 0, 0, 0, 0x41, 0x89, 0x86, 0x90, 0, 0, 0, 0xeb, 0x0a];
+    *field::<14>(image, UPSCALER_SIZING)? =
+        [0xb8, mode.ffx_mode(), 0, 0, 0, 0x41, 0x89, 0x86, 0x90, 0, 0, 0, 0xeb, 0x0a];
     if mode != Mode::Quality {
         // The jump leaves the native branch unreached: its load's operand
         // becomes a literal of ours, which the scaled branch loads.
@@ -139,7 +156,8 @@ pub(super) fn prepare_upscaler(image: &mut PreparedImage, mode: Mode) -> Result<
 }
 
 fn field<const N: usize>(image: &mut PreparedImage, rva: u32) -> Result<&mut [u8; N]> {
-    let offset = image.info.rva_to_file_offset(rva).context("display profile field missing")? as usize;
+    let offset =
+        image.info.rva_to_file_offset(rva).context("display profile field missing")? as usize;
     image
         .bytes
         .get_mut(offset..offset + N)
@@ -188,13 +206,22 @@ mod tests {
         };
         let bytes = std::fs::read(path).unwrap();
         for native in [false, true] {
-            for mode in [Mode::Dlaa, Mode::Quality, Mode::Balanced, Mode::Performance, Mode::UltraPerformance] {
+            for mode in [
+                Mode::Dlaa,
+                Mode::Quality,
+                Mode::Balanced,
+                Mode::Performance,
+                Mode::UltraPerformance,
+            ] {
                 let mut image = victory_loader::prepare(&bytes).unwrap();
                 if native {
                     prepare(&mut image, false).unwrap();
                 }
                 prepare_upscaler(&mut image, mode).unwrap();
-                assert_eq!(*field::<8>(&mut image, RENDERER_SELECTION).unwrap(), [0xb8, 7, 0, 0, 0, 0x90, 0x90, 0x90]);
+                assert_eq!(
+                    *field::<8>(&mut image, RENDERER_SELECTION).unwrap(),
+                    [0xb8, 7, 0, 0, 0, 0x90, 0x90, 0x90]
+                );
                 let sizing = *field::<14>(&mut image, UPSCALER_SIZING).unwrap();
                 assert_eq!(sizing[1], mode.ffx_mode());
                 assert_eq!(sizing[12..], [0xeb, 0x0a]);
@@ -202,10 +229,19 @@ mod tests {
                 assert_eq!(UPSCALER_SIZING + 14 + 0x0a, SCALED_LOAD);
                 let disp = i32::from_le_bytes(*field::<4>(&mut image, SCALED_LOAD + 4).unwrap());
                 let loaded = (SCALED_LOAD + 8).wrapping_add_signed(disp);
-                assert_eq!(f32::from_le_bytes(*field::<4>(&mut image, loaded).unwrap()), mode.scale());
-                assert_eq!(f32::from_le_bytes(*field::<4>(&mut image, TEMPORAL_SCALE).unwrap()), mode.scale());
+                assert_eq!(
+                    f32::from_le_bytes(*field::<4>(&mut image, loaded).unwrap()),
+                    mode.scale()
+                );
+                assert_eq!(
+                    f32::from_le_bytes(*field::<4>(&mut image, TEMPORAL_SCALE).unwrap()),
+                    mode.scale()
+                );
                 // The shared constant stays as it was.
-                assert_eq!(*field::<4>(&mut image, UPSCALER_SCALE).unwrap(), (2.0f32 / 3.0).to_le_bytes());
+                assert_eq!(
+                    *field::<4>(&mut image, UPSCALER_SCALE).unwrap(),
+                    (2.0f32 / 3.0).to_le_bytes()
+                );
                 // Patched once, refused.
                 assert!(prepare_upscaler(&mut image, mode).is_err());
             }

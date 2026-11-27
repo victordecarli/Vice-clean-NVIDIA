@@ -62,18 +62,7 @@ struct Ray {
 impl<'a> Lower<'a> {
     /// `image_bvh_intersect_ray` and `image_bvh64_intersect_ray`.
     pub(super) fn bvh(&mut self, inst: &Inst, b: usize, i: usize) -> Result<(), Why> {
-        let Fields::Image {
-            data,
-            addr,
-            rsrc,
-            dmask,
-            a16,
-            d16,
-            tfe,
-            lwe,
-            ..
-        } = &inst.fields
-        else {
+        let Fields::Image { data, addr, rsrc, dmask, a16, d16, tfe, lwe, .. } = &inst.fields else {
             unreachable!()
         };
         if *a16 || *d16 || *tfe || *lwe || *dmask != 0xf {
@@ -106,10 +95,9 @@ impl<'a> Lower<'a> {
             .ok_or("an untracked ray-tracing structure")?;
         let (sort, barycentrics) = match nodes {
             BvhNodes::Resource => (true, true),
-            BvhNodes::Memory { word1, word3 } => (
-                word1 & bvh::BOX_SORT != 0,
-                word3 & bvh::RETURN_BARYCENTRICS != 0,
-            ),
+            BvhNodes::Memory { word1, word3 } => {
+                (word1 & bvh::BOX_SORT != 0, word3 & bvh::RETURN_BARYCENTRICS != 0)
+            }
         };
         if !barycentrics {
             // Mode 0 returns a triangle id and a hit status in the last two
@@ -124,10 +112,7 @@ impl<'a> Lower<'a> {
         }
         let pointer = x[0];
         let pointer_high = wide.then(|| x[1]);
-        let f: Vec<V> = x[1 + usize::from(wide)..]
-            .iter()
-            .map(|&v| self.as_float(v))
-            .collect();
+        let f: Vec<V> = x[1 + usize::from(wide)..].iter().map(|&v| self.as_float(v)).collect();
         let ray = Ray {
             extent: f[0],
             origin: [f[1], f[2], f[3]],
@@ -155,9 +140,7 @@ impl<'a> Lower<'a> {
                 };
                 let mut words = [pointer; 2];
                 for (k, w) in words.iter_mut().enumerate() {
-                    let v = inst
-                        .read(Reg::S(code + k as u8))
-                        .ok_or("an unread operand")?;
+                    let v = inst.read(Reg::S(code + k as u8)).ok_or("an unread operand")?;
                     *w = self.i32_of(v)?;
                 }
                 let (low, high) = self.bvh_address(words[0], words[1], pointer, pointer_high);
@@ -165,13 +148,7 @@ impl<'a> Lower<'a> {
                 // node is 64 bytes on 64, so its first half lies in one
                 // 64 KiB page whatever its kind.
                 let (handle, byte, mapped) = self.bvh_memory(low, high, guard);
-                NodeAt::Memory {
-                    handle,
-                    byte,
-                    low,
-                    high,
-                    mapped,
-                }
+                NodeAt::Memory { handle, byte, low, high, mapped }
             }
         };
         let zero = self.s.m.i32(0);
@@ -184,12 +161,8 @@ impl<'a> Lower<'a> {
         let is_triangle = self.s.m.cmp(head, pred::IULT, kind, k4);
         let (box_block, leaf_block) = (self.s.m.new_block(), self.s.m.new_block());
         let (triangle_block, join) = (self.s.m.new_block(), self.s.m.new_block());
-        self.s
-            .m
-            .terminate(head, Term::CondBr(is_box, box_block, leaf_block));
-        self.s
-            .m
-            .terminate(leaf_block, Term::CondBr(is_triangle, triangle_block, join));
+        self.s.m.terminate(head, Term::CondBr(is_box, box_block, leaf_block));
+        self.s.m.terminate(leaf_block, Term::CondBr(is_triangle, triangle_block, join));
         self.cur = box_block;
         let boxes = self.bvh_boxes(at, kind, &ray, sort);
         let box_end = self.cur;
@@ -208,11 +181,7 @@ impl<'a> Lower<'a> {
             let phi = self.s.m.phi(join, i32t);
             self.s.m.set_phi(
                 phi,
-                vec![
-                    (boxes[k], box_end),
-                    (triangle[k], triangle_end),
-                    (other[k], leaf_block),
-                ],
+                vec![(boxes[k], box_end), (triangle[k], triangle_end), (other[k], leaf_block)],
             );
             results.push((phi, zero));
         }
@@ -264,13 +233,7 @@ impl<'a> Lower<'a> {
                 let (low, high) = self.address_plus(low, high, 64);
                 // Every lane in this block runs the instruction.
                 let (handle, byte, mapped) = self.bvh_memory(low, high, None);
-                NodeAt::Memory {
-                    handle,
-                    byte,
-                    low,
-                    high,
-                    mapped,
-                }
+                NodeAt::Memory { handle, byte, low, high, mapped }
             }
         }
     }
@@ -339,9 +302,7 @@ impl<'a> Lower<'a> {
         let wide = self.s.m.cmp(head, pred::EQ, kind, k5);
         let (wide_block, half_block) = (self.s.m.new_block(), self.s.m.new_block());
         let join = self.s.m.new_block();
-        self.s
-            .m
-            .terminate(head, Term::CondBr(wide, wide_block, half_block));
+        self.s.m.terminate(head, Term::CondBr(wide, wide_block, half_block));
         // 32-bit floats: 24 dwords from byte 16.
         self.cur = wide_block;
         let k16 = self.s.m.i32(16);
@@ -364,14 +325,7 @@ impl<'a> Lower<'a> {
                 h = self.s.m.bin(half_block, Bin::LShr, h, k16);
             }
             // The conversion reads the low 16 bits.
-            halves.push(self.s.op(
-                half_block,
-                "legacyF16ToF32",
-                Attr::ReadNone,
-                f32t,
-                131,
-                &[h],
-            ));
+            halves.push(self.s.op(half_block, "legacyF16ToF32", Attr::ReadNone, f32t, 131, &[h]));
         }
         self.s.m.terminate(half_block, Term::Br(join));
         self.cur = join;
@@ -382,9 +336,7 @@ impl<'a> Lower<'a> {
             (NodeAt::Memory { mapped: first, .. }, NodeAt::Memory { mapped: last, .. }) => {
                 let i1t = self.s.m.type_of(first);
                 let mapped = self.s.m.phi(join, i1t);
-                self.s
-                    .m
-                    .set_phi(mapped, vec![(last, wide_block), (first, half_block)]);
+                self.s.m.set_phi(mapped, vec![(last, wide_block), (first, half_block)]);
                 let both = self.s.m.bin(join, Bin::And, first, mapped);
                 Some([first, first, both, both])
             }
@@ -393,26 +345,18 @@ impl<'a> Lower<'a> {
         let mut coords = Vec::with_capacity(24);
         for n in 0..24 {
             let phi = self.s.m.phi(join, f32t);
-            self.s
-                .m
-                .set_phi(phi, vec![(floats[n], wide_block), (halves[n], half_block)]);
+            self.s.m.set_phi(phi, vec![(floats[n], wide_block), (halves[n], half_block)]);
             coords.push(phi);
         }
         // The inverse direction held finite ([`bvh::boxes`]).
-        let (most, least) = (
-            self.s.m.f32(f32::MAX.to_bits()),
-            self.s.m.f32((-f32::MAX).to_bits()),
-        );
+        let (most, least) = (self.s.m.f32(f32::MAX.to_bits()), self.s.m.f32((-f32::MAX).to_bits()));
         let inverse = ray.inverse.map(|x| {
             let x = self.binary(35, x, least);
             self.binary(36, x, most)
         });
         let c = join;
-        let (none, infinity, fzero) = (
-            self.s.m.i32(bvh::NONE),
-            self.s.m.f32(f32::INFINITY.to_bits()),
-            self.s.m.f32(0),
-        );
+        let (none, infinity, fzero) =
+            (self.s.m.i32(bvh::NONE), self.s.m.f32(f32::INFINITY.to_bits()), self.s.m.f32(0));
         let mut ids = [none; 4];
         let mut distances = [infinity; 4];
         for n in 0..4 {
@@ -528,11 +472,7 @@ impl<'a> Lower<'a> {
         // ray that runs backwards along it.
         let axes = |l: &mut Self, q: [V; 3]| {
             let (x, y) = (pick(l, q, 1), pick(l, q, 2));
-            [
-                l.s.m.select(c, backwards, y, x),
-                l.s.m.select(c, backwards, x, y),
-                pick(l, q, 0),
-            ]
+            [l.s.m.select(c, backwards, y, x), l.s.m.select(c, backwards, x, y), pick(l, q, 0)]
         };
         let d = axes(self, ray.direction);
         let sz = pick(self, ray.inverse, 0);
@@ -548,9 +488,7 @@ impl<'a> Lower<'a> {
             let z = self.s.m.bin(c, Bin::Mul, sz, r[2]);
             sheared.push((x, y, z));
         }
-        let [(ax, ay, az), (bx, by, bz), (cx, cy, cz)] = sheared[..] else {
-            unreachable!()
-        };
+        let [(ax, ay, az), (bx, by, bz), (cx, cy, cz)] = sheared[..] else { unreachable!() };
         // p * q - r * s.
         let cross = |l: &mut Self, p: V, q: V, r: V, s: V| {
             let a = l.s.m.bin(c, Bin::Mul, p, q);

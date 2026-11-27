@@ -52,9 +52,7 @@ impl Default for HostPolicy {
             "mfplat.dll",
             "mfreadwrite.dll",
         ];
-        HostPolicy {
-            allow: allow.iter().map(|s| s.to_string()).collect(),
-        }
+        HostPolicy { allow: allow.iter().map(|s| s.to_string()).collect() }
     }
 }
 
@@ -66,12 +64,10 @@ impl HostPolicy {
 
     pub fn allows(&self, dll: &str) -> bool {
         let dll = dll.to_ascii_lowercase();
-        self.allow
-            .iter()
-            .any(|pattern| match pattern.strip_suffix('*') {
-                Some(prefix) => dll.starts_with(prefix),
-                None => dll == *pattern,
-            })
+        self.allow.iter().any(|pattern| match pattern.strip_suffix('*') {
+            Some(prefix) => dll.starts_with(prefix),
+            None => dll == *pattern,
+        })
     }
 
     pub(crate) fn resolve(&self, dll: &str, symbol: &ImportSymbol) -> Option<usize> {
@@ -99,10 +95,7 @@ impl HostPolicy {
 /// The host's own `name` from the System32 DLL `dll`: what a title import
 /// of it is bound to when we do not override it.
 pub(crate) fn function(dll: &str, name: &str) -> Option<usize> {
-    let name = ImportSymbol::Name {
-        hint: 0,
-        name: name.into(),
-    };
+    let name = ImportSymbol::Name { hint: 0, name: name.into() };
     imp::resolve(dll, &name)
 }
 
@@ -148,11 +141,7 @@ mod imp {
         // System32 only: never pick up a same-named DLL from the current folder or PATH.
         // SAFETY: NUL-terminated DLL name; only allow-listed system DLLs get here.
         let handle = unsafe {
-            LoadLibraryExA(
-                name.as_ptr().cast(),
-                std::ptr::null_mut(),
-                LOAD_LIBRARY_SEARCH_SYSTEM32,
-            )
+            LoadLibraryExA(name.as_ptr().cast(), std::ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
         } as usize;
         // A thread that loaded it meanwhile got the same module, which stays loaded.
         (handle != 0).then(|| *cache().entry(key).or_insert(handle))

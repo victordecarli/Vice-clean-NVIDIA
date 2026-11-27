@@ -246,7 +246,9 @@ pub(crate) fn run(r: Replay) -> Result<()> {
     }
     if let Some(text) = &r.flow {
         let lists = range(text).with_context(|| format!("--flow {text}"))?;
-        return play::look::flow(&r.folder, lists, r.flow_draws, r.flow_slots, &mut |line| println!("{line}"));
+        return play::look::flow(&r.folder, lists, r.flow_draws, r.flow_slots, &mut |line| {
+            println!("{line}")
+        });
     }
     if let Some(into) = &r.retranslate {
         return retranslate(&r.folder, into, r.view_limit, r.raw_views);
@@ -325,11 +327,8 @@ pub(crate) fn run(r: Replay) -> Result<()> {
     }
     if !r.pixel.is_empty() {
         let mut player = play::Player::load(&r.folder, &options)?;
-        let mut pixels = play::pixel::Pixels {
-            depth: r.depth,
-            written: !r.targets_only,
-            ..Default::default()
-        };
+        let mut pixels =
+            play::pixel::Pixels { depth: r.depth, written: !r.targets_only, ..Default::default() };
         if let Some(text) = &r.lists {
             pixels.lists = Some(range(text).with_context(|| format!("--lists {text}"))?);
         }
@@ -358,9 +357,7 @@ pub(crate) fn run(r: Replay) -> Result<()> {
             }
         }
         for text in &r.split {
-            pixels
-                .split
-                .push(pair(text, ':').with_context(|| format!("--split {text}"))?);
+            pixels.split.push(pair(text, ':').with_context(|| format!("--split {text}"))?);
         }
         return player.pixel(&options, &pixels, &mut |line| println!("{line}"));
     }
@@ -374,14 +371,8 @@ pub(crate) fn run(r: Replay) -> Result<()> {
     }
     let mut watched = Vec::new();
     for text in &r.watch {
-        let mut n = text
-            .split(':')
-            .map(|p| u64::from_str_radix(p.trim_start_matches("0x"), 16));
-        let mut next = || {
-            n.next()
-                .and_then(Result::ok)
-                .with_context(|| format!("--watch {text}"))
-        };
+        let mut n = text.split(':').map(|p| u64::from_str_radix(p.trim_start_matches("0x"), 16));
+        let mut next = || n.next().and_then(Result::ok).with_context(|| format!("--watch {text}"));
         let id = text
             .split(':')
             .next()
@@ -390,11 +381,7 @@ pub(crate) fn run(r: Replay) -> Result<()> {
         let _ = next();
         watched.push((id, next()?, next()?));
     }
-    if let Some(runs) = r
-        .diverge
-        .or(r.diverge_picture)
-        .or((!watched.is_empty()).then_some(2))
-    {
+    if let Some(runs) = r.diverge.or(r.diverge_picture).or((!watched.is_empty()).then_some(2)) {
         let lists = match &r.lists {
             Some(text) => Some(range(text).with_context(|| format!("--lists {text}"))?),
             None => None,
@@ -434,7 +421,12 @@ pub(crate) fn run(r: Replay) -> Result<()> {
 }
 
 /// Translates the capture's shaders into `into`.
-fn retranslate(folder: &std::path::Path, into: &std::path::Path, view_limit: u32, raw_views: u32) -> Result<()> {
+fn retranslate(
+    folder: &std::path::Path,
+    into: &std::path::Path,
+    view_limit: u32,
+    raw_views: u32,
+) -> Result<()> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let wanted = play::title_shaders(folder)?;
     let kept = play::find(folder)?.with_file_name("containers");
@@ -446,11 +438,19 @@ fn retranslate(folder: &std::path::Path, into: &std::path::Path, view_limit: u32
         .filter(|h| !kept.join(format!("{h}.cdxil")).exists())
         .collect();
     if !missing.is_empty() {
-        println!("{} of {} containers are looked for in the title's files", missing.len(), wanted.len());
+        println!(
+            "{} of {} containers are looked for in the title's files",
+            missing.len(),
+            wanted.len()
+        );
         for root in crate::default_paths(Vec::new())? {
-            for entry in walkdir::WalkDir::new(root).into_iter().filter_map(std::result::Result::ok) {
+            for entry in walkdir::WalkDir::new(root).into_iter().filter_map(std::result::Result::ok)
+            {
                 let size = entry.metadata().map_or(0, |m| m.len());
-                if missing.is_empty() || !entry.file_type().is_file() || size > crate::shader::MAX_FILE {
+                if missing.is_empty()
+                    || !entry.file_type().is_file()
+                    || size > crate::shader::MAX_FILE
+                {
                     continue;
                 }
                 let Ok(data) = std::fs::read(entry.path()) else { continue };
@@ -476,7 +476,9 @@ fn retranslate(folder: &std::path::Path, into: &std::path::Path, view_limit: u32
         for _ in 0..std::thread::available_parallelism().map_or(4, |n| n.get()) {
             s.spawn(|| {
                 while let Some((stage, hash)) = all.get(next.fetch_add(1, Ordering::Relaxed)) {
-                    let Ok(bytes) = std::fs::read(kept.join(format!("{hash}.cdxil"))) else { continue };
+                    let Ok(bytes) = std::fs::read(kept.join(format!("{hash}.cdxil"))) else {
+                        continue;
+                    };
                     match victory_shader::emit::translate(&bytes) {
                         Ok(t) => {
                             if std::fs::write(into.join(format!("{hash}.dxil")), &t.dxil).is_ok() {
@@ -489,7 +491,12 @@ fn retranslate(folder: &std::path::Path, into: &std::path::Path, view_limit: u32
             });
         }
     });
-    println!("{} of {} shaders translated, {:.1} s", done.into_inner(), all.len(), started.elapsed().as_secs_f64());
+    println!(
+        "{} of {} shaders translated, {:.1} s",
+        done.into_inner(),
+        all.len(),
+        started.elapsed().as_secs_f64()
+    );
     Ok(())
 }
 

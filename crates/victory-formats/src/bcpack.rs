@@ -199,10 +199,7 @@ impl Tables {
                 for v in ep.e.as_flattened_mut() {
                     *v = r.u16();
                 }
-                let mut ix = Bc6Ix {
-                    mode: r.u8(),
-                    ..Default::default()
-                };
+                let mut ix = Bc6Ix { mode: r.u8(), ..Default::default() };
                 for v in &mut ix.ix {
                     *v = r.u16() as i16;
                 }
@@ -211,17 +208,11 @@ impl Tables {
             .collect();
         let bc7 = (0..DICTIONARY)
             .map(|_| {
-                let mut ep = Bc7Ep {
-                    ctrl: r.u16(),
-                    ..Default::default()
-                };
+                let mut ep = Bc7Ep { ctrl: r.u16(), ..Default::default() };
                 for v in ep.rows.as_flattened_mut() {
                     *v = r.u16();
                 }
-                let mut ix = Bc7Ix {
-                    bits: [r.u8(), r.u8()],
-                    ..Default::default()
-                };
+                let mut ix = Bc7Ix { bits: [r.u8(), r.u8()], ..Default::default() };
                 // Unused: the widths again in all entries but the first.
                 r.u16();
                 // Only 15 slots for set 1, which no entry uses (0 bits).
@@ -452,11 +443,7 @@ fn lanes(
         }
         if done == full {
             pos += 1;
-            at += if pos.is_multiple_of(per) {
-                stride - per + 1
-            } else {
-                1
-            };
+            at += if pos.is_multiple_of(per) { stride - per + 1 } else { 1 };
             done = 0;
             moved = true;
         }
@@ -473,11 +460,8 @@ fn lanes(
 
 /// The record's endpoint and index references.
 fn references(s: &[u8], paired: bool) -> (usize, usize) {
-    let (d, ix) = if paired {
-        (interleave(s[0], s[1]), interleave(s[2], s[3]))
-    } else {
-        (s[0], s[1])
-    };
+    let (d, ix) =
+        if paired { (interleave(s[0], s[1]), interleave(s[2], s[3])) } else { (s[0], s[1]) };
     let delta = (d >> 1) ^ (d & 1).wrapping_neg();
     (usize::from(ix.wrapping_add(delta)), usize::from(ix))
 }
@@ -625,9 +609,7 @@ const BC4_CODE: [u64; 8] = [0, 2, 3, 4, 5, 6, 7, 1];
 fn bc1_color(ep: &[u8], ix: &[u8], out: &mut [u8]) {
     let c0 = u16::from(ep[0]) << 11 | u16::from(ep[1]) << 5 | u16::from(ep[2]);
     let c1 = u16::from(ep[3]) << 11 | u16::from(ep[4]) << 5 | u16::from(ep[5]);
-    let bits = (0..16).fold(0, |acc, p| {
-        acc | BC1_CODE[usize::from(ix[p] & 3)] << (2 * p)
-    });
+    let bits = (0..16).fold(0, |acc, p| acc | BC1_CODE[usize::from(ix[p] & 3)] << (2 * p));
     out[..2].copy_from_slice(&c0.to_le_bytes());
     out[2..4].copy_from_slice(&c1.to_le_bytes());
     out[4..8].copy_from_slice(&bits.to_le_bytes());
@@ -635,9 +617,7 @@ fn bc1_color(ep: &[u8], ix: &[u8], out: &mut [u8]) {
 
 /// BC4 half: endpoints are kept 128 below their stored value.
 fn bc4_alpha(e0: u8, e1: u8, ix: &[u8], out: &mut [u8]) {
-    let bits = (0..16).fold(0u64, |acc, p| {
-        acc | BC4_CODE[usize::from(ix[p] & 7)] << (16 + 3 * p)
-    });
+    let bits = (0..16).fold(0u64, |acc, p| acc | BC4_CODE[usize::from(ix[p] & 7)] << (16 + 3 * p));
     let v = u64::from(e0 ^ 0x80) | u64::from(e1 ^ 0x80) << 8 | bits;
     out[..8].copy_from_slice(&v.to_le_bytes());
 }
@@ -672,11 +652,7 @@ fn nibbles(b: u8, odd_first: bool) -> [i16; 2] {
 /// widths, back to `bits` bits (signed).
 fn add_index(cur: i16, bits: u8, refv: i16, ref_bits: u8) -> i16 {
     let up = |v: i16, b: u8| {
-        if b == 0 || b > 16 {
-            0
-        } else {
-            (v as u16) << (16 - b)
-        }
+        if b == 0 || b > 16 { 0 } else { (v as u16) << (16 - b) }
     };
     let sum = up(cur, bits).wrapping_add(up(refv, ref_bits)) as i16;
     if bits == 0 { 0 } else { sum >> (16 - bits) }
@@ -729,16 +705,7 @@ const BC7_BITS: [[u8; 4]; 8] = [
     [5, 5, 5, 5],
 ];
 /// Index bits of the primary and secondary sets per mode.
-const BC7_INDEX: [[u8; 2]; 8] = [
-    [3, 0],
-    [3, 0],
-    [2, 0],
-    [2, 0],
-    [3, 2],
-    [2, 2],
-    [4, 0],
-    [2, 0],
-];
+const BC7_INDEX: [[u8; 2]; 8] = [[3, 0], [3, 0], [2, 0], [2, 0], [3, 2], [2, 2], [4, 0], [2, 0]];
 
 fn pbits(mode: u16) -> bool {
     matches!(mode, 0 | 1 | 3 | 6 | 7)
@@ -746,11 +713,7 @@ fn pbits(mode: u16) -> bool {
 
 /// Channel rotation bits; only BC7 modes 4 and 5 have a rotation field.
 fn rotation(ctrl: u16) -> usize {
-    if matches!(ctrl & 7, 4 | 5) {
-        usize::from(ctrl >> 3 & 3)
-    } else {
-        0
-    }
+    if matches!(ctrl & 7, 4 | 5) { usize::from(ctrl >> 3 & 3) } else { 0 }
 }
 
 /// Channel precisions: the p-bit is red's lowest bit; rotation swaps alpha
@@ -787,32 +750,11 @@ fn bc7<'a>(
         let if3 = |v: u8| if three { v } else { 0 };
         let stored = [
             [s[4], s[5], s[6], s[7], s[8], s[9], or0(s[10]), or0(s[11])],
-            [
-                s[12],
-                s[13],
-                s[14],
-                s[15],
-                s[16],
-                s[17],
-                or0(s[18]),
-                or0(s[19]),
-            ],
-            [
-                s[20],
-                s[21],
-                if3(s[10]),
-                if3(s[11]),
-                if3(s[18]),
-                if3(s[19]),
-                0,
-                0,
-            ],
+            [s[12], s[13], s[14], s[15], s[16], s[17], or0(s[18]), or0(s[19])],
+            [s[20], s[21], if3(s[10]), if3(s[11]), if3(s[18]), if3(s[19]), 0, 0],
         ];
         let r = &pick(i, ep_ref, &history, &t.bc7, &zero).0;
-        let mut ep = Bc7Ep {
-            ctrl,
-            ..Default::default()
-        };
+        let mut ep = Bc7Ep { ctrl, ..Default::default() };
         // Rows the reference lacks build on its first row.
         let common = subsets.min(usize::from((r.ctrl & 0xff) >> 6));
         let columns = if prec[3] > 0 { 8 } else { 6 };
@@ -832,10 +774,7 @@ fn bc7<'a>(
         }
         let bits = BC7_INDEX[mode];
         let rx = &pick(i, ix_ref, &history, &t.bc7, &zero).1;
-        let mut ix = Bc7Ix {
-            bits,
-            ..Default::default()
-        };
+        let mut ix = Bc7Ix { bits, ..Default::default() };
         for (set, offsets) in [[22, 24, 26, 28], [12, 14, 16, 20]].into_iter().enumerate() {
             if bits[set] == 0 {
                 continue;
@@ -1072,13 +1011,7 @@ fn bc6<'a>(
     dictionary: &[(Bc6Ep, Bc6Ix)],
 ) -> Result<(), Error> {
     let mut history = vec![(Bc6Ep::default(), Bc6Ix::default()); HISTORY];
-    let zero = (
-        Bc6Ep::default(),
-        Bc6Ix {
-            mode: 11,
-            ..Default::default()
-        },
-    );
+    let zero = (Bc6Ep::default(), Bc6Ix { mode: 11, ..Default::default() });
     let z = |v: u16| (v >> 1) ^ (v & 1).wrapping_neg();
     let wide = |a: u8, b: u8| {
         (0..8).fold(0u16, |acc, k| {
@@ -1096,10 +1029,7 @@ fn bc6<'a>(
         let e0 = [wide(s[4], s[5]), wide(s[6], s[7]), wide(s[8], s[9])].map(z);
         let e1 = [wide(s[10], s[11]), wide(s[12], s[13]), wide(s[14], s[15])].map(z);
         let (e2, e3) = if two {
-            (
-                [s[16], s[18], s[20]].map(|v| z(v.into())),
-                [s[17], s[19], s[21]].map(|v| z(v.into())),
-            )
+            ([s[16], s[18], s[20]].map(|v| z(v.into())), [s[17], s[19], s[21]].map(|v| z(v.into())))
         } else {
             (e0, e1)
         };
@@ -1111,11 +1041,7 @@ fn bc6<'a>(
         for ((e, &r), res) in ep.e[0].iter_mut().zip(&r.e[0]).zip(e0) {
             *e = r.wrapping_add(res << shift[0]) & mask(shift[0]);
         }
-        for (k, res) in [e1, e2, e3]
-            .iter()
-            .enumerate()
-            .take(if two { 3 } else { 1 })
-        {
+        for (k, res) in [e1, e2, e3].iter().enumerate().take(if two { 3 } else { 1 }) {
             for c in 0..3 {
                 ep.e[k + 1][c] =
                     r.e[k + 1][c].wrapping_add(res[c] << shift[1 + c]) & mask(shift[1 + c]);
@@ -1129,10 +1055,7 @@ fn bc6<'a>(
         }
         let rx = &pick(i, ix_ref, &history, dictionary, &zero).1;
         let bits = bc6_index_bits(mode);
-        let mut ix = Bc6Ix {
-            mode,
-            ..Default::default()
-        };
+        let mut ix = Bc6Ix { mode, ..Default::default() };
         for k in 0..8 {
             for (h, v) in nibbles(s[22 + k], k < 6).into_iter().enumerate() {
                 let p = 2 * k + h;
@@ -1153,10 +1076,7 @@ fn bc6<'a>(
             if run.ch == 3 {
                 w.put(part.into(), 5);
             } else {
-                w.put(
-                    field(run.ep.into(), run.ch.into()) >> run.first,
-                    run.len.into(),
-                );
+                w.put(field(run.ep.into(), run.ch.into()) >> run.first, run.len.into());
             }
         }
         let anchor = if two { ANCHOR2[usize::from(part)] } else { 0 };
@@ -1211,11 +1131,7 @@ mod tests {
         let mut x = LOW;
         let mut bytes = Vec::new();
         for &s in symbols.iter().rev() {
-            let (freq, start) = if s == 0 {
-                (f - 1, 1)
-            } else {
-                (f, u32::from(s) * f)
-            };
+            let (freq, start) = if s == 0 { (f - 1, 1) } else { (f, u32::from(s) * f) };
             while x >= (freq << 16) {
                 bytes.push(x as u8);
                 x >>= 8;
@@ -1243,10 +1159,8 @@ mod tests {
         let stride = widths.len() * per;
         let mut queues: Vec<std::collections::VecDeque<u8>> = (0..widths.len())
             .map(|j| {
-                let syms: Vec<u8> = records
-                    .iter()
-                    .flat_map(|r| r[j * per..j * per + per].to_vec())
-                    .collect();
+                let syms: Vec<u8> =
+                    records.iter().flat_map(|r| r[j * per..j * per + per].to_vec()).collect();
                 let mut bytes = fragment(widths[j], &syms);
                 bytes.extend([0, 1, 0, 0]);
                 bytes.into()
@@ -1255,9 +1169,7 @@ mod tests {
         let mut out = Vec::new();
         let mut check = vec![0; records.len() * stride];
         let fetch = |j: usize| {
-            let b = queues[j]
-                .pop_front()
-                .expect("a parked lane asked for input");
+            let b = queues[j].pop_front().expect("a parked lane asked for input");
             out.push(b);
             Some(b)
         };
@@ -1269,11 +1181,7 @@ mod tests {
     const BC4_LANES: [u8; 12] = [7, 7, 7, 7, 5, 5, 5, 5, 5, 5, 5, 5];
 
     fn zigzag(v: i32) -> u8 {
-        if v >= 0 {
-            (2 * v) as u8
-        } else {
-            (-2 * v - 1) as u8
-        }
+        if v >= 0 { (2 * v) as u8 } else { (-2 * v - 1) as u8 }
     }
 
     #[test]
@@ -1323,26 +1231,12 @@ mod tests {
         s[5] = zigzag(-1); // R1 = 0xff (8 bits)
         s[6] = zigzag(3);
         s[10] = zigzag(0x7f >> 1);
-        let src = stream(
-            &t,
-            &[3, 3, 7, 7, 7, 7, 7, 6, 6, 4, 5, 7, 7, 7, 7, 4],
-            2,
-            &[s],
-        );
+        let src = stream(&t, &[3, 3, 7, 7, 7, 7, 7, 6, 6, 4, 5, 7, 7, 7, 7, 4], 2, &[s]);
         let mut dst = [0u8; 16];
         decode(7, &src, &mut dst, &t).unwrap();
         let mut w = Bits::default();
         w.put(1 << 6, 7);
-        for (v, n) in [
-            (0x2a, 7),
-            (0x7f, 7),
-            (3, 7),
-            (0, 7),
-            (0, 7),
-            (0, 7),
-            (0x3f, 7),
-            (0, 7),
-        ] {
+        for (v, n) in [(0x2a, 7), (0x7f, 7), (3, 7), (0, 7), (0, 7), (0, 7), (0x3f, 7), (0, 7)] {
             w.put(v, n);
         }
         w.put(1, 1);
@@ -1363,9 +1257,8 @@ mod tests {
         };
 
         let mut record = vec![0u8; 32];
-        for (i, &val) in [11, 23, 5, 19, 13, 29, 7, 17, 3, 25, 9, 21, 15, 31, 1, 12]
-            .iter()
-            .enumerate()
+        for (i, &val) in
+            [11, 23, 5, 19, 13, 29, 7, 17, 3, 25, 9, 21, 15, 31, 1, 12].iter().enumerate()
         {
             record[4 + i] = zigzag(val);
         }
@@ -1388,11 +1281,7 @@ mod tests {
                 let mut got = [0u8; 16];
                 decode(7, &src, &mut got, &t).unwrap();
                 assert_eq!(got, want, "mode {mode} rot {rot}");
-                assert_eq!(
-                    bc7_precision(ctrl),
-                    bc7_precision(base_ctrl),
-                    "mode {mode} rot {rot}"
-                );
+                assert_eq!(bc7_precision(ctrl), bc7_precision(base_ctrl), "mode {mode} rot {rot}");
             }
         }
 
@@ -1449,9 +1338,8 @@ mod tests {
     #[test]
     fn malformed_input_is_an_error() {
         let t = Tables::parse(&tables()).unwrap();
-        let records: Vec<Vec<u8>> = (0..64u8)
-            .map(|i| vec![0, 0, i, i, 1, 2, 3, 4, 5, 6, 7, 8])
-            .collect();
+        let records: Vec<Vec<u8>> =
+            (0..64u8).map(|i| vec![0, 0, i, i, 1, 2, 3, 4, 5, 6, 7, 8]).collect();
         let src = stream(&t, &BC4_LANES, 1, &records);
         let mut dst = vec![0u8; 64 * 8];
         decode(4, &src, &mut dst, &t).unwrap();
@@ -1519,11 +1407,7 @@ mod tests {
                 let start = &t.start[usize::from(model)];
                 for slot in 0..1u32 << 16 {
                     let scan = start[1..].iter().filter(|&&s| s <= slot).count();
-                    assert_eq!(
-                        bucket_of(&t, model, slot),
-                        scan,
-                        "model {model} slot {slot}"
-                    );
+                    assert_eq!(bucket_of(&t, model, slot), scan, "model {model} slot {slot}");
                 }
             }
         }
@@ -1545,25 +1429,16 @@ mod tests {
         } else {
             let k = (8 - sym.leading_zeros()) as usize;
             let f = freq[k];
-            (
-                f,
-                ((u32::from(sym) - (1 << (k - 1))) * f + start[k]) & 0xffff,
-            )
+            (f, ((u32::from(sym) - (1 << (k - 1))) * f + start[k]) & 0xffff)
         };
-        (
-            sym,
-            (x >> 16).wrapping_mul(f).wrapping_sub(c).wrapping_add(slot),
-        )
+        (sym, (x >> 16).wrapping_mul(f).wrapping_sub(c).wrapping_add(slot))
     }
 
     /// A payload step decodes the symbol and state the first version did, for
     /// every model and slot of the shipped tables and ours, at assorted states.
     #[test]
     fn payload_step_matches_the_reference_decode() {
-        for t in [
-            Tables::builtin().unwrap(),
-            Tables::parse(&tables()).unwrap(),
-        ] {
+        for t in [Tables::builtin().unwrap(), Tables::parse(&tables()).unwrap()] {
             for model in 0..MODELS as u8 {
                 for high in [0x100u32, 0x1234, 0xffff] {
                     for slot in 0..1u32 << 16 {
@@ -1571,20 +1446,10 @@ mod tests {
                         if x <= LOW {
                             continue;
                         }
-                        let mut lane = Lane {
-                            phase: 3,
-                            model,
-                            x,
-                            left: 1,
-                            ..Default::default()
-                        };
+                        let mut lane = Lane { phase: 3, model, x, left: 1, ..Default::default() };
                         lane.step(&t).unwrap();
                         let (sym, next) = reference_decode(&t, model, x);
-                        assert_eq!(
-                            (lane.out, lane.x),
-                            (Some(sym), next),
-                            "model {model} x {x:#x}"
-                        );
+                        assert_eq!((lane.out, lane.x), (Some(sym), next), "model {model} x {x:#x}");
                     }
                 }
             }
@@ -1684,9 +1549,8 @@ mod tests {
         let mut n = 0;
         for entry in std::fs::read_dir(cases).unwrap() {
             let path = entry.unwrap().path();
-            let Some(bc) = path
-                .extension()
-                .and_then(|e| e.to_str()?.strip_prefix("bc")?.parse().ok())
+            let Some(bc) =
+                path.extension().and_then(|e| e.to_str()?.strip_prefix("bc")?.parse().ok())
             else {
                 continue;
             };

@@ -85,9 +85,8 @@ pub fn decode(code: &[u8]) -> Result<Vec<Instruction>, ShaderError> {
         while !found.contains_key(&offset) {
             let inst = instruction(code, offset)?;
             let next = offset + 4 * inst.words.len();
-            let flow = control(&inst, code.len(), |at| {
-                found.range(..at).next_back().map(|(_, i)| i)
-            })?;
+            let flow =
+                control(&inst, code.len(), |at| found.range(..at).next_back().map(|(_, i)| i))?;
             found.insert(offset, inst);
             match flow {
                 Flow::Next => offset = next,
@@ -101,10 +100,7 @@ pub fn decode(code: &[u8]) -> Result<Vec<Instruction>, ShaderError> {
         }
     }
     let list: Vec<Instruction> = found.into_values().collect();
-    if let Some(w) = list
-        .windows(2)
-        .find(|w| w[0].offset + 4 * w[0].words.len() > w[1].offset)
-    {
+    if let Some(w) = list.windows(2).find(|w| w[0].offset + 4 * w[0].words.len() > w[1].offset) {
         return Err(isa(w[1].offset, "a branch lands inside an instruction"));
     }
     Ok(list)
@@ -240,22 +236,14 @@ fn instruction(code: &[u8], offset: usize) -> Result<Instruction, ShaderError> {
         let literal = |srcs: &[u32]| 1 + usize::from(srcs.contains(&0xFF));
         match w >> 23 {
             0x17D => (Encoding::Sop1, (w >> 8) & 0xFF, literal(&[w & 0xFF])),
-            0x17E => (
-                Encoding::Sopc,
-                (w >> 16) & 0x7F,
-                literal(&[w & 0xFF, (w >> 8) & 0xFF]),
-            ),
+            0x17E => (Encoding::Sopc, (w >> 16) & 0x7F, literal(&[w & 0xFF, (w >> 8) & 0xFF])),
             0x17F => (Encoding::Sopp, (w >> 16) & 0x7F, 1),
             _ if w >> 28 == 0b1011 => {
                 let op = (w >> 23) & 0x1F;
                 let imm32 = name(Encoding::Sopk, op as u16) == Some("s_setreg_imm32_b32");
                 (Encoding::Sopk, op, 1 + usize::from(imm32))
             }
-            _ => (
-                Encoding::Sop2,
-                (w >> 23) & 0x7F,
-                literal(&[w & 0xFF, (w >> 8) & 0xFF]),
-            ),
+            _ => (Encoding::Sop2, (w >> 23) & 0x7F, literal(&[w & 0xFF, (w >> 8) & 0xFF])),
         }
     } else {
         let vop3 =
@@ -275,17 +263,9 @@ fn instruction(code: &[u8], offset: usize) -> Result<Instruction, ShaderError> {
                 (encoding, (w >> 18) & 0x7F, 2)
             }
             0x38 => (Encoding::Mubuf, (w >> 18) & 0x7F | (w >> 25 & 1) << 7, 2),
-            0x3A => (
-                Encoding::Mtbuf,
-                (w >> 16) & 0x7 | (word(1)? >> 21 & 1) << 3,
-                2,
-            ),
+            0x3A => (Encoding::Mtbuf, (w >> 16) & 0x7 | (word(1)? >> 21 & 1) << 3, 2),
             // Bits 2:1 count extra dwords of non-sequential address registers.
-            0x3C => (
-                Encoding::Mimg,
-                (w >> 18) & 0x7F | (w & 1) << 7,
-                2 + (w as usize >> 1 & 3),
-            ),
+            0x3C => (Encoding::Mimg, (w >> 18) & 0x7F | (w & 1) << 7, 2 + (w as usize >> 1 & 3)),
             0x3D => (Encoding::Smem, (w >> 18) & 0xFF, 2),
             0x3E => (Encoding::Exp, 0, 2),
             _ => return Err(isa(offset, "unknown encoding")),
@@ -331,10 +311,7 @@ fn name(encoding: Encoding, opcode: u16) -> Option<&'static str> {
         Encoding::Global => (t::GLOBAL, opcode),
         Encoding::Scratch => (t::SCRATCH, opcode),
     };
-    table
-        .binary_search_by_key(&op, |&(o, _)| o)
-        .ok()
-        .map(|i| table[i].1)
+    table.binary_search_by_key(&op, |&(o, _)| o).ok().map(|i| table[i].1)
 }
 
 fn isa(offset: usize, reason: &'static str) -> ShaderError {
@@ -504,18 +481,9 @@ mod tests {
     #[test]
     fn rejects_bad_code() {
         assert!(decode(&[0; 3]).is_err(), "size not a multiple of 4");
-        assert!(
-            decode(&bytes(&[sopp(0x02, 100)])).is_err(),
-            "branch out of range"
-        );
-        assert!(
-            decode(&bytes(&[0xBE80_03FF])).is_err(),
-            "literal past the end"
-        );
-        assert!(
-            decode(&bytes(&[0xE400_0000, 0])).is_err(),
-            "unknown encoding"
-        );
+        assert!(decode(&bytes(&[sopp(0x02, 100)])).is_err(), "branch out of range");
+        assert!(decode(&bytes(&[0xBE80_03FF])).is_err(), "literal past the end");
+        assert!(decode(&bytes(&[0xE400_0000, 0])).is_err(), "unknown encoding");
         // s_cbranch_scc0 into the literal of the s_mov_b32 at 4.
         assert!(decode(&bytes(&[sopp(0x04, 1), 0xBE80_03FF, S_ENDPGM, S_ENDPGM])).is_err());
     }

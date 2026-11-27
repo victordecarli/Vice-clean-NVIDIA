@@ -36,11 +36,7 @@ pub(crate) fn mapped(image: &LoadedImage) {
     let image = Arc::new(image.clone());
     let mut images = images();
     images.retain(|m| m.image.base() != image.base());
-    images.push(Mapped {
-        image,
-        attached: false,
-        quiet: false,
-    });
+    images.push(Mapped { image, attached: false, quiet: false });
 }
 
 /// Its `DLL_PROCESS_ATTACH` is done. The list keeps attach order, which is
@@ -131,13 +127,7 @@ extern "C" fn detach_all() {
     for image in dlls.iter().chain(&exes) {
         // SAFETY: attached images are bound. A non-null third argument
         // tells the entry points the process is ending.
-        unsafe {
-            image.notify(
-                DLL_PROCESS_DETACH,
-                true,
-                std::ptr::without_provenance_mut(1),
-            )
-        };
+        unsafe { image.notify(DLL_PROCESS_DETACH, true, std::ptr::without_provenance_mut(1)) };
     }
 }
 
@@ -164,8 +154,8 @@ fn end_other_threads(keep: &[u32]) {
         CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
     };
     use windows_sys::Win32::System::Threading::{
-        GetCurrentProcessId, GetCurrentThreadId, OpenThread, THREAD_TERMINATE, TerminateThread,
-        THREAD_QUERY_INFORMATION,
+        GetCurrentProcessId, GetCurrentThreadId, OpenThread, THREAD_QUERY_INFORMATION,
+        THREAD_TERMINATE, TerminateThread,
     };
     // SAFETY: plain queries of the calling process and thread.
     let (process, me) = unsafe { (GetCurrentProcessId(), GetCurrentThreadId()) };
@@ -177,10 +167,8 @@ fn end_other_threads(keep: &[u32]) {
             if snapshot == INVALID_HANDLE_VALUE {
                 break;
             }
-            let mut entry = THREADENTRY32 {
-                dwSize: size_of::<THREADENTRY32>() as u32,
-                ..std::mem::zeroed()
-            };
+            let mut entry =
+                THREADENTRY32 { dwSize: size_of::<THREADENTRY32>() as u32, ..std::mem::zeroed() };
             let mut ids = Vec::new();
             let mut more = Thread32First(snapshot, &mut entry) != 0;
             while more {
@@ -245,11 +233,8 @@ unsafe extern "system" fn on_thread(_: *mut c_void, reason: u32, _: *mut c_void)
         return; // our exit watchdog, or threads ending with the process
     }
     // A snapshot: title code may map and attach another DLL from here.
-    let notify: Vec<_> = images()
-        .iter()
-        .filter(|m| m.attached)
-        .map(|m| (m.image.clone(), !m.quiet))
-        .collect();
+    let notify: Vec<_> =
+        images().iter().filter(|m| m.attached).map(|m| (m.image.clone(), !m.quiet)).collect();
     if notify.is_empty() {
         return;
     }
@@ -349,11 +334,7 @@ fn starts_in(thread: windows_sys::Win32::Foundation::HANDLE, module: &std::ffi::
         )
     };
     let mut found = std::ptr::null_mut();
-    let name = if module.is_empty() {
-        std::ptr::null()
-    } else {
-        module.as_ptr().cast()
-    };
+    let name = if module.is_empty() { std::ptr::null() } else { module.as_ptr().cast() };
     // SAFETY: looks up the module containing an address, taking no reference.
     status == 0
         && unsafe {
@@ -431,9 +412,6 @@ mod tests {
             .output()
             .unwrap();
         let text = String::from_utf8_lossy(&out.stdout);
-        assert!(
-            out.status.success() && text.contains("ENDED KEPT"),
-            "{text}"
-        );
+        assert!(out.status.success() && text.contains("ENDED KEPT"), "{text}");
     }
 }

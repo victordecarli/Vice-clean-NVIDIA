@@ -79,22 +79,15 @@ pub(super) fn submit(
 ) {
     let mut phase = lock(&r.submits);
     type Closed = (Option<Arc<Vec<u8>>>, Arc<Vec<Change>>);
-    let closed: Vec<Option<Closed>> = lists
-        .iter()
-        .map(|&p| r.list(p).and_then(|l| l.closed()))
-        .collect();
+    let closed: Vec<Option<Closed>> =
+        lists.iter().map(|&p| r.list(p).and_then(|l| l.closed())).collect();
     phase.submits += 1;
     let whole = |c: &Option<Closed>| c.as_ref().is_some_and(|c| c.0.is_some());
-    phase.missing += lists
-        .iter()
-        .zip(&closed)
-        .filter(|(p, c)| !whole(c) && r.knows(**p))
-        .count() as u32;
+    phase.missing +=
+        lists.iter().zip(&closed).filter(|(p, c)| !whole(c) && r.knows(**p)).count() as u32;
     if let Stage::Capturing(c) = &mut phase.stage {
-        let commands: Vec<Option<Arc<Vec<u8>>>> = closed
-            .iter()
-            .map(|c| c.as_ref().and_then(|c| c.0.clone()))
-            .collect();
+        let commands: Vec<Option<Arc<Vec<u8>>>> =
+            closed.iter().map(|c| c.as_ref().and_then(|c| c.0.clone())).collect();
         let _ours = Ours::new();
         if let Err(e) = c.submit(r, queue, &commands) {
             stop(r, &mut phase, &*e);
@@ -123,10 +116,8 @@ pub(super) fn present(r: &Recorder, texture: &ID3D12Resource, state: u32) {
     let mut phase = lock(&r.submits);
     phase.presents += 1;
     let presents = phase.presents;
-    let (submits, missing) = (
-        std::mem::take(&mut phase.submits),
-        std::mem::take(&mut phase.missing),
-    );
+    let (submits, missing) =
+        (std::mem::take(&mut phase.submits), std::mem::take(&mut phase.missing));
     let mut finished = None;
     match &mut phase.stage {
         Stage::Waiting => {
@@ -148,11 +139,7 @@ pub(super) fn present(r: &Recorder, texture: &ID3D12Resource, state: u32) {
                 if !whole {
                     r.problem("no frame was found whose lists were all recorded");
                 }
-                tracing::info!(
-                    presents,
-                    waited,
-                    "frame recorder: the next frame is captured"
-                );
+                tracing::info!(presents, waited, "frame recorder: the next frame is captured");
                 match Capture::new(r) {
                     Ok(c) => phase.stage = Stage::Capturing(Box::new(c)),
                     Err(e) => stop(r, &mut phase, &*e),
@@ -206,36 +193,20 @@ impl Reads {
         };
         for c in cmds {
             match c {
-                Cmd::RootView { va, .. }
-                | Cmd::IndexBuffer {
-                    view: Some((va, _, _)),
-                } => whole(va),
-                Cmd::VertexBuffers {
-                    views: Some(views), ..
-                } => views.iter().for_each(|(va, _, _)| whole(va)),
+                Cmd::RootView { va, .. } | Cmd::IndexBuffer { view: Some((va, _, _)) } => whole(va),
+                Cmd::VertexBuffers { views: Some(views), .. } => {
+                    views.iter().for_each(|(va, _, _)| whole(va))
+                }
                 Cmd::Indirect { args, count, .. } => {
                     for res in [*args, *count] {
                         whole(&Va::At { res, offset: 0 });
                     }
                 }
-                Cmd::CopyResource { src, .. } => whole(&Va::At {
-                    res: *src,
-                    offset: 0,
-                }),
-                Cmd::CopyBuffer {
-                    src, src_at, len, ..
-                } => parts.entry(*src).or_default().push((*src_at, src_at + len)),
-                Cmd::CopyTexture {
-                    src:
-                        Loc::Placed {
-                            res,
-                            offset,
-                            size,
-                            pitch,
-                            ..
-                        },
-                    ..
-                } => {
+                Cmd::CopyResource { src, .. } => whole(&Va::At { res: *src, offset: 0 }),
+                Cmd::CopyBuffer { src, src_at, len, .. } => {
+                    parts.entry(*src).or_default().push((*src_at, src_at + len))
+                }
+                Cmd::CopyTexture { src: Loc::Placed { res, offset, size, pitch, .. }, .. } => {
                     // At the most: compressed formats have fewer rows.
                     let len = u64::from(*pitch) * u64::from(size[1]) * u64::from(size[2].max(1));
                     parts.entry(*res).or_default().push((*offset, offset + len));
@@ -257,10 +228,7 @@ impl Reads {
         let mut pages: Vec<(usize, usize)> = parts
             .iter()
             .map(|&(from, to)| {
-                (
-                    from as usize / PAGE * PAGE,
-                    (to as usize).next_multiple_of(PAGE).min(size),
-                )
+                (from as usize / PAGE * PAGE, (to as usize).next_multiple_of(PAGE).min(size))
             })
             .filter(|(from, to)| from < to)
             .collect();
@@ -392,12 +360,9 @@ impl Capture {
                 // SAFETY: a live resource, or one whose end waits for the
                 // lock held here (`Recorder::gone`): the count tells which.
                 let count = unsafe {
-                    (Interface::vtable(&*object)
-                        .base__
-                        .base__
-                        .base__
-                        .base__
-                        .AddRef)(object.as_raw())
+                    (Interface::vtable(&*object).base__.base__.base__.base__.AddRef)(
+                        object.as_raw(),
+                    )
                 };
                 if count <= 1 {
                     // Dying: the reference does not bring it back, and
@@ -425,20 +390,12 @@ impl Capture {
             if let Place::Placed { heap, offset } = res.place {
                 // SAFETY: a plain query.
                 let info = unsafe {
-                    self.worker
-                        .device
-                        .GetResourceAllocationInfo(0, &[gpu::to_desc(&res.desc)])
+                    self.worker.device.GetResourceAllocationInfo(0, &[gpu::to_desc(&res.desc)])
                 };
-                let size = if info.SizeInBytes == u64::MAX {
-                    res.desc.width
-                } else {
-                    info.SizeInBytes
-                };
+                let size =
+                    if info.SizeInBytes == u64::MAX { res.desc.width } else { info.SizeInBytes };
                 let used = self.states.used.get(&res.id).copied().unwrap_or(0);
-                heaps
-                    .entry(heap)
-                    .or_default()
-                    .push((used, offset, offset + size, res.id));
+                heaps.entry(heap).or_default().push((used, offset, offset + size, res.id));
             }
         }
         let mut idle = HashSet::new();
@@ -446,10 +403,7 @@ impl Capture {
             list.sort_by(|a, b| b.cmp(a));
             let mut taken: BTreeMap<u64, u64> = BTreeMap::new();
             for (_, from, to, id) in list {
-                let overlaps = taken
-                    .range(..to)
-                    .next_back()
-                    .is_some_and(|(_, &end)| end > from);
+                let overlaps = taken.range(..to).next_back().is_some_and(|(_, &end)| end > from);
                 if overlaps {
                     idle.insert(id);
                 } else {
@@ -471,13 +425,7 @@ impl Capture {
                 let mut at = 0;
                 while at < res.desc.width {
                     let len = PIECE.min(res.desc.width - at);
-                    pieces.push(Piece {
-                        res: res.clone(),
-                        first: at,
-                        count: 1,
-                        len,
-                        at: 0,
-                    });
+                    pieces.push(Piece { res: res.clone(), first: at, count: 1, len, at: 0 });
                     at += len;
                 }
                 continue;
@@ -720,20 +668,14 @@ impl Capture {
         let chunks: Vec<(usize, usize, usize)> = parts
             .iter()
             .flat_map(|&(i, from, to)| {
-                (from..to)
-                    .step_by(CHUNK)
-                    .map(move |at| (i, at, CHUNK.min(to - at)))
+                (from..to).step_by(CHUNK).map(move |at| (i, at, CHUNK.min(to - at)))
             })
             .collect();
         // Each chunk is one thread's; threads share what is kept by parts.
         struct Kept(*mut u8);
         // SAFETY: parts of it are used by one thread each.
         unsafe impl Sync for Kept {}
-        let kept: Vec<Kept> = self
-            .buffers
-            .iter_mut()
-            .map(|b| Kept(b.kept.as_mut_ptr()))
-            .collect();
+        let kept: Vec<Kept> = self.buffers.iter_mut().map(|b| Kept(b.kept.as_mut_ptr())).collect();
         let next = AtomicUsize::new(0);
         let out: std::sync::Mutex<Vec<Delta>> = std::sync::Mutex::default();
         let failed: std::sync::Mutex<Option<std::io::Error>> = std::sync::Mutex::default();
@@ -805,8 +747,7 @@ impl Capture {
             let heaps: Vec<Arc<Heap>> = read(&r.descriptors).visible().cloned().collect();
             for h in heaps {
                 let runs = runs_of(r, &h.all());
-                self.viewed
-                    .extend(runs.iter().flat_map(|(_, _, s)| [s.res, s.counter]));
+                self.viewed.extend(runs.iter().flat_map(|(_, _, s)| [s.res, s.counter]));
                 self.heaps.push((h, runs));
             }
         } else {
@@ -816,10 +757,7 @@ impl Capture {
                 let h = match self.heaps.iter().find(|(h, _)| h.id == heap) {
                     Some((h, _)) => h.clone(),
                     None => {
-                        let found = read(&r.descriptors)
-                            .visible()
-                            .find(|h| h.id == heap)
-                            .cloned();
+                        let found = read(&r.descriptors).visible().find(|h| h.id == heap).cloned();
                         let Some(h) = found else { continue };
                         self.heaps.push((h.clone(), Vec::new()));
                         h
@@ -848,25 +786,18 @@ impl Capture {
                     );
                     MISSING
                 }
-                Some(commands) => match self
-                    .lists
-                    .iter()
-                    .position(|have| Arc::ptr_eq(have, commands))
-                {
-                    Some(i) => i as u32,
-                    None => {
-                        self.lists.push(commands.clone());
-                        self.lists.len() as u32 - 1
+                Some(commands) => {
+                    match self.lists.iter().position(|have| Arc::ptr_eq(have, commands)) {
+                        Some(i) => i as u32,
+                        None => {
+                            self.lists.push(commands.clone());
+                            self.lists.len() as u32 - 1
+                        }
                     }
-                },
+                }
             });
         }
-        self.submits.push(wire::Submit {
-            frame: self.frame,
-            lists: numbers,
-            deltas,
-            views,
-        });
+        self.submits.push(wire::Submit { frame: self.frame, lists: numbers, deltas, views });
         Ok(())
     }
 
@@ -881,8 +812,7 @@ impl Capture {
             total,
             D3D12_RESOURCE_FLAG_NONE,
         )?;
-        self.worker
-            .run(|list| read_sub(list, texture, 0, state, &back, f[0]))?;
+        self.worker.run(|list| read_sub(list, texture, 0, state, &back, f[0]))?;
         // SAFETY: the buffer's mapping; the copy into it has run.
         let bytes = unsafe { std::slice::from_raw_parts(data, total as usize) };
         write_at(&self.present_file, bytes, self.present_at)?;
@@ -939,23 +869,15 @@ impl Capture {
             let used: HashSet<u32> = resources
                 .iter()
                 .filter_map(|res| {
-                    if let Place::Placed { heap, .. } = res.place {
-                        Some(heap)
-                    } else {
-                        None
-                    }
+                    if let Place::Placed { heap, .. } = res.place { Some(heap) } else { None }
                 })
                 .collect();
             used.iter().filter_map(|id| all.get(id).cloned()).collect()
         };
         heaps.sort_by_key(|h| h.id);
         // What the lists name.
-        let (mut psos, mut roots, mut signatures, mut queries) = (
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
-        );
+        let (mut psos, mut roots, mut signatures, mut queries) =
+            (HashSet::new(), HashSet::new(), HashSet::new(), HashSet::new());
         for l in &self.lists {
             for c in Cmd::all(l)? {
                 match c {
@@ -986,28 +908,21 @@ impl Capture {
             out.sort_by_key(|p| p.id);
             out
         };
-        roots.extend(pipelines.iter().flat_map(|p| &p.parts).filter_map(|p| {
-            if let wire::Part::Root { root } = p {
-                Some(*root)
-            } else {
-                None
-            }
-        }));
+        roots.extend(
+            pipelines
+                .iter()
+                .flat_map(|p| &p.parts)
+                .filter_map(|p| if let wire::Part::Root { root } = p { Some(*root) } else { None }),
+        );
         let signatures: Vec<wire::Signature> = {
             let all = lock(&r.signatures);
-            signatures
-                .iter()
-                .filter_map(|id| all.get(id).cloned())
-                .collect()
+            signatures.iter().filter_map(|id| all.get(id).cloned()).collect()
         };
         roots.extend(signatures.iter().map(|s| s.root));
         roots.remove(&NONE);
         let roots: Vec<(u32, wire::Blob)> = {
             let all = lock(&r.roots);
-            roots
-                .iter()
-                .filter_map(|id| Some((*id, wire::Blob(all.get(id)?.to_vec()))))
-                .collect()
+            roots.iter().filter_map(|id| Some((*id, wire::Blob(all.get(id)?.to_vec())))).collect()
         };
         for ((what, before), (_, now)) in self.calls.iter().zip(not_recorded_calls()) {
             if now > *before {
@@ -1016,12 +931,7 @@ impl Capture {
         }
         let (adapter, vendor, device) = gpu::adapter(&self.worker.device);
         let mut notes = r.problems();
-        let bytes: u64 = self
-            .contents
-            .iter()
-            .filter(|c| c.file != ZERO)
-            .map(|c| c.len)
-            .sum();
+        let bytes: u64 = self.contents.iter().filter(|c| c.file != ZERO).map(|c| c.len).sum();
         notes.push(format!(
             "{} submissions, {} lists, {} resources, {} pipelines; {} MB of the card's memory, {} MB of changes by the CPU; {:.1} s: {}",
             self.submits.len(),
@@ -1060,10 +970,7 @@ impl Capture {
                 .collect(),
             query_heaps: {
                 let all = lock(&r.queries);
-                queries
-                    .iter()
-                    .filter_map(|id| all.get(id).cloned())
-                    .collect()
+                queries.iter().filter_map(|id| all.get(id).cloned()).collect()
             },
             lists: self
                 .lists
@@ -1112,13 +1019,7 @@ fn copy_out(
         // From the common state a texture is promoted by the copy.
         let to: Vec<u32> = from
             .iter()
-            .map(|&s| {
-                if s == COMMON || s & COPY_SOURCE != 0 {
-                    s
-                } else {
-                    COPY_SOURCE
-                }
-            })
+            .map(|&s| if s == COMMON || s & COPY_SOURCE != 0 { s } else { COPY_SOURCE })
             .collect();
         gpu::moves(&p.res.object(), &from, &to, &mut before);
         gpu::moves(&p.res.object(), &to, &from, &mut after);
@@ -1192,10 +1093,7 @@ fn resolved(r: &Recorder, mut s: Slot) -> Slot {
         && kind == D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE.0
     {
         r.problem("views of acceleration structures are null in the capture");
-        return Slot {
-            kind: slot::SRV,
-            ..Slot::EMPTY
-        };
+        return Slot { kind: slot::SRV, ..Slot::EMPTY };
     }
     if s.kind == slot::CBV && s.described != 0 {
         match r.va(s.address()) {
@@ -1206,10 +1104,7 @@ fn resolved(r: &Recorder, mut s: Slot) -> Slot {
             Va::Null {} => {}
             Va::Unknown { .. } => {
                 // Its buffer is gone: nothing may read it.
-                s = Slot {
-                    kind: slot::CBV,
-                    ..Slot::EMPTY
-                };
+                s = Slot { kind: slot::CBV, ..Slot::EMPTY };
             }
         }
     }
@@ -1296,10 +1191,7 @@ mod tests {
         live[PAGE + 5] = 1;
         live[2 * PAGE] = 2;
         live[5 * PAGE + 99] = 3;
-        assert_eq!(
-            find(&live, &mut kept),
-            [(PAGE, 3 * PAGE), (5 * PAGE, 5 * PAGE + 100)]
-        );
+        assert_eq!(find(&live, &mut kept), [(PAGE, 3 * PAGE), (5 * PAGE, 5 * PAGE + 100)]);
         assert_eq!(live, kept);
         assert!(find(&live, &mut kept).is_empty());
     }
@@ -1307,13 +1199,7 @@ mod tests {
     #[test]
     fn what_a_submission_reads() {
         let mut reads = Reads::default();
-        let part = |from, len| Cmd::CopyBuffer {
-            dst: 9,
-            dst_at: 0,
-            src: 1,
-            src_at: from,
-            len,
-        };
+        let part = |from, len| Cmd::CopyBuffer { dst: 9, dst_at: 0, src: 1, src_at: from, len };
         reads.note(&[
             part(100, 50),
             part(4000, 200),
@@ -1330,14 +1216,7 @@ mod tests {
                 },
                 part: None,
             },
-            Cmd::Indirect {
-                signature: 1,
-                most: 1,
-                args: 3,
-                at: 8,
-                count: 0,
-                count_at: 0,
-            },
+            Cmd::Indirect { signature: 1, most: 1, args: 3, at: 8, count: 0, count_at: 0 },
             Cmd::RootView {
                 graphics: true,
                 kind: slot::CBV,
@@ -1346,19 +1225,11 @@ mod tests {
             },
         ]);
         assert_eq!(reads.pages(1, 1 << 20, false), [(0, 8192), (16384, 20480)]);
-        assert_eq!(
-            reads.pages(1, 20_100, false),
-            [(0, 8192), (16384, 20_100)],
-            "its end"
-        );
+        assert_eq!(reads.pages(1, 20_100, false), [(0, 8192), (16384, 20_100)], "its end");
         assert_eq!(reads.pages(2, 1 << 20, false), [(4096, 8192)]);
         assert_eq!(reads.pages(3, 100, false), [(0, 100)]);
         assert_eq!(reads.pages(4, 100, false), [(0, 100)]);
-        assert_eq!(
-            reads.pages(5, 100, true),
-            [(0, 100)],
-            "a descriptor names it"
-        );
+        assert_eq!(reads.pages(5, 100, true), [(0, 100)], "a descriptor names it");
         assert!(reads.pages(5, 100, false).is_empty() && reads.pages(9, 100, false).is_empty());
     }
 

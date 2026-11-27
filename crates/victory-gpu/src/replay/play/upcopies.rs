@@ -22,13 +22,7 @@ impl Player {
         let mut out = Vec::new();
         for c in lists.iter().flatten() {
             if self.merged_copy(c).is_some()
-                && let Cmd::CopyBuffer {
-                    dst,
-                    dst_at,
-                    src,
-                    len,
-                    ..
-                } = c
+                && let Cmd::CopyBuffer { dst, dst_at, src, len, .. } = c
             {
                 out.push((submit, *src, *dst, *dst_at, *len));
             }
@@ -46,26 +40,18 @@ impl Player {
             for c in cmds {
                 match c {
                     Cmd::Pipeline { pso } => bound = *pso,
-                    Cmd::Constants {
-                        graphics: false,
-                        param: 0,
-                        values,
-                        ..
-                    } => constants = values.clone(),
-                    Cmd::RootView {
-                        graphics: false,
-                        param: 1,
-                        va: Va::At { res, .. },
-                        ..
-                    } => of = *res,
+                    Cmd::Constants { graphics: false, param: 0, values, .. } => {
+                        constants = values.clone()
+                    }
+                    Cmd::RootView { graphics: false, param: 1, va: Va::At { res, .. }, .. } => {
+                        of = *res
+                    }
                     Cmd::Dispatch { .. }
                         if compares.contains(&bound)
                             && constants.len() >= 6
                             && constants[5] != 0 =>
                     {
-                        let e = out
-                            .entry(of)
-                            .or_insert((u64::from(constants[1]), HashSet::new()));
+                        let e = out.entry(of).or_insert((u64::from(constants[1]), HashSet::new()));
                         e.1.extend((constants[0]..constants[0] + constants[3]).map(u64::from));
                     }
                     _ => {}
@@ -81,12 +67,8 @@ impl Player {
         if total == 0 {
             return Ok(vec![Vec::new(); all.len()]);
         }
-        let (back, data) = gpu::buffer(
-            &self.device,
-            D3D12_HEAP_TYPE_READBACK,
-            total,
-            D3D12_RESOURCE_FLAG_NONE,
-        )?;
+        let (back, data) =
+            gpu::buffer(&self.device, D3D12_HEAP_TYPE_READBACK, total, D3D12_RESOURCE_FLAG_NONE)?;
         self.worker.run(|list| {
             let mut at = 0;
             for (res, from, len) in all {
@@ -124,10 +106,7 @@ impl Player {
         }
         for (i, s) in self.frame.submits.iter().enumerate() {
             for (heap, at, s) in s.views.iter().filter(|v| v.2.res == id) {
-                shown(
-                    s.kind,
-                    format!("heap {heap} slot {at:#x} from submission {i} on"),
-                );
+                shown(s.kind, format!("heap {heap} slot {at:#x} from submission {i} on"));
             }
         }
         out
@@ -147,9 +126,7 @@ impl Player {
             .map(|m| m.0)
             .filter(|id| {
                 self.card_writes.contains(id)
-                    && self.frame.resources[self.objects[id].index]
-                        .name
-                        .ends_with("on the card")
+                    && self.frame.resources[self.objects[id].index].name.ends_with("on the card")
             })
             .collect();
         let reader = self.reader(&ids)?;
@@ -161,12 +138,7 @@ impl Player {
         // What a shader that picks a view to write through by an index could
         // write.
         let mut shown: BTreeMap<u32, u64> = BTreeMap::new();
-        for s in self
-            .frame
-            .descriptor_heaps
-            .iter()
-            .flat_map(|h| h.runs.iter().map(|r| &r.2))
-        {
+        for s in self.frame.descriptor_heaps.iter().flat_map(|h| h.runs.iter().map(|r| &r.2)) {
             if s.kind == slot::UAV
                 && let Some(o) = self.objects.get(&s.res)
             {
@@ -187,19 +159,11 @@ impl Player {
             self.restore(true)?;
             self.fresh = false;
             let mut found: Vec<(Up, Vec<Word>)> = Vec::new();
-            let mut was = if run == 0 {
-                self.hashes_now(&reader, &states)?
-            } else {
-                Vec::new()
-            };
+            let mut was = if run == 0 { self.hashes_now(&reader, &states)? } else { Vec::new() };
             for (i, (delta, lists)) in built.steps.iter().enumerate() {
                 if let Some(d) = delta {
                     // SAFETY: a closed list, waited for.
-                    unsafe {
-                        self.worker
-                            .queue
-                            .ExecuteCommandLists(&[Some(d.list.cast()?)])
-                    };
+                    unsafe { self.worker.queue.ExecuteCommandLists(&[Some(d.list.cast()?)]) };
                     self.worker.idle()?;
                 }
                 let ups = self.ups(i, &submits[i]);

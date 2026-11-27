@@ -36,20 +36,12 @@ pub const GAMERTAG_IID: Guid = Guid {
 };
 
 /// The user's devices and audio endpoints.
-pub const DEVICE_PROVIDER: Guid = Guid::new(
-    0x7d82_4997,
-    0x10dc,
-    0x45ab,
-    [0x86, 0xb7, 0x27, 0x37, 0x76, 0x7c, 0x0b, 0xf1],
-);
+pub const DEVICE_PROVIDER: Guid =
+    Guid::new(0x7d82_4997, 0x10dc, 0x45ab, [0x86, 0xb7, 0x27, 0x37, 0x76, 0x7c, 0x0b, 0xf1]);
 
 /// The device interface as Minecraft (2022) asks for it.
-pub const DEVICE_IID: Guid = Guid::new(
-    0x0cc6_a956,
-    0xe7e1,
-    0x4fdf,
-    [0x93, 0x41, 0x9d, 0x5d, 0xa6, 0x49, 0xeb, 0xc8],
-);
+pub const DEVICE_IID: Guid =
+    Guid::new(0x0cc6_a956, 0xe7e1, 0x4fdf, [0x93, 0x41, 0x9d, 0x5d, 0xa6, 0x49, 0xeb, 0xc8]);
 
 /// The documented "no such user" error.
 pub const USER_NOT_FOUND: HRESULT = 0x8924_5104_u32 as i32;
@@ -68,11 +60,7 @@ fn user() -> Handle {
 }
 
 fn found(found: bool, out: *mut Handle) -> HRESULT {
-    if found {
-        put(out, user())
-    } else {
-        USER_NOT_FOUND
-    }
+    if found { put(out, user()) } else { USER_NOT_FOUND }
 }
 
 pub static OBJECT: Object = Object::new("user", &VTABLE);
@@ -227,10 +215,7 @@ extern "system" fn token_async(
     _body: *const c_void,
     block: *mut AsyncBlock,
 ) -> HRESULT {
-    tracing::info!(
-        url = text(url).unwrap_or_default(),
-        "token and signature: offline"
-    );
+    tracing::info!(url = text(url).unwrap_or_default(), "token and signature: offline");
     xasync::finished(block, (&raw const TOKEN).cast(), FAILED_TO_GET_TOKEN)
 }
 extern "system" fn token_size(_: This, block: *mut AsyncBlock, out: *mut usize) -> HRESULT {
@@ -365,10 +350,7 @@ mod tests {
         assert_eq!(slot::<Add>(&OBJECT, 0x38)(this, 1, &mut block), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut block, true), S_OK);
         let mut handle = std::ptr::null();
-        assert_eq!(
-            slot::<AddResult>(&OBJECT, 0x40)(this, &mut block, &mut handle),
-            S_OK
-        );
+        assert_eq!(slot::<AddResult>(&OBJECT, 0x40)(this, &mut block, &mut handle), S_OK);
         assert!(!handle.is_null());
         let mut xuid = 0;
         assert_eq!(slot::<GetId>(&OBJECT, 0x58)(this, handle, &mut xuid), S_OK);
@@ -379,10 +361,7 @@ mod tests {
         let get = slot::<Gamertag>(&GAMERTAG_OBJECT, 0x18);
         assert_eq!(get(this, handle, 0, 16, name.as_mut_ptr(), &mut used), S_OK);
         assert_eq!(&name[..used], b"Player\0");
-        assert_eq!(
-            get(this, handle, 0, 2, name.as_mut_ptr(), &mut used),
-            E_NOT_SUFFICIENT_BUFFER
-        );
+        assert_eq!(get(this, handle, 0, 2, name.as_mut_ptr(), &mut used), E_NOT_SUFFICIENT_BUFFER);
 
         type Age = extern "system" fn(This, Handle, *mut u32) -> HRESULT;
         let mut age = 0;
@@ -403,23 +382,9 @@ mod tests {
         let (null, url) = (std::ptr::null(), c"https://example.invalid/");
         let token = slot::<Token>(&OBJECT, 0xb8);
         assert_eq!(
-            token(
-                this,
-                handle,
-                0,
-                c"GET".as_ptr(),
-                url.as_ptr(),
-                0,
-                null,
-                0,
-                null,
-                &mut block
-            ),
+            token(this, handle, 0, c"GET".as_ptr(), url.as_ptr(), 0, null, 0, null, &mut block),
             S_OK
         );
-        assert_eq!(
-            xasync::XAsyncGetStatus(&mut block, true),
-            FAILED_TO_GET_TOKEN
-        );
+        assert_eq!(xasync::XAsyncGetStatus(&mut block, true), FAILED_TO_GET_TOKEN);
     }
 }

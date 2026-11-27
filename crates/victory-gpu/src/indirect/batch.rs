@@ -235,7 +235,13 @@ impl Table {
         {
             self.times[i as usize] += 1;
             // SAFETY: the job's own word of the table ([`Table::new`]).
-            unsafe { table.add(4 + 4 * i as usize).write_volatile(job(source, kind, self.times[i as usize])) };
+            unsafe {
+                table.add(4 + 4 * i as usize).write_volatile(job(
+                    source,
+                    kind,
+                    self.times[i as usize],
+                ))
+            };
             return Some(place(i));
         }
         let i = self.times.len() as u32;

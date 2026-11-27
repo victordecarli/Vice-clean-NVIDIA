@@ -685,11 +685,7 @@ fn compile(dxc: &Path, dir: &Path, src: &str, entry: &str, profile: &str) -> Vec
         )
         .output()
         .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     std::fs::read(output).unwrap()
 }
 
@@ -729,14 +725,7 @@ fn translated_shaders_draw_as_pc_ones() {
     std::fs::create_dir_all(&dir).unwrap();
     let k = [0.75f32, -1.5, 2.0, 0.125].map(f32::to_bits);
     let texels: Vec<[f32; 4]> = (0..16)
-        .map(|i| {
-            [
-                i as f32 / 16.0,
-                (i % 4) as f32 * 0.3,
-                1.0 - i as f32 / 20.0,
-                0.5,
-            ]
-        })
+        .map(|i| [i as f32 / 16.0, (i % 4) as f32 * 0.3, 1.0 - i as f32 / 20.0, 0.5])
         .collect();
     let dummy = [[9.0f32; 4]];
     let sampler = |filter, address| D3D12_SAMPLER_DESC {
@@ -749,14 +738,8 @@ fn translated_shaders_draw_as_pc_ones() {
         ..Default::default()
     };
     let samplers = [
-        sampler(
-            D3D12_FILTER_MIN_MAG_MIP_POINT,
-            D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-        ),
-        sampler(
-            D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-        ),
+        sampler(D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_CLAMP),
+        sampler(D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_WRAP),
     ];
     // A full-screen triangle: POSITION (4 floats), TEXCOORD0 (2 floats).
     let vertices = [
@@ -776,10 +759,7 @@ fn translated_shaders_draw_as_pc_ones() {
     };
     let mut failures = Vec::new();
     let only = std::env::var("VICTORY_DIFF_ONLY").ok();
-    for (name, src) in CASES
-        .iter()
-        .filter(|c| only.as_ref().is_none_or(|o| o == c.0))
-    {
+    for (name, src) in CASES.iter().filter(|c| only.as_ref().is_none_or(|o| o == c.0)) {
         // A case may bring its own vertex shader.
         let vs = if src.contains(" vs16(") { "vs16" } else { "vs" };
         let vs_c = translate(&compile(&console, &dir, src, vs, "vs_6_5")).unwrap();
@@ -803,8 +783,7 @@ fn translated_shaders_draw_as_pc_ones() {
             super::validator::Validator::default_path().as_deref(),
         ) {
             for s in [&vs_c, &ps_c] {
-                v.validate(&mut s.dxil.clone())
-                    .unwrap_or_else(|e| panic!("{name}: {e}"));
+                v.validate(&mut s.dxil.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
             }
         }
         let (root_t, pso_t) = host.pipeline(&vs_c, &ps_c).unwrap();
@@ -819,10 +798,8 @@ fn translated_shaders_draw_as_pc_ones() {
             )
             .unwrap();
 
-        let (vs_p, ps_p) = (
-            compile(&pc, &dir, src, vs, "vs_6_5"),
-            compile(&pc, &dir, src, "ps", "ps_6_5"),
-        );
+        let (vs_p, ps_p) =
+            (compile(&pc, &dir, src, vs, "vs_6_5"), compile(&pc, &dir, src, "ps", "ps_6_5"));
         // SAFETY: the PC container carries its root signature.
         let root_p: ID3D12RootSignature =
             unsafe { host.device.CreateRootSignature(0, &ps_p) }.unwrap();
@@ -833,20 +810,8 @@ fn translated_shaders_draw_as_pc_ones() {
                 &pso_p,
                 &draw(vec![
                     (0, Root::Constants(k.to_vec())),
-                    (
-                        1,
-                        Root::Table {
-                            sampler: false,
-                            index: 1,
-                        },
-                    ),
-                    (
-                        2,
-                        Root::Table {
-                            sampler: true,
-                            index: 1,
-                        },
-                    ),
+                    (1, Root::Table { sampler: false, index: 1 }),
+                    (2, Root::Table { sampler: true, index: 1 }),
                 ]),
             )
             .unwrap();
@@ -898,10 +863,7 @@ fn translated_mesh_shaders_draw_as_pc_ones() {
     };
     let mut failures = Vec::new();
     let only = std::env::var("VICTORY_DIFF_ONLY").ok();
-    for &(name, groups, src) in MS_CASES
-        .iter()
-        .filter(|c| only.as_ref().is_none_or(|o| o == c.0))
-    {
+    for &(name, groups, src) in MS_CASES.iter().filter(|c| only.as_ref().is_none_or(|o| o == c.0)) {
         let console_ms = compile(&console, &dir, src, "ms", "ms_6_5");
         let ms_c = match translate(&console_ms) {
             Ok(s) => s,
@@ -919,8 +881,7 @@ fn translated_mesh_shaders_draw_as_pc_ones() {
         if let Ok(mut v) = super::validator::Validator::load(
             super::validator::Validator::default_path().as_deref(),
         ) {
-            v.validate(&mut ms_c.dxil.clone())
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            v.validate(&mut ms_c.dxil.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
         let (root_t, pso_t) = host.mesh_pipeline(&ms_c, &ps_c).unwrap();
         let ours = host
@@ -936,20 +897,14 @@ fn translated_mesh_shaders_draw_as_pc_ones() {
                 ),
             )
             .unwrap();
-        let (ms_p, ps_p) = (
-            compile(&pc, &dir, src, "ms", "ms_6_5"),
-            compile(&pc, &dir, src, "mps", "ps_6_5"),
-        );
+        let (ms_p, ps_p) =
+            (compile(&pc, &dir, src, "ms", "ms_6_5"), compile(&pc, &dir, src, "mps", "ps_6_5"));
         // SAFETY: the PC container carries its root signature.
         let root_p: ID3D12RootSignature =
             unsafe { host.device.CreateRootSignature(0, &ms_p) }.unwrap();
         let pso_p = host.mesh_pipeline_with(&root_p, &ms_p, &ps_p).unwrap();
         let theirs = host
-            .draw(
-                &root_p,
-                &pso_p,
-                &draw(vec![(0, Root::Constants(k.to_vec()))], groups),
-            )
+            .draw(&root_p, &pso_p, &draw(vec![(0, Root::Constants(k.to_vec()))], groups))
             .unwrap();
         let worst = ours
             .iter()
@@ -968,9 +923,7 @@ fn translated_mesh_shaders_draw_as_pc_ones() {
             // Which texels each drew (alpha set), row by row.
             for (o, t) in ours.chunks(16).zip(theirs.chunks(16)) {
                 let row = |r: &[[f32; 4]]| -> String {
-                    r.iter()
-                        .map(|x| if x[3] != 0.0 { '#' } else { '.' })
-                        .collect()
+                    r.iter().map(|x| if x[3] != 0.0 { '#' } else { '.' }).collect()
                 };
                 eprintln!("  {}  {}", row(o), row(t));
             }
@@ -1099,19 +1052,11 @@ fn translated_compute_matches_pc() {
     let dir = std::env::temp_dir().join(format!("victory-diff-cs-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let k = [0.75f32, -1.5, 2.0, 0.125].map(f32::to_bits);
-    let texels: Vec<[f32; 4]> = (0..16)
-        .map(|i| [i as f32 / 16.0, (i % 4) as f32 * 0.3, 0.5, 1.0])
-        .collect();
+    let texels: Vec<[f32; 4]> =
+        (0..16).map(|i| [i as f32 / 16.0, (i % 4) as f32 * 0.3, 0.5, 1.0]).collect();
     let dummy = [[9.0f32; 4]];
     let cube_texels: Vec<[f32; 4]> = (0..96)
-        .map(|i| {
-            [
-                (i / 16) as f32,
-                (i % 4) as f32 * 0.25,
-                (i / 4 % 4) as f32 * 0.25,
-                1.0,
-            ]
-        })
+        .map(|i| [(i / 16) as f32, (i % 4) as f32 * 0.25, (i / 4 % 4) as f32 * 0.25, 1.0])
         .collect();
     // Buffers: 16 float4, 8 structures of 16 bytes, 32 raw dwords; the
     // root CBV's 16 float4 and the root SRV's 32 dwords.
@@ -1120,39 +1065,22 @@ fn translated_compute_matches_pc() {
     };
     let typed_data = floats(64, 0.25);
     let structured_data: Vec<u32> = (0..32u32)
-        .map(|i| {
-            if i % 4 == 1 {
-                i * 0x0101_0101
-            } else {
-                (i as f32 * 0.5).to_bits()
-            }
-        })
+        .map(|i| if i % 4 == 1 { i * 0x0101_0101 } else { (i as f32 * 0.5).to_bits() })
         .collect();
     let raw_data: Vec<u32> = (0..32u32).map(|i| i.wrapping_mul(0x9E37_79B9)).collect();
     let views = [
         View::Texture(1, 1, &dummy),
         View::Texture(4, 4, &texels),
-        View::Buffer {
-            data: &typed_data,
-            stride: Stride::Typed,
-        },
-        View::Buffer {
-            data: &structured_data,
-            stride: Stride::Structured(16),
-        },
-        View::Buffer {
-            data: &raw_data,
-            stride: Stride::Raw,
-        },
+        View::Buffer { data: &typed_data, stride: Stride::Typed },
+        View::Buffer { data: &structured_data, stride: Stride::Structured(16) },
+        View::Buffer { data: &raw_data, stride: Stride::Raw },
         View::RawUav(1024),
         View::TextureUav(16, 16),
         View::UintTextureUav(16, 16),
         View::HalfUav(256),
     ];
-    let typed_view = |format, bytes| View::Buffer {
-        data: &raw_data,
-        stride: Stride::Format(format, bytes),
-    };
+    let typed_view =
+        |format, bytes| View::Buffer { data: &raw_data, stride: Stride::Format(format, bytes) };
     let views: Vec<View> = views
         .into_iter()
         .chain([
@@ -1178,12 +1106,8 @@ fn translated_compute_matches_pc() {
         MaxLOD: f32::MAX,
         ..Default::default()
     }; 2];
-    let dispatch = |roots| Dispatch {
-        roots,
-        views: &views,
-        samplers: &samplers,
-        groups: [2, 2, 1],
-    };
+    let dispatch =
+        |roots| Dispatch { roots, views: &views, samplers: &samplers, groups: [2, 2, 1] };
     let mut failures = Vec::new();
     let only = std::env::var("VICTORY_DIFF_ONLY").ok();
     let warp = std::env::var("VICTORY_WARP").is_ok_and(|v| v == "1");
@@ -1211,8 +1135,7 @@ fn translated_compute_matches_pc() {
         if let Ok(mut v) = super::validator::Validator::load(
             super::validator::Validator::default_path().as_deref(),
         ) {
-            v.validate(&mut cs_c.dxil.clone())
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            v.validate(&mut cs_c.dxil.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
         let (root_t, pso_t) = match host.compute_pipeline(&cs_c) {
             Ok(p) => p,
@@ -1254,17 +1177,12 @@ fn translated_compute_matches_pc() {
             })
             .collect();
         for (n, (slot, srv)) in root_views.into_iter().enumerate() {
-            let data = if srv
-                && (slot == super::SLOT_STRIDES || slot == super::SLOT_TABLE_STRIDES)
+            let data = if srv && (slot == super::SLOT_STRIDES || slot == super::SLOT_TABLE_STRIDES)
             {
                 view_strides.clone()
             } else {
                 assert_eq!(slot, 4 + u8::from(srv), "{name}: root view");
-                if srv {
-                    root_srv.clone()
-                } else {
-                    root_cbv.clone()
-                }
+                if srv { root_srv.clone() } else { root_cbv.clone() }
             };
             roots.push((1 + n as u32, Root::View { srv, data }));
         }
@@ -1292,20 +1210,8 @@ fn translated_compute_matches_pc() {
                     (1, table(false, 1)),
                     (2, table(true, 1)),
                     (3, table(false, 5)),
-                    (
-                        4,
-                        Root::View {
-                            srv: false,
-                            data: root_cbv.clone(),
-                        },
-                    ),
-                    (
-                        5,
-                        Root::View {
-                            srv: true,
-                            data: root_srv.clone(),
-                        },
-                    ),
+                    (4, Root::View { srv: false, data: root_cbv.clone() }),
+                    (5, Root::View { srv: true, data: root_srv.clone() }),
                     (6, table(false, 9)),
                 ]),
             )

@@ -175,13 +175,7 @@ pub struct Sdwa {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dpp {
     /// DPP16: `ctrl` is the 9-bit permutation (quad_perm, row shifts...).
-    Row {
-        ctrl: u16,
-        row_mask: u8,
-        bank_mask: u8,
-        bound_ctrl: bool,
-        fi: bool,
-    },
+    Row { ctrl: u16, row_mask: u8, bank_mask: u8, bound_ctrl: bool, fi: bool },
     /// DPP8: eight 3-bit lane selects.
     Lanes { sel: u32, fi: bool },
 }
@@ -208,11 +202,7 @@ impl Instruction {
                         _ => (Some(sdst), vec![ssrc(0, src0)]),
                     },
                 };
-                Fields::Sop {
-                    dst,
-                    src,
-                    imm: None,
-                }
+                Fields::Sop { dst, src, imm: None }
             }
             Encoding::Sopk => {
                 let sdst = scalar((w0 >> 16 & 0x7F) as u8, 1 + u8::from(name == "s_call_b64"));
@@ -227,11 +217,7 @@ impl Instruction {
                     }
                     _ => (Some(sdst), vec![]),
                 };
-                Fields::Sop {
-                    dst,
-                    src,
-                    imm: Some(w0 as u16),
-                }
+                Fields::Sop { dst, src, imm: Some(w0 as u16) }
             }
             Encoding::Sopp => Fields::Sopp { imm: w0 as u16 },
             Encoding::Smem => {
@@ -321,9 +307,7 @@ impl Instruction {
                 Fields::Ds {
                     dst: returns.then(|| vector(w1 >> 24, ty * (1 + u8::from(pair)))),
                     addr: (!no_addr).then(|| vector(w1 & 0xFF, 1)),
-                    data: (0..data)
-                        .map(|i| vector(w1 >> (8 + 8 * i) & 0xFF, ty))
-                        .collect(),
+                    data: (0..data).map(|i| vector(w1 >> (8 + 8 * i) & 0xFF, ty)).collect(),
                     offset0: w0 as u8,
                     offset1: (w0 >> 8) as u8,
                     gds: bit(w0, 17),
@@ -348,12 +332,8 @@ impl Instruction {
                 }
             }
             Encoding::Mimg => {
-                let (dim, dmask, a16, d16) = (
-                    (w0 >> 3 & 7) as u8,
-                    (w0 >> 8 & 0xF) as u8,
-                    bit(w1, 30),
-                    bit(w1, 31),
-                );
+                let (dim, dmask, a16, d16) =
+                    ((w0 >> 3 & 7) as u8, (w0 >> 8 & 0xF) as u8, bit(w1, 30), bit(w1, 31));
                 let (r128, tfe, lwe) = (bit(w0, 15), bit(w0, 16), bit(w0, 17));
                 let mut data = if name.starts_with("image_gather4") {
                     4
@@ -406,11 +386,7 @@ impl Instruction {
                     // With an SGPR base, scratch takes no VGPR.
                     _ => (saddr == NULL).then(|| vector(w1 & 0xFF, 1)),
                 };
-                let ret = if atomic && name.contains("cmpswap") {
-                    n / 2
-                } else {
-                    n
-                };
+                let ret = if atomic && name.contains("cmpswap") { n / 2 } else { n };
                 Fields::Flat {
                     dst: (load || atomic && glc).then(|| vector(w1 >> 24, ret)),
                     addr,
@@ -484,11 +460,7 @@ impl Instruction {
                             if ext >> 15 & 1 == 1 {
                                 v.dst = Some(scalar((ext >> 8 & 0x7F) as u8, lanes));
                             }
-                            v.sdwa = Some(Sdwa {
-                                dst_sel: 6,
-                                dst_unused: 0,
-                                ..sdwa
-                            });
+                            v.sdwa = Some(Sdwa { dst_sel: 6, dst_unused: 0, ..sdwa });
                         } else {
                             v.clamp = ext >> 13 & 1 == 1;
                             v.omod = (ext >> 14 & 3) as u8;
@@ -508,10 +480,7 @@ impl Instruction {
                         });
                     }
                     0xE9 | 0xEA => {
-                        v.dpp = Some(Dpp::Lanes {
-                            sel: ext >> 8,
-                            fi: src0 == 0xEA,
-                        });
+                        v.dpp = Some(Dpp::Lanes { sel: ext >> 8, fi: src0 == 0xEA });
                         src0 = 256 + (ext & 0xFF);
                     }
                     _ => {}
@@ -520,11 +489,7 @@ impl Instruction {
                 let op1 = source(src1, src_n[1], ext);
                 match self.encoding {
                     Encoding::Vopc => {
-                        let mask = if name.starts_with("v_cmpx") {
-                            EXEC
-                        } else {
-                            VCC
-                        };
+                        let mask = if name.starts_with("v_cmpx") { EXEC } else { VCC };
                         v.dst = v.dst.or(Some(scalar(mask, lanes)));
                         v.src = vec![op0, op1];
                     }
@@ -684,10 +649,7 @@ fn scalar(code: u8, dwords: u8) -> Operand {
 }
 
 fn vector(reg: u32, dwords: u8) -> Operand {
-    Operand::Vector {
-        reg: reg as u8,
-        dwords,
-    }
+    Operand::Vector { reg: reg as u8, dwords }
 }
 
 /// A 9-bit source field (8-bit scalar fields are the same codes below 256).
@@ -710,11 +672,7 @@ fn valu_dst(name: &str, field: u32, dwords: u8) -> Operand {
 
 /// LDS opcodes on two addresses (`ds_read2_b32`...), with `offset0`/`offset1`.
 pub(super) fn ds_pair(name: &str) -> bool {
-    name.split('_').any(|t| {
-        ["read2", "write2", "wrxchg2"]
-            .iter()
-            .any(|p| t.starts_with(p))
-    })
+    name.split('_').any(|t| ["read2", "write2", "wrxchg2"].iter().any(|p| t.starts_with(p)))
 }
 
 /// Dwords of a type suffix such as `b64` or `f32`.
@@ -789,16 +747,7 @@ fn data_dwords(name: &str) -> u8 {
 fn image_addr_dwords(name: &str, dim: u8, a16: bool) -> u8 {
     // (coordinates, derivatives per direction) for 1D 2D 3D CUBE 1D_ARRAY
     // 2D_ARRAY 2D_MSAA 2D_MSAA_ARRAY.
-    const DIMS: [(u8, u8); 8] = [
-        (1, 1),
-        (2, 2),
-        (3, 3),
-        (3, 2),
-        (2, 1),
-        (3, 2),
-        (3, 2),
-        (4, 2),
-    ];
+    const DIMS: [(u8, u8); 8] = [(1, 1), (2, 2), (3, 3), (3, 2), (2, 1), (3, 2), (3, 2), (4, 2)];
     let (coords, grads) = DIMS[usize::from(dim & 7)];
     match name {
         "image_bvh_intersect_ray" => return if a16 { 8 } else { 11 },
@@ -807,9 +756,8 @@ fn image_addr_dwords(name: &str, dim: u8, a16: bool) -> u8 {
         _ => {}
     }
     let (mut whole, mut derivs, mut packed): (u8, u8, u8) = (0, 0, coords);
-    if let Some(rest) = name
-        .strip_prefix("image_sample")
-        .or_else(|| name.strip_prefix("image_gather4"))
+    if let Some(rest) =
+        name.strip_prefix("image_sample").or_else(|| name.strip_prefix("image_gather4"))
     {
         for token in rest.split('_') {
             match token {

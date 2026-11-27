@@ -24,7 +24,9 @@ impl Mode {
             "quality" => Mode::Quality,
             "balanced" => Mode::Balanced,
             "performance" => Mode::Performance,
-            "ultraperformance" | "ultra-performance" | "ultra_performance" => Mode::UltraPerformance,
+            "ultraperformance" | "ultra-performance" | "ultra_performance" => {
+                Mode::UltraPerformance
+            }
             _ => return None,
         })
     }
@@ -122,14 +124,23 @@ pub const MODES: [u32; 6] = [
 /// `output`: of the modes whose optimal render size (`optimal`, from the
 /// library) holds `render` (DLSS makes its feature for that size and takes
 /// smaller ones as a sub-rectangle), the one with the smallest.
-pub fn pick_mode(render: [u32; 2], output: [u32; 2], optimal: impl Fn(u32) -> Option<[u32; 2]>) -> Option<u32> {
+pub fn pick_mode(
+    render: [u32; 2],
+    output: [u32; 2],
+    optimal: impl Fn(u32) -> Option<[u32; 2]>,
+) -> Option<u32> {
     if render[0] == 0 || render[1] == 0 || render[0] > output[0] || render[1] > output[1] {
         return None;
     }
     MODES
         .iter()
         .filter_map(|&mode| optimal(mode).map(|size| (mode, size)))
-        .filter(|&(_, size)| size[0] >= render[0] && size[1] >= render[1] && size[0] <= output[0] && size[1] <= output[1])
+        .filter(|&(_, size)| {
+            size[0] >= render[0]
+                && size[1] >= render[1]
+                && size[0] <= output[0]
+                && size[1] <= output[1]
+        })
         .min_by_key(|&(_, size)| u64::from(size[0]) * u64::from(size[1]))
         .map(|(mode, _)| mode)
 }
@@ -229,9 +240,14 @@ impl Camera {
     /// range it gives; camera motion is in the motion vectors, so the
     /// clip-to-previous-clip matrices stay the identity and the camera stands
     /// at the origin looking down +z.
-    pub fn constants(&self, jitter_multiplier: [f32; 2], mvec_multiplier: [f32; 2]) -> abi::Constants {
+    pub fn constants(
+        &self,
+        jitter_multiplier: [f32; 2],
+        mvec_multiplier: [f32; 2],
+    ) -> abi::Constants {
         let aspect = self.render[0].max(1) as f32 / self.render[1].max(1) as f32;
-        let view_to_clip = projection(self.near, self.far, self.fov_y, aspect, self.depth_inverted());
+        let view_to_clip =
+            projection(self.near, self.far, self.fov_y, aspect, self.depth_inverted());
         let clip_to_view = invert(&view_to_clip).unwrap_or(IDENTITY);
         abi::Constants {
             base: abi::BaseStructure::new(abi::CONSTANTS, 2),
@@ -240,7 +256,10 @@ impl Camera {
             clip_to_lens_clip: IDENTITY,
             clip_to_prev_clip: IDENTITY,
             prev_clip_to_clip: IDENTITY,
-            jitter_offset: [self.jitter[0] * jitter_multiplier[0], self.jitter[1] * jitter_multiplier[1]],
+            jitter_offset: [
+                self.jitter[0] * jitter_multiplier[0],
+                self.jitter[1] * jitter_multiplier[1],
+            ],
             mvec_scale: self.mvec_scale(mvec_multiplier),
             camera_pinhole_offset: [0.0, 0.0],
             camera_pos: [0.0, 0.0, 0.0],
@@ -258,20 +277,24 @@ impl Camera {
             reset: abi::boolean(self.reset),
             orthographic_projection: abi::FALSE,
             motion_vectors_dilated: abi::FALSE,
-            motion_vectors_jittered: abi::boolean(self.flags & FFX_MOTION_VECTORS_JITTER_CANCELLATION != 0),
+            motion_vectors_jittered: abi::boolean(
+                self.flags & FFX_MOTION_VECTORS_JITTER_CANCELLATION != 0,
+            ),
             min_relative_linear_depth_object_separation: 40.0,
         }
     }
 }
 
-pub const IDENTITY: abi::Float4x4 = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]];
+pub const IDENTITY: abi::Float4x4 =
+    [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]];
 
 /// A left-handed perspective projection in Streamline's layout (row vectors,
 /// rows as stored): depth 0 at `near` and 1 at `far`, or reversed; a far
 /// plane past 1e30 (or not finite) is at infinity. Degenerate inputs give
 /// the identity.
 pub fn projection(near: f32, far: f32, fov_y: f32, aspect: f32, inverted: bool) -> abi::Float4x4 {
-    if !(near > 0.0 && fov_y > 0.0 && fov_y < std::f32::consts::PI && aspect > 0.0) || near.is_nan() {
+    if !(near > 0.0 && fov_y > 0.0 && fov_y < std::f32::consts::PI && aspect > 0.0) || near.is_nan()
+    {
         return IDENTITY;
     }
     let y = 1.0 / (fov_y * 0.5).tan();
@@ -290,37 +313,69 @@ pub fn projection(near: f32, far: f32, fov_y: f32, aspect: f32, inverted: bool) 
 pub fn invert(m: &abi::Float4x4) -> Option<abi::Float4x4> {
     let a: [f64; 16] = std::array::from_fn(|i| f64::from(m[i / 4][i % 4]));
     let mut inv = [0f64; 16];
-    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] + a[9] * a[7] * a[14] + a[13] * a[6] * a[11]
+    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15]
+        + a[9] * a[7] * a[14]
+        + a[13] * a[6] * a[11]
         - a[13] * a[7] * a[10];
-    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] - a[8] * a[7] * a[14] - a[12] * a[6] * a[11]
+    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15]
+        - a[8] * a[7] * a[14]
+        - a[12] * a[6] * a[11]
         + a[12] * a[7] * a[10];
-    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] + a[8] * a[7] * a[13] + a[12] * a[5] * a[11]
+    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15]
+        + a[8] * a[7] * a[13]
+        + a[12] * a[5] * a[11]
         - a[12] * a[7] * a[9];
-    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] - a[8] * a[6] * a[13] - a[12] * a[5] * a[10]
+    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14]
+        - a[8] * a[6] * a[13]
+        - a[12] * a[5] * a[10]
         + a[12] * a[6] * a[9];
-    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] - a[9] * a[3] * a[14] - a[13] * a[2] * a[11]
+    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15]
+        - a[9] * a[3] * a[14]
+        - a[13] * a[2] * a[11]
         + a[13] * a[3] * a[10];
-    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] + a[8] * a[3] * a[14] + a[12] * a[2] * a[11]
+    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15]
+        + a[8] * a[3] * a[14]
+        + a[12] * a[2] * a[11]
         - a[12] * a[3] * a[10];
-    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] - a[8] * a[3] * a[13] - a[12] * a[1] * a[11]
+    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15]
+        - a[8] * a[3] * a[13]
+        - a[12] * a[1] * a[11]
         + a[12] * a[3] * a[9];
-    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] + a[8] * a[2] * a[13] + a[12] * a[1] * a[10]
+    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14]
+        + a[8] * a[2] * a[13]
+        + a[12] * a[1] * a[10]
         - a[12] * a[2] * a[9];
-    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] + a[13] * a[2] * a[7]
+    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15]
+        + a[5] * a[3] * a[14]
+        + a[13] * a[2] * a[7]
         - a[13] * a[3] * a[6];
-    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] - a[4] * a[3] * a[14] - a[12] * a[2] * a[7]
+    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15]
+        - a[4] * a[3] * a[14]
+        - a[12] * a[2] * a[7]
         + a[12] * a[3] * a[6];
-    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] + a[4] * a[3] * a[13] + a[12] * a[1] * a[7]
+    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15]
+        + a[4] * a[3] * a[13]
+        + a[12] * a[1] * a[7]
         - a[12] * a[3] * a[5];
-    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] - a[4] * a[2] * a[13] - a[12] * a[1] * a[6]
+    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14]
+        - a[4] * a[2] * a[13]
+        - a[12] * a[1] * a[6]
         + a[12] * a[2] * a[5];
-    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] - a[5] * a[3] * a[10] - a[9] * a[2] * a[7]
+    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11]
+        - a[5] * a[3] * a[10]
+        - a[9] * a[2] * a[7]
         + a[9] * a[3] * a[6];
-    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] + a[8] * a[2] * a[7]
+    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11]
+        + a[4] * a[3] * a[10]
+        + a[8] * a[2] * a[7]
         - a[8] * a[3] * a[6];
-    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] - a[8] * a[1] * a[7]
+    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11]
+        - a[4] * a[3] * a[9]
+        - a[8] * a[1] * a[7]
         + a[8] * a[3] * a[5];
-    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] + a[8] * a[1] * a[6]
+    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10]
+        + a[4] * a[2] * a[9]
+        + a[8] * a[1] * a[6]
         - a[8] * a[2] * a[5];
     let det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
     if det.abs() < 1e-30 || !det.is_finite() {
@@ -428,12 +483,16 @@ mod tests {
 
     #[test]
     fn constants_follow_the_upscaling() {
-        let c = camera(FFX_HIGH_DYNAMIC_RANGE | FFX_DEPTH_INVERTED | FFX_AUTO_EXPOSURE).constants([1.0, 1.0], [1.0, 1.0]);
+        let c = camera(FFX_HIGH_DYNAMIC_RANGE | FFX_DEPTH_INVERTED | FFX_AUTO_EXPOSURE)
+            .constants([1.0, 1.0], [1.0, 1.0]);
         // Motion vectors in UV space scaled to pixels: Streamline gets them
         // back to [-1, 1].
         assert_eq!(c.mvec_scale, [1.0, 1.0]);
         assert_eq!(c.jitter_offset, [0.25, -0.5]);
-        assert_eq!((c.depth_inverted, c.reset, c.camera_motion_included), (abi::TRUE, abi::TRUE, abi::TRUE));
+        assert_eq!(
+            (c.depth_inverted, c.reset, c.camera_motion_included),
+            (abi::TRUE, abi::TRUE, abi::TRUE)
+        );
         assert_eq!(c.motion_vectors_jittered, abi::FALSE);
         assert!((c.camera_aspect_ratio - 1706.0 / 960.0).abs() < 1e-6);
         let flipped = camera(0).constants([-1.0, 1.0], [1.0, -2.0]);
@@ -465,8 +524,9 @@ mod tests {
         assert!(depth(&infinite, 1e7) < 1e-6);
         assert_eq!(projection(0.0, 100.0, 1.2, 1.0, false), IDENTITY);
         let inverse = invert(&standard).unwrap();
-        let product: abi::Float4x4 =
-            std::array::from_fn(|r| std::array::from_fn(|c| (0..4).map(|k| standard[r][k] * inverse[k][c]).sum()));
+        let product: abi::Float4x4 = std::array::from_fn(|r| {
+            std::array::from_fn(|c| (0..4).map(|k| standard[r][k] * inverse[k][c]).sum())
+        });
         for r in 0..4 {
             for c in 0..4 {
                 let want = if r == c { 1.0 } else { 0.0 };

@@ -106,11 +106,7 @@ pub fn dump_stacks() {
     for id in ids {
         // SAFETY: opens a thread of our own process.
         let thread = unsafe {
-            OpenThread(
-                THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
-                0,
-                id,
-            )
+            OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, id)
         };
         if thread.is_null() {
             continue;
@@ -224,11 +220,7 @@ mod tests {
         let id = rx.recv().unwrap();
         // SAFETY: a thread of this process.
         let thread = unsafe {
-            OpenThread(
-                THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
-                0,
-                id,
-            )
+            OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, id)
         };
         assert!(!thread.is_null());
         let (frames, _) = frames_of(thread);
@@ -246,12 +238,7 @@ mod tests {
     /// thread (`from_secs_f64` panicked on `inf`); the rest come in order.
     #[test]
     fn schedules_skip_times_out_of_range() {
-        let secs = |list| {
-            schedule(list)
-                .iter()
-                .map(|d| d.as_secs_f64())
-                .collect::<Vec<_>>()
-        };
+        let secs = |list| schedule(list).iter().map(|d| d.as_secs_f64()).collect::<Vec<_>>();
         assert_eq!(secs("30, 5,x,-2,inf,NaN,1e20"), [0.0, 5.0, 30.0]);
         assert!(schedule("").is_empty());
     }
