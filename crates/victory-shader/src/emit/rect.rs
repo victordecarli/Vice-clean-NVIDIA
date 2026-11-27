@@ -216,7 +216,7 @@ fn build(mut outputs: Vec<SigElement>, ps_inputs: &[SigElement]) -> Result<Vec<u
         }
     }
     s.m.terminate(b, Term::Ret);
-    Ok(s.finish())
+    s.finish()
 }
 
 /// Column `col` of input `id` at vertex `vertex` of the triangle.
@@ -357,7 +357,7 @@ mod tests {
         }
         let host = |stage, s: Shader| super::super::HostShader {
             stage,
-            dxil: s.finish(),
+            dxil: s.finish().unwrap(),
             user_data: Vec::new(),
             samplers: Vec::new(),
             static_samplers: Vec::new(),

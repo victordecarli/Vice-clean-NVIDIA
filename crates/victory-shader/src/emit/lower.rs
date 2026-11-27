@@ -362,9 +362,9 @@ struct Lower<'a> {
     /// flat thread ids (NVIDIA fills 2-D groups from 16 x 2 tiles), so the waves take their
     /// console threads from a counter as with `halves` (fxceless issue #1243, Vice-Tay c125c0c).
     ticket: Option<u32>,
-    wave_base: Option<V>,
-    /// With `wave_base`: this thread's place among the active lanes of its host wave.
-    wave_rank: Option<V>,
+    /// [`Self::wave_base`] once made, with this thread's place among the active lanes of its
+    /// host wave.
+    wave_base: Option<(V, V)>,
     /// The host waves of a console wave meet on their own ([`with_pair_meetings`]): the first
     /// of the LDS dwords that count each console wave's arrivals, and the dword of this
     /// thread's console wave (made in the entry block).
@@ -2016,7 +2016,6 @@ impl<'a> Lower<'a> {
             halves,
             ticket,
             wave_base: None,
-            wave_rank: None,
             pairs,
             meeting: None,
             lds_unordered: lds_order.unordered.clone(),
@@ -2713,7 +2712,7 @@ impl<'a> Lower<'a> {
             wave_ops: self.s.flags & flags::WAVE_OPS != 0,
             #[cfg(test)]
             early_depth: self.s.flags & flags::EARLY_DEPTH_STENCIL != 0,
-            dxil: self.s.finish(),
+            dxil: self.s.finish().map_err(Stop::Fail)?,
             user_data,
             samplers: self.samplers,
         })
@@ -4265,8 +4264,9 @@ impl<'a> Lower<'a> {
     /// (0, 32, 64, ...). A GPU need not give a host wave consecutive thread indices (NVIDIA's
     /// 8 x 8 groups), so each wave takes the next 32 from an LDS counter instead: every thread
     /// zeroes it, the group meets, each wave's first lane adds 32 and the wave takes what it
-    /// found. Branch-free, in the entry block, which every thread runs.
-    fn wave_base(&mut self) -> Option<V> {
+    /// found. Branch-free, in the entry block, which every thread runs. With it, this thread's
+    /// place among the active lanes of its host wave.
+    fn wave_base(&mut self) -> Option<(V, V)> {
         let slot = self.halves.or(self.ticket)?;
         if let Some(v) = self.wave_base {
             return Some(v);
@@ -4317,17 +4317,15 @@ impl<'a> Lower<'a> {
         let tail = self.s.m.bin(e, Bin::Add, blocks, past);
         let base = self.s.m.select(e, full, low, tail);
         self.s.flags |= flags::WAVE_OPS;
-        self.wave_base = Some(base);
-        self.wave_rank = Some(rank);
-        Some(base)
+        self.wave_base = Some((base, rank));
+        Some((base, rank))
     }
 
     /// The console thread index of this thread in the group: `wave_base` plus the host lane
     /// (host waves of 32), else the wave's first thread index rounded down plus the lane.
     fn console_thread(&mut self) -> V {
         let (e, i32t) = (self.s.entry, self.s.t.i32);
-        if let Some(base) = self.wave_base() {
-            let rank = self.wave_rank.expect("made with the base");
+        if let Some((base, rank)) = self.wave_base() {
             return self.s.m.bin(e, Bin::Add, base, rank);
         }
         let lane = self.s.op(e, "waveGetLaneIndex", Attr::ReadOnly, i32t, 111, &[]);
@@ -4406,11 +4404,11 @@ impl<'a> Lower<'a> {
     /// 11.9 ms a frame for `CS_DefragHeap_ComputeRelocations` alone, run 184458.) The code
     /// after it is in a new block ([`Self::cur`]).
     fn meet(&mut self) {
-        if self.pairs.is_none() {
+        let Some(first) = self.pairs else {
             let c = self.cur;
             self.group_sync(c);
             return;
-        }
+        };
         let (i1t, i32t, void) = (self.s.t.i1, self.s.t.i32, self.s.t.void);
         let fence = self.s.m.i32(8);
         let head = self.cur;
@@ -4418,7 +4416,7 @@ impl<'a> Lower<'a> {
         if super::group_sync() == 0 {
             return;
         }
-        let index = self.meeting_index();
+        let index = self.meeting_index(first);
         let lds = self.s.lds();
         let ptr = self.s.m.element(head, lds, index);
         let (zero, one) = (self.s.m.i32(0), self.s.m.i32(1));
@@ -4452,13 +4450,12 @@ impl<'a> Lower<'a> {
         self.s.op(done, "barrier", Attr::NoDuplicate, void, 80, &[fence]);
     }
 
-    /// With `pairs`: the LDS dword of this console wave's meeting counter (made in the entry
-    /// block).
-    fn meeting_index(&mut self) -> V {
+    /// With `pairs` (whose first counter's dword is `first`): the LDS dword of this console
+    /// wave's meeting counter (made in the entry block).
+    fn meeting_index(&mut self, first: u32) -> V {
         if let Some(v) = self.meeting {
             return v;
         }
-        let first = self.pairs.expect("console waves meeting on their own");
         let e = self.s.entry;
         let thread = self.console_thread();
         let six = self.s.m.i32(6);
@@ -4475,9 +4472,9 @@ impl<'a> Lower<'a> {
     /// writes one only after the meeting that the other half's reads of it came before, so an
     /// exchange is one meeting. (Both halves meet as often; between two of its meetings a half
     /// finds the counter at twice its meetings, or one more.)
-    fn exchange_dword(&mut self) -> V {
+    fn exchange_dword(&mut self, first: u32) -> V {
         let c = self.cur;
-        let counter = self.meeting_index();
+        let counter = self.meeting_index(first);
         let lds = self.s.lds();
         let ptr = self.s.m.element(c, lds, counter);
         let now = self.s.m.load(c, ptr);
@@ -4496,7 +4493,7 @@ impl<'a> Lower<'a> {
                 let (six, three) = (self.s.m.i32(6), self.s.m.i32(3));
                 let wave = self.s.m.bin(e, Bin::LShr, thread, six);
                 let eight = self.s.m.bin(e, Bin::Shl, wave, three);
-                let first = self.s.m.i32(self.pairs.expect("pairs") + waves);
+                let first = self.s.m.i32(first + waves);
                 let v = self.s.m.bin(e, Bin::Add, first, eight);
                 self.pair_base = Some(v);
                 v
@@ -4508,9 +4505,9 @@ impl<'a> Lower<'a> {
     /// With `pairs`: each host wave gives the values `mine` (each the same in all its lanes,
     /// two at most) for its half; all get (lower half's, upper half's) of each, after one
     /// meeting.
-    fn exchange_pairs(&mut self, mine: &[V]) -> Vec<(V, V)> {
+    fn exchange_pairs(&mut self, first: u32, mine: &[V]) -> Vec<(V, V)> {
         debug_assert!(mine.len() <= 2);
-        let at = self.exchange_dword();
+        let at = self.exchange_dword(first);
         let c = self.cur;
         let cl = self.console_lane();
         let (five, one) = (self.s.m.i32(5), self.s.m.i32(1));
@@ -4568,14 +4565,14 @@ impl<'a> Lower<'a> {
             let hi = self.s.m.select(at, upper, mine, z);
             return Ok((lo, hi));
         }
-        if self.pairs.is_some() {
+        if let Some(first) = self.pairs {
             if at != self.cur {
                 // (the meeting would split a block lowered already)
                 return Err(
                     "a lane mask exchanged after its block, in a group of several console waves",
                 );
             }
-            return Ok(self.exchange_pairs(&[mine])[0]);
+            return Ok(self.exchange_pairs(first, &[mine])[0]);
         }
         // the pair of dwords of this thread's console wave: its half's, then both
         let pair = self.exchange_pair(slot);
@@ -8892,8 +8889,8 @@ impl<'a> Lower<'a> {
                     let is = self.s.m.cmp(self.cur, pred::EQ, cl, lane);
                     // (console waves meeting on their own: a buffer of the next meeting, which
                     // needs no second meeting before it is written again)
-                    let k = if self.pairs.is_some() {
-                        self.exchange_dword()
+                    let k = if let Some(first) = self.pairs {
+                        self.exchange_dword(first)
                     } else {
                         self.exchange_pair(slot)
                     };
@@ -8992,8 +8989,8 @@ impl<'a> Lower<'a> {
                         let i32t = self.s.t.i32;
                         let has = self.s.m.cast(c, Cast::ZExt, any, i32t);
                         // (console waves meeting on their own: both in one meeting)
-                        let ((lo_has, hi_has), (lo, hi)) = if self.pairs.is_some() {
-                            let both = self.exchange_pairs(&[has, mine]);
+                        let ((lo_has, hi_has), (lo, hi)) = if let Some(first) = self.pairs {
+                            let both = self.exchange_pairs(first, &[has, mine]);
                             (both[0], both[1])
                         } else {
                             let has = self.exchange_halves(c, has)?;

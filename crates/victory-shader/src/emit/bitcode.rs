@@ -5,7 +5,10 @@
 //! it is written: functions, then constants (all at module level), then the
 //! instructions of `main` in block order.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+
+use crate::ShaderError;
 
 pub mod census;
 pub mod opt;
@@ -226,6 +229,9 @@ pub(crate) struct Module {
     named: Vec<(String, Vec<Md>)>,
     /// See [`Tag`]: by instruction.
     tags: HashMap<u32, Tag>,
+    /// The first broken builder invariant (an emitter bug). Building goes on
+    /// with a stand-in; [`Module::write`] reports it.
+    broken: RefCell<Option<String>>,
 }
 
 impl Module {
@@ -378,6 +384,11 @@ impl Module {
         self.blocks.len() - 1
     }
 
+    /// Records a broken invariant; the first one is kept.
+    fn broke(&self, what: String) {
+        self.broken.borrow_mut().get_or_insert(what);
+    }
+
     pub fn type_of(&self, v: V) -> Ty {
         match v {
             V::Global(i) => self.globals[i as usize].ptr,
@@ -385,12 +396,16 @@ impl Module {
             V::Inst(i) => self.insts[i as usize].ty,
             V::Func(i) => {
                 let t = self.funcs[i as usize].ty;
-                *self
-                    .type_ids
-                    .get(&TypeDef::Ptr(t, 0))
-                    .map(|t| Ty(*t))
-                    .as_ref()
-                    .expect("function pointer type")
+                match self.type_ids.get(&TypeDef::Ptr(t, 0)) {
+                    Some(&p) => Ty(p),
+                    None => {
+                        let name = &self.funcs[i as usize].name;
+                        self.broke(format!(
+                            "function {name} used as a value without its pointer type"
+                        ));
+                        t
+                    }
+                }
             }
         }
     }
@@ -529,7 +544,16 @@ impl Module {
         live
     }
 
-    pub fn write(&self) -> Vec<u8> {
+    /// The module's bitcode, or the first broken invariant met building it.
+    pub fn write(&self) -> Result<Vec<u8>, ShaderError> {
+        let bytes = self.write_bitcode()?;
+        match self.broken.borrow().clone() {
+            Some(what) => Err(ShaderError::Internal(what)),
+            None => Ok(bytes),
+        }
+    }
+
+    fn write_bitcode(&self) -> Result<Vec<u8>, ShaderError> {
         let mut w = Writer::default();
         w.bytes(b"BC\xC0\xDE");
         w.enter(MODULE_BLOCK, 3);
@@ -544,12 +568,12 @@ impl Module {
             }
             w.record(3, &r);
         }
-        w.exit();
+        w.exit()?;
         w.enter(PARAMATTR_BLOCK, 3);
         for id in 1..=4 {
             w.record(2, &[id]);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(TYPE_BLOCK, 4);
         w.record(1, &[self.types.len() as u64]);
@@ -579,7 +603,7 @@ impl Module {
                 }
             }
         }
-        w.exit();
+        w.exit()?;
 
         w.record(2, &chars("dxil-ms-dx"));
         w.record(
@@ -633,7 +657,7 @@ impl Module {
                 }
             }
         }
-        w.exit();
+        w.exit()?;
 
         // Phis nothing reads are left out (one register per phi makes many).
         let live = self.live();
@@ -739,7 +763,7 @@ impl Module {
             let r: Vec<u64> = nodes.iter().map(|m| u64::from(m.0)).collect();
             w.record(10, &r);
         }
-        w.exit();
+        w.exit()?;
         // The metadata kinds an LLVM 3.7 module declares, as DXC writes them.
         w.enter(METADATA_BLOCK, 3);
         for (id, kind) in [
@@ -765,7 +789,7 @@ impl Module {
             r.extend(chars(kind));
             w.record(6, &r);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(VALUE_SYMTAB_BLOCK, 4);
         let names = self.globals.iter().map(|g| &g.name);
@@ -774,7 +798,7 @@ impl Module {
             r.extend(chars(name));
             w.record(1, &r);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(FUNCTION_BLOCK, 4);
         w.record(1, &[layout.len() as u64]);
@@ -832,7 +856,10 @@ impl Module {
                     inst_id += 1;
                 }
             }
-            match b.term.expect("unterminated block") {
+            let Some(term) = b.term else {
+                return Err(ShaderError::Internal("a block left unterminated".into()));
+            };
+            match term {
                 Term::Ret => w.record(10, &[]),
                 Term::Br(t) => w.record(11, &[target(t)]),
                 Term::CondBr(c, t, f) => {
@@ -842,9 +869,9 @@ impl Module {
                 }
             }
         }
-        w.exit();
-        w.exit();
-        w.finish()
+        w.exit()?;
+        w.exit()?;
+        Ok(w.finish())
     }
 }
 
@@ -967,11 +994,14 @@ impl Writer {
         self.stack.push((width, self.words.len()));
     }
 
-    fn exit(&mut self) {
+    fn exit(&mut self) -> Result<(), ShaderError> {
         self.emit(0, self.width()); // END_BLOCK
         self.align();
-        let (_, start) = self.stack.pop().expect("open block");
+        let Some((_, start)) = self.stack.pop() else {
+            return Err(ShaderError::Internal("a bitcode block closed twice".into()));
+        };
         self.words[start - 1] = (self.words.len() - start) as u32;
+        Ok(())
     }
 
     /// An unabbreviated record.
@@ -1003,7 +1033,7 @@ mod tests {
         let mut w = Writer::default();
         w.enter(8, 3);
         w.record(1, &[1]);
-        w.exit();
+        w.exit().unwrap();
         let bytes = w.finish();
         // header word, length word, one record word, end word.
         assert_eq!(bytes.len() % 4, 0);
@@ -1169,7 +1199,7 @@ mod tests {
             m.set_phi(i, vec![(z, entry), (next, latch)]);
             let _ = m.call(exit, f, vec![next]);
             m.terminate(exit, Term::Ret);
-            m.write()
+            m.write().unwrap()
         };
         assert_eq!(build(false), build(true));
     }
@@ -1190,7 +1220,7 @@ mod tests {
             ((64, 64, 64), 38_916, 0x9586_730c_f953_4a45),
             ((128, 256, 32), 295_952, 0x89e5_de2d_64f0_8785),
         ] {
-            let bytes = synthetic(regs, stages, read).write();
+            let bytes = synthetic(regs, stages, read).write().unwrap();
             assert_eq!((bytes.len(), fnv(&bytes)), (len, hash), "{regs}x{stages}");
         }
     }
@@ -1200,11 +1230,11 @@ mod tests {
     fn bench_write() {
         for (regs, stages, read) in [(64, 64, 64), (128, 256, 32), (256, 512, 256)] {
             let m = synthetic(regs, stages, read);
-            let bytes = m.write();
+            let bytes = m.write().unwrap();
             let runs = 5;
             let t = std::time::Instant::now();
             for _ in 0..runs {
-                std::hint::black_box(m.write());
+                std::hint::black_box(m.write().unwrap());
             }
             let per = t.elapsed() / runs;
             println!(

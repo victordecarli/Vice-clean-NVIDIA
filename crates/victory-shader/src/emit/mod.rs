@@ -1909,7 +1909,7 @@ mod tests {
             s.op(b, "storeOutput.f32", Attr::NoUnwind, s.t.void, 5, &args);
         }
         s.m.terminate(b, super::bitcode::Term::Ret);
-        s.finish()
+        s.finish().unwrap()
     }
 
     #[test]
@@ -3062,7 +3062,7 @@ mod barycentric_tests {
         s.m.terminate(s.entry, Term::Ret);
         let vs = HostShader {
             stage: HwStage::Vs,
-            dxil: s.finish(),
+            dxil: s.finish().unwrap(),
             user_data: Vec::new(),
             samplers: Vec::new(),
             static_samplers: Vec::new(),

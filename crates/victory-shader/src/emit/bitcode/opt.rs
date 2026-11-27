@@ -1233,7 +1233,7 @@ mod tests {
         m.terminate(b, Term::Ret);
         m.optimise(DEAD);
         assert_eq!(body(&m, b), 3, "the load, the add and the store");
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1259,7 +1259,7 @@ mod tests {
         assert_eq!(m.blocks[head].phis.len(), 1, "the counter");
         assert_eq!(body(&m, head), 2, "the step and the test");
         assert_eq!(body(&m, exit), 1);
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1283,7 +1283,7 @@ mod tests {
             panic!("a call");
         };
         assert_eq!(k.m.funcs[f as usize].name, "dx.op.barrier");
-        k.m.write();
+        k.m.write().unwrap();
     }
 
     /// The operands of each store left in block `b`.
@@ -1339,7 +1339,7 @@ mod tests {
         let minus4 = m.i32(-4i32 as u32);
         let stores = stores(&m, b);
         assert_eq!(stores, [vec![x, four], vec![minus4, wide]]);
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1371,7 +1371,7 @@ mod tests {
         // selects are gone.
         assert_eq!(body(&m, b), 6);
         assert_eq!(stores(&m, b), [[xy, p]]);
-        m.write();
+        m.write().unwrap();
     }
 
     /// entry: `c = x < y`, branch to `then` or `other`, which join.
@@ -1419,7 +1419,7 @@ mod tests {
         assert_eq!(body(&m, then), 2);
         assert_eq!(body(&m, other), 2);
         assert_eq!(body(&m, join), 2);
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1450,7 +1450,7 @@ mod tests {
         assert_eq!(stores(&m, other), [[y, y]]);
         assert_eq!(body(&m, join), 2);
         let _ = both;
-        m.write();
+        m.write().unwrap();
 
         // Both terms of an `and` that held hold behind it.
         let Diamond { k: Kit { mut m, b, reads, writes, .. }, x, y, c, .. } = diamond();
@@ -1471,7 +1471,7 @@ mod tests {
         m.optimise(FOLD | FACTS);
         assert_eq!(stores(&m, inner), [[x, x]]);
         assert_eq!(body(&m, out), 2);
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1500,7 +1500,7 @@ mod tests {
         let Op::Phi(incoming) = &m.insts[m.blocks[join].phis[0] as usize].op else { panic!() };
         assert_eq!(incoming, &vec![(x, meet), (y, other)]);
         let _ = b;
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1535,7 +1535,7 @@ mod tests {
         );
         assert_eq!(stores[2], [top, top]);
         assert_eq!(super::tests::stores(&m, then), [vec![below, below], vec![top, top]]);
-        m.write();
+        m.write().unwrap();
     }
 
     #[test]
@@ -1562,7 +1562,7 @@ mod tests {
         let stores = stores(&m, join);
         assert_eq!(stores[0], [x, p]);
         assert_eq!(stores[1][1], p);
-        m.write();
+        m.write().unwrap();
     }
 
     // ---- the passes against an interpreter, on random programs ----
@@ -2026,7 +2026,7 @@ mod tests {
                     let left: usize = m.blocks.iter().map(|b| b.body.len() + b.phis.len()).sum();
                     removed += written - left;
                 }
-                m.write();
+                m.write().unwrap();
             }
         }
         // The programs are of the wasteful kind: the passes find work.

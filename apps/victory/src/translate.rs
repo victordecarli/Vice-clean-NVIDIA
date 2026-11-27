@@ -298,7 +298,7 @@ pub fn run(
                                 .then(|| Validator::load(dll.as_deref()).ok())
                                 .flatten(),
                             host: pipelines
-                                .then(|| Host::new(false).ok().map(|h| (h, host::stub_ps())))
+                                .then(|| Host::new(false).ok().zip(host::stub_ps().ok()))
                                 .flatten(),
                         };
                         while let Some(job) = jobs.get(next.fetch_add(1, Ordering::Relaxed)) {
