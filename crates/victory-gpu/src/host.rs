@@ -1084,6 +1084,33 @@ pub(crate) fn warp_adapter() -> windows::core::Result<IDXGIAdapter> {
     }
 }
 
+/// The round of the heaps' records a submission works with: the one begun
+/// first (`first`) unless it waited for flights, whose landings came after
+/// it; else the round of `mark` (`crate::heap_marks`), or one begun now.
+fn heaps_round(
+    first: Option<crate::descriptor::SyncedHeaps>,
+    mark: u64,
+    waited_for_flights: bool,
+) -> crate::descriptor::SyncedHeaps {
+    match first {
+        Some(first) if !waited_for_flights => {
+            HEAP_SYNC_FIRST[0].fetch_add(1, Ordering::Relaxed);
+            first
+        }
+        first => {
+            if let Some(first) = first {
+                HEAP_SYNC_FIRST[1].fetch_add(1, Ordering::Relaxed);
+                let _ = std::mem::ManuallyDrop::new(first);
+            }
+            if mark != 0 && !waited_for_flights {
+                crate::descriptor::begin_sync_heaps_after(mark)
+            } else {
+                crate::descriptor::begin_sync_heaps()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// A list of ours is found by its name, with the debug layer's note or not.
@@ -5755,6 +5782,65 @@ impl Host {
         number
     }
 
+    /// A submission's wait for the flights it reads from: all of them for
+    /// one that is waited for (not `late`); for one sent ahead, those that
+    /// write what its lists read, unless the card does those reads
+    /// (`card_reads`). Whether it waited for flights.
+    fn wait_for_flights(
+        &self,
+        submitted: &mut u64,
+        runs: &[&HostList],
+        late: bool,
+        card_reads: bool,
+    ) -> bool {
+        if !late {
+            self.settle(submitted, WHY_SYNC);
+            return false;
+        }
+        if card_reads {
+            return false;
+        }
+        let Some(why) = late_blocked(runs) else {
+            return false;
+        };
+        if relay_exact() && why == WHY_READ {
+            // Only until the flights that may write what is read have
+            // landed: their copy-back's end, not the card's other work.
+            relay_wait(why, |line| {
+                blocked_by(&line.written, runs, false).is_none()
+                    && !card_steps::copied_read(&card_steps::copies(line), runs)
+            });
+        } else {
+            self.settle(submitted, why);
+        }
+        true
+    }
+
+    /// The sweep, before a submission counts as started: what it lets go of
+    /// is named by no list, and nothing runs now. Behind flights it waits
+    /// for a submission that finds none in the air (there is one at every
+    /// present), or, with the present sent ahead, makes such a moment once
+    /// in 1.5 s.
+    fn sweep_at_rest(&self, submitted: &mut u64, behind: bool) {
+        static SWEPT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if !behind {
+            if upcheck::on() {
+                upcheck::at_rest(self);
+            }
+            sweep();
+            SWEPT.store(now_ms(), Ordering::Relaxed);
+        } else if late_free_present() && now_ms() > SWEPT.load(Ordering::Relaxed) + 1500 {
+            // With the present sent ahead nothing else brings a moment
+            // with nothing in the air: one is made for the sweep.
+            self.settle(submitted, WHY_SYNC);
+            if upcheck::on() {
+                upcheck::at_rest(self);
+            }
+            sweep();
+            SWEPT.store(now_ms(), Ordering::Relaxed);
+        }
+    }
+
     /// Waits for the card to run every flight in the air ([`late`]) and
     /// does what they left to do, as [`Host::execute`] does for one
     /// submission after its wait: the pieces their shaders wrote in copies
@@ -6006,24 +6092,7 @@ impl Host {
         let own = if late { self.card_steps(runs) } else { None };
         ahead.part(12);
         stage.next("submit: waiting for flights it reads from");
-        let mut waited_for_flights = false;
-        if !late {
-            self.settle(&mut submitted, WHY_SYNC);
-        } else if own.is_none()
-            && let Some(why) = late_blocked(runs)
-        {
-            waited_for_flights = true;
-            if relay_exact() && why == WHY_READ {
-                // Only until the flights that may write what is read have
-                // landed: their copy-back's end, not the card's other work.
-                relay_wait(why, |line| {
-                    blocked_by(&line.written, runs, false).is_none()
-                        && !card_steps::copied_read(&card_steps::copies(line), runs)
-                });
-            } else {
-                self.settle(&mut submitted, why);
-            }
-        }
+        let waited_for_flights = self.wait_for_flights(&mut submitted, runs, late, own.is_some());
         ahead.part(13);
         // Descriptors the title copied into placed heaps directly, before
         // command lists that index those slots are submitted. (Begun first:
@@ -6031,23 +6100,7 @@ impl Host {
         // as the round began here saw them; the first is not waited for.)
         // With a mark (`crate::heap_marks`): that round, unless the
         // submission waited for flights, whose landings came after it.
-        let heaps_synced = match first_heaps {
-            Some(first) if !waited_for_flights => {
-                HEAP_SYNC_FIRST[0].fetch_add(1, Ordering::Relaxed);
-                first
-            }
-            first => {
-                if let Some(first) = first {
-                    HEAP_SYNC_FIRST[1].fetch_add(1, Ordering::Relaxed);
-                    let _ = std::mem::ManuallyDrop::new(first);
-                }
-                if heaps_mark != 0 && !waited_for_flights {
-                    crate::descriptor::begin_sync_heaps_after(heaps_mark)
-                } else {
-                    crate::descriptor::begin_sync_heaps()
-                }
-            }
-        };
+        let heaps_synced = heaps_round(first_heaps, heaps_mark, waited_for_flights);
         // That list runs first, and is one of the submission's from here on.
         let with: Vec<&HostList>;
         let runs = match &own {
@@ -6067,23 +6120,7 @@ impl Host {
         // of is named by no list, and nothing runs now (behind flights the
         // sweep waits for a submission that finds none in the air: there is
         // one at every present).
-        static SWEPT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        if !behind {
-            if upcheck::on() {
-                upcheck::at_rest(self);
-            }
-            sweep();
-            SWEPT.store(now_ms(), Ordering::Relaxed);
-        } else if late_free_present() && now_ms() > SWEPT.load(Ordering::Relaxed) + 1500 {
-            // With the present sent ahead nothing else brings a moment
-            // with nothing in the air: one is made for the sweep.
-            self.settle(&mut submitted, WHY_SYNC);
-            if upcheck::on() {
-                upcheck::at_rest(self);
-            }
-            sweep();
-            SWEPT.store(now_ms(), Ordering::Relaxed);
-        }
+        self.sweep_at_rest(&mut submitted, behind);
         let behind = late && flying();
         stage.next("submit: gathering what to ask about");
         let this_submission = STARTED.fetch_add(1, Ordering::AcqRel) + 1;
