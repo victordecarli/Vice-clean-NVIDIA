@@ -2427,8 +2427,8 @@ fn dword_runs(at: usize, title: &[u8], merged: &[u8], gap: usize) -> Vec<(usize,
 /// 12 MB this way and finds 80,000 runs.
 fn word_runs(at: usize, title: &[u8], held: &[u8]) -> Vec<(usize, usize)> {
     #[cfg(target_arch = "x86_64")]
-    if at % 4 == 0
-        && title.len() % 4 == 0
+    if at.is_multiple_of(4)
+        && title.len().is_multiple_of(4)
         && title.len() == held.len()
         && std::arch::is_x86_feature_detected!("avx2")
     {
@@ -5313,7 +5313,7 @@ mod land_tests {
             });
             let mut now = vec![0u8; LEN];
             for round in 1..200u32 {
-                for block in (0..BLOCKS).filter(|b| (*b as u32 * 5 + round) % 3 != 0) {
+                for block in (0..BLOCKS).filter(|b| !(*b as u32 * 5 + round).is_multiple_of(3)) {
                     for i in (block * PIECE / 4 + 3..(block + 1) * PIECE / 4).step_by(4) {
                         now[i * 4..i * 4 + 4]
                             .copy_from_slice(&(round << 20 | i as u32).to_le_bytes());

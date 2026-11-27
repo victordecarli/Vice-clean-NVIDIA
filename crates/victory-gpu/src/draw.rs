@@ -1985,7 +1985,7 @@ impl State {
                 } else {
                     crate::memory::Use::Reads
                 };
-                let Some(ready) = self.memory_ready(list, &t, compute, use_) else {
+                let Some(ready) = self.memory_ready(list, t, compute, use_) else {
                     once!(
                         "a shader that reads title memory by address without a view heap to hold its views: the draw is dropped"
                     );
@@ -4531,7 +4531,7 @@ impl State {
             if draws > 0 {
                 let mut rects: Vec<([i32; 4], u32)> =
                     census.1.iter().map(|(r, n)| (*r, *n)).collect();
-                rects.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+                rects.sort_unstable_by_key(|a| std::cmp::Reverse(a.1));
                 let scissors: Vec<String> = rects
                     .iter()
                     .take(5)

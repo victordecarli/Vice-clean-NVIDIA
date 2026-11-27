@@ -381,8 +381,10 @@ mod tests {
                     format!("other.dll {:x}\nT.dll 0x{at:x}\nt.dll {at:x}\nt.dll 5\nt.dll\n", at);
                 assert_eq!(apply("t.dll", second, 0x1000, &list), 1);
                 assert_eq!(std::ptr::read((second + at) as *const u8), 0xe9);
-                let (plain, changed): (F, F) =
-                    (std::mem::transmute(place), std::mem::transmute(second));
+                let (plain, changed): (F, F) = (
+                    std::mem::transmute::<usize, F>(place),
+                    std::mem::transmute::<usize, F>(second),
+                );
                 for was in 0..=255u8 {
                     let mut bytes = [[0u8; 0x40]; 2];
                     bytes[0][0x31] = was;
@@ -471,8 +473,10 @@ mod tests {
                 if size == 0 {
                     continue;
                 }
-                let (plain, changed): (F, F) =
-                    (std::mem::transmute(place), std::mem::transmute(second));
+                let (plain, changed): (F, F) = (
+                    std::mem::transmute::<usize, F>(place),
+                    std::mem::transmute::<usize, F>(second),
+                );
                 let data =
                     VirtualAlloc(std::ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
                         as *mut u8;
