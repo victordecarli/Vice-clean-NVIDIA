@@ -57,7 +57,7 @@ impl Cache {
         let output = converter
             .convert(input)
             .with_context(|| format!("converter {} v{}", converter.id(), converter.version()))?;
-        let dir = path.parent().expect("hashed path has a parent");
+        let dir = path.parent().context("hashed path has no parent")?;
         std::fs::create_dir_all(dir)?;
         // Write-then-rename so readers never see partial output.
         let (tmp, mut file) = tempfile_in(dir)?;

@@ -274,7 +274,8 @@ fn find_real() {
         let module = unsafe { GetModuleHandleA(dll.as_ptr().cast()) };
         for (name, at, _) in &TABLE {
             if at.load(Ordering::Relaxed) == 0 && !module.is_null() {
-                let text = std::ffi::CString::new(*name).expect("a plain name");
+                // An identifier, so no NUL inside.
+                let text: Vec<u8> = name.bytes().chain([0]).collect();
                 // SAFETY: as above.
                 if let Some(f) = unsafe { GetProcAddress(module, text.as_ptr().cast()) } {
                     at.store(f as *const () as usize, Ordering::Relaxed);

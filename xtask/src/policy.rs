@@ -203,7 +203,7 @@ mod tests {
     /// Enforces the policy wherever tests run, even in clones without the hook.
     #[test]
     fn repository_passes_policy() {
-        super::run(&crate::workspace_root(), false).unwrap();
+        super::run(&crate::workspace_root().unwrap(), false).unwrap();
     }
 
     #[test]

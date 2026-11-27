@@ -471,8 +471,8 @@ impl Store {
         match self.op {
             Op::Put(bytes) => Some((there[..self.size] == bytes[..self.size], c.EFlags)),
             Op::Alu { alu, with, keeps } => {
-                let was = u64::from_le_bytes(there[..8].try_into().expect("eight bytes"))
-                    & mask(self.size);
+                let (head, _) = there.split_first_chunk()?;
+                let was = u64::from_le_bytes(*head) & mask(self.size);
                 let (value, flags) = arithmetic(alu, was, with, self.size, keeps, c.EFlags);
                 Some((value == was, flags))
             }

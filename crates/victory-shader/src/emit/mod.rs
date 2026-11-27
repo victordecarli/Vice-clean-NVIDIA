@@ -1074,7 +1074,9 @@ fn vertex_output_interpolation(
         Ok(head)
     }
     fn size(data: &mut &[u8]) -> Result<usize, ShaderError> {
-        Ok(u32::from_le_bytes(take(data, 4)?.try_into().unwrap()) as usize)
+        let (head, tail) = data.split_first_chunk().ok_or(TRUNCATED)?;
+        *data = tail;
+        Ok(u32::from_le_bytes(*head) as usize)
     }
     let info_size = size(&mut data)?;
     let info = take(&mut data, info_size)?;

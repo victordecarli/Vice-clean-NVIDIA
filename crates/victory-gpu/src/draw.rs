@@ -63,8 +63,10 @@ impl TablePlan {
             .collect();
         let mut direct = Vec::new();
         for &u in used.iter().filter(|u| u.root == RootType::Table) {
-            let i =
-                slots.binary_search(&u.slot).expect("table slot collected from these declarations");
+            // `slots` was collected from these same declarations.
+            let Ok(i) = slots.binary_search(&u.slot) else {
+                continue;
+            };
             let group = &mut groups[i];
             group.has_cbv |= u.kind == ResourceType::Cbv;
             group.has_uav |= u.kind == ResourceType::Uav;

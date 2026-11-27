@@ -285,8 +285,6 @@ struct Lower<'a> {
     /// In the instruction being lowered: the host copy its root view's bytes
     /// are in ([`Lower::root_memory`]).
     root_copy: Option<V>,
-    /// Whether the page [`Lower::memory`] last looked for has a copy.
-    page_there: Option<V>,
     mask_phis: HashMap<Value, V>,
     pending_masks: Vec<(V, usize, usize)>,
     data_phis: Vec<(V, usize, usize)>,
@@ -1943,7 +1941,6 @@ impl<'a> Lower<'a> {
             stale: HashSet::new(),
             coherent: HashSet::new(),
             root_copy: None,
-            page_there: None,
             ordered: if x.native.stage == HwStage::Ps {
                 ordered_section(p)
             } else {
@@ -3327,6 +3324,12 @@ impl<'a> Lower<'a> {
     /// With `store`, a page that is not to be written ([`super::shader::MEMORY_READ_ONLY`])
     /// is the null view.
     fn memory(&mut self, lo: V, hi: V, guard: Option<V>, store: bool) -> (V, V) {
+        let (h, byte, _) = self.memory_there(lo, hi, guard, store);
+        (h, byte)
+    }
+
+    /// [`Lower::memory`], and whether the page has a copy.
+    fn memory_there(&mut self, lo: V, hi: V, guard: Option<V>, store: bool) -> (V, V, V) {
         use super::shader::{
             MEMORY_FAULTS, MEMORY_PAGES, MEMORY_READ_ONLY, SLOT_FAULTS, SLOT_MEMORY,
             USER_MEMORY_BASE,
@@ -3389,7 +3392,7 @@ impl<'a> Lower<'a> {
         );
         self.end_guarded(noting, &[]);
         let c = self.cur;
-        self.page_there = Some(self.s.m.cmp(c, pred::NE, copy, zero));
+        let there = self.s.m.cmp(c, pred::NE, copy, zero);
         let copy = if store {
             let closed = self.s.m.cmp(c, pred::SLT, number, zero);
             self.s.m.select(c, closed, zero, copy)
@@ -3405,7 +3408,7 @@ impl<'a> Lower<'a> {
         let k64k = k(self, 0xFFFF);
         let within = self.s.m.bin(c, Bin::And, lo, k64k);
         let byte = self.s.m.bin(c, Bin::Add, start, within);
-        (h, byte)
+        (h, byte, there)
     }
 
     /// The title address in the root view `src` is built around, in a program
@@ -7648,8 +7651,10 @@ impl<'a> Lower<'a> {
                 continue;
             }
             match arg {
-                Source::Constant(w) if w.len() >= 4 => {
-                    let k: [u32; 4] = w[..4].try_into().unwrap();
+                Source::Constant(w) => {
+                    let Some(&k) = w.first_chunk::<4>() else {
+                        return Err(WHY);
+                    };
                     if !distinct.contains(&k) {
                         distinct.push(k);
                     }
@@ -7681,8 +7686,10 @@ impl<'a> Lower<'a> {
             let tail = self.tail[q].ok_or(WHY)?;
             let at = self.edges.get(&(q, block)).copied().unwrap_or(tail);
             let idx = match arg {
-                Source::Constant(w) if w.len() >= 4 => {
-                    let k: [u32; 4] = w[..4].try_into().unwrap();
+                Source::Constant(w) => {
+                    let Some(&k) = w.first_chunk::<4>() else {
+                        return Err(WHY);
+                    };
                     let pos = distinct.iter().position(|d| *d == k).ok_or(WHY)? as u32;
                     self.s.m.i32(lower + pos)
                 }

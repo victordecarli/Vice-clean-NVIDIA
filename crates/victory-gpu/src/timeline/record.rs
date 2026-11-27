@@ -605,7 +605,10 @@ pub(super) fn make_room() {
         return;
     }
     fn zeroed<T>(n: usize) -> *mut T {
-        let layout = std::alloc::Layout::array::<T>(n).expect("a small number");
+        // Too large a count is an allocation that fails.
+        let Ok(layout) = std::alloc::Layout::array::<T>(n) else {
+            return std::ptr::null_mut();
+        };
         // SAFETY: not of no size.
         unsafe { std::alloc::alloc_zeroed(layout) }.cast()
     }

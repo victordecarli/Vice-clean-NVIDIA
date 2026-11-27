@@ -63,7 +63,7 @@ pub(crate) struct Shader {
     #[cfg(windows)]
     pub(crate) ambient: Option<crate::ambient::Role>,
     #[cfg(windows)]
-    translated: OnceLock<Option<Translated>>,
+    translated: OnceLock<Option<Arc<Translated>>>,
 }
 
 impl std::fmt::Debug for Shader {
@@ -148,43 +148,49 @@ impl Shader {
     /// The translation, made on first use; a shader that does not
     /// translate is logged once.
     pub(crate) fn translated(&self) -> Option<&Translated> {
-        self.translated
-            .get_or_init(|| {
-                let done = translate(&self.container);
-                // `VICTORY_SHADER_SAVE=<dir>`: each shader as the title gave it (`.cdxil`) and as
-                // translated (`.dxil`), by the hash crash reports name it with
-                if let Some(dir) = std::env::var_os("VICTORY_SHADER_SAVE") {
-                    let dir = std::path::PathBuf::from(dir);
-                    let _ = std::fs::create_dir_all(&dir);
-                    let stem = format!("{}.{}", self.hash, self.stage);
-                    let _ = std::fs::write(dir.join(format!("{stem}.cdxil")), &self.container);
-                    if let Ok(t) = &done {
-                        let _ = std::fs::write(dir.join(format!("{stem}.dxil")), &t.host.dxil);
-                    }
-                }
+        self.translation().as_deref()
+    }
+
+    /// [`Shader::translated`], shared.
+    pub(crate) fn translated_shared(&self) -> Option<Arc<Translated>> {
+        self.translation().clone()
+    }
+
+    fn translation(&self) -> &Option<Arc<Translated>> {
+        self.translated.get_or_init(|| {
+            let done = translate(&self.container);
+            // `VICTORY_SHADER_SAVE=<dir>`: each shader as the title gave it (`.cdxil`) and as
+            // translated (`.dxil`), by the hash crash reports name it with
+            if let Some(dir) = std::env::var_os("VICTORY_SHADER_SAVE") {
+                let dir = std::path::PathBuf::from(dir);
+                let _ = std::fs::create_dir_all(&dir);
+                let stem = format!("{}.{}", self.hash, self.stage);
+                let _ = std::fs::write(dir.join(format!("{stem}.cdxil")), &self.container);
                 if let Ok(t) = &done {
-                    KEPT[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    KEPT[3]
-                        .fetch_add(t.host.dxil.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    let _ = std::fs::write(dir.join(format!("{stem}.dxil")), &t.host.dxil);
                 }
-                match &done {
-                    Ok(t) => tracing::info!(
-                        stage = self.stage,
-                        hash = %self.hash,
-                        user_data = t.host.user_data.len(),
-                        samplers = t.host.samplers.len(),
-                        "shader translated"
-                    ),
-                    Err(e) => tracing::warn!(
-                        stage = self.stage,
-                        hash = %self.hash,
-                        error = %e,
-                        "shader does not translate; its pipelines' draws are dropped"
-                    ),
-                }
-                done.ok()
-            })
-            .as_ref()
+            }
+            if let Ok(t) = &done {
+                KEPT[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                KEPT[3].fetch_add(t.host.dxil.len() as u64, std::sync::atomic::Ordering::Relaxed);
+            }
+            match &done {
+                Ok(t) => tracing::info!(
+                    stage = self.stage,
+                    hash = %self.hash,
+                    user_data = t.host.user_data.len(),
+                    samplers = t.host.samplers.len(),
+                    "shader translated"
+                ),
+                Err(e) => tracing::warn!(
+                    stage = self.stage,
+                    hash = %self.hash,
+                    error = %e,
+                    "shader does not translate; its pipelines' draws are dropped"
+                ),
+            }
+            done.ok().map(Arc::new)
+        })
     }
 }
 

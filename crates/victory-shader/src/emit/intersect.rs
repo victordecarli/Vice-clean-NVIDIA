@@ -215,9 +215,7 @@ impl<'a> Lower<'a> {
             let at = self.s.m.select(c, inside, at, outside);
             return (handle, at, inside);
         }
-        let (handle, byte) = self.memory(low, high, guard, false);
-        let mapped = self.page_there.expect("memory says");
-        (handle, byte, mapped)
+        self.memory_there(low, high, guard, false)
     }
 
     /// The second 64 bytes of a 128-byte node: in a page, and in a copy, of

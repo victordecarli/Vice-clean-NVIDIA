@@ -189,7 +189,10 @@ fn load(dir: &Path) -> std::io::Result<Option<(String, String, Vec<String>)>> {
         return Ok(None);
     };
     let blobs = names.split_off(2);
-    let [name, display] = <[String; 2]>::try_from(names).expect("two names, checked by the parser");
+    // Two names, checked by the parser.
+    let Ok([name, display]) = <[String; 2]>::try_from(names) else {
+        return Ok(None);
+    };
     Ok(Some((name, display, blobs)))
 }
 

@@ -86,9 +86,7 @@ pub fn records(file: &[u8]) -> impl Iterator<Item = Record<'_>> {
 }
 
 fn record(file: &[u8], at: usize) -> Option<Record<'_>> {
-    let u32_at = |o: usize| {
-        file.get(o..o + 4).map(|b| u32::from_le_bytes(b.try_into().expect("4 bytes")) as usize)
-    };
+    let u32_at = |o: usize| file.get(o..)?.first_chunk().map(|b| u32::from_le_bytes(*b) as usize);
     let n = u32_at(at.checked_sub(4)?)?;
     let unpacked_size = u32_at(at + 8)?;
     if u32_at(at + 4)? != n || n < 12 || unpacked_size > MAX_UNPACKED {

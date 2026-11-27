@@ -622,11 +622,11 @@ fn translate_programs(
                 };
                 if let (Some(r), Some(i), Some(s)) = (res, raised, structured) {
                     let label = || format!("{} {:?}", example(), p.stage);
-                    *counter(t, p.stage, 0) += 1;
+                    *counter(t, p.stage, Count::Programs) += 1;
                     match emit::emit(container, &p, &program, &s, &i, &r) {
                         Ok(shader) => {
                             census_line(&label(), &p, &program, &shader);
-                            *counter(t, p.stage, 1) += 1;
+                            *counter(t, p.stage, Count::Emitted) += 1;
                             check(shader, t, checks, label);
                         }
                         Err(ShaderError::Unsupported { offset, what }) => t
@@ -733,7 +733,7 @@ fn check(
         };
         match made {
             Ok(()) => {
-                *counter(t, shader.stage, 3) += 1;
+                *counter(t, shader.stage, Count::Pipelines) += 1;
                 if t.list {
                     t.lines.push(format!("{}  pipeline created", label()));
                 }
@@ -749,7 +749,7 @@ fn check(
     };
     match v.validate(&mut shader.dxil) {
         Ok(()) => {
-            *counter(t, shader.stage, 2) += 1;
+            *counter(t, shader.stage, Count::Validated) += 1;
             if t.list {
                 t.lines.push(format!("{}  validated", label()));
             }
@@ -780,9 +780,17 @@ fn check(
     }
 }
 
-/// Emission counts of `stage`'s kind: 0 programs, 1 emitted, 2 validated,
-/// 3 pipelines.
-fn counter(t: &mut Tally, stage: HwStage, k: usize) -> &mut usize {
+/// One of the emission counts kept per kind of stage.
+#[derive(Clone, Copy)]
+enum Count {
+    Programs,
+    Emitted,
+    Validated,
+    Pipelines,
+}
+
+/// Emission count `k` of `stage`'s kind.
+fn counter(t: &mut Tally, stage: HwStage, k: Count) -> &mut usize {
     let [a, b, c, d] = match stage {
         HwStage::Cs => {
             [&mut t.cs_programs, &mut t.cs_emitted, &mut t.cs_validated, &mut t.cs_pipelines]
@@ -792,7 +800,12 @@ fn counter(t: &mut Tally, stage: HwStage, k: usize) -> &mut usize {
         }
         _ => [&mut t.emit_programs, &mut t.emitted, &mut t.validated, &mut t.pipelines],
     };
-    [a, b, c, d].into_iter().nth(k).expect("0 to 3")
+    match k {
+        Count::Programs => a,
+        Count::Emitted => b,
+        Count::Validated => c,
+        Count::Pipelines => d,
+    }
 }
 
 fn tally_io(r: &io::Io, t: &mut Tally) {

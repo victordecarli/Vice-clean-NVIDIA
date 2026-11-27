@@ -247,7 +247,9 @@ fn assemble(digits: &[u8; 32]) -> Guid {
 /// pointer back through either free (A or W) releases the whole thing.
 fn allocate(bytes: &[u8]) -> *mut u8 {
     let len = 8 + bytes.len();
-    let layout = std::alloc::Layout::from_size_align(len, 8).expect("a small allocation");
+    let Ok(layout) = std::alloc::Layout::from_size_align(len, 8) else {
+        return std::ptr::null_mut();
+    };
     // SAFETY: a fresh allocation of `len` bytes.
     unsafe {
         let base = std::alloc::alloc(layout);
@@ -273,7 +275,9 @@ fn free(pointer: *mut *mut c_void) {
         }
         let base = at.cast::<u8>().sub(8);
         let len = base.cast::<u64>().read_unaligned() as usize;
-        let layout = std::alloc::Layout::from_size_align(8 + len, 8).expect("a small allocation");
+        let Ok(layout) = std::alloc::Layout::from_size_align(8 + len, 8) else {
+            return;
+        };
         std::alloc::dealloc(base, layout);
         pointer.write(std::ptr::null_mut());
     }

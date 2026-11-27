@@ -34,7 +34,7 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
-    let root = workspace_root();
+    let root = workspace_root()?;
     match Cli::parse().command {
         Cmd::Policy { staged } => policy::run(&root, staged),
         Cmd::InstallHooks => {
@@ -50,6 +50,9 @@ fn main() -> Result<()> {
     }
 }
 
-fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask lives in the workspace").into()
+fn workspace_root() -> Result<PathBuf> {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .context("xtask's manifest directory has no parent (the workspace root)")
 }
