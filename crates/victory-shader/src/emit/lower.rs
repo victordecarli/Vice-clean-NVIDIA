@@ -1,4 +1,4 @@
-//! IR to DXIL, one machine instruction at a time (decision 0003).
+//! IR to DXIL, one machine instruction at a time.
 //!
 //! Every register dword is an `i32` (SCC an `i1`); float operations bitcast
 //! their operands. Lane masks exist only as the per-lane booleans of

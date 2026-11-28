@@ -1126,7 +1126,7 @@ struct Resource {
     heap: HeapProperties,
     heap_flags: u32,
     backing: Backing,
-    /// Textures also live on the host GPU (decision 0007); buffers do not
+    /// Textures also live on the host GPU; buffers do not
     /// yet. With, for a depth texture the title also writes as unordered
     /// access, the colour texture shaders write instead ([`Twin`]).
     #[cfg(windows)]

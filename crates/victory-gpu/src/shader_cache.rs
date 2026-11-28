@@ -1,4 +1,4 @@
-//! Translated shaders kept on disk (decision 0003): under the configured
+//! Translated shaders kept on disk: under the configured
 //! cache folder, keyed by the container's content and by the translator
 //! (the BLAKE3 of its sources) and its settings, so a changed translator
 //! never serves an old translation. Entries go through

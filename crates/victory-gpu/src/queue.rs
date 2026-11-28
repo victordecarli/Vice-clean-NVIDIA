@@ -570,7 +570,7 @@ extern "system" fn release(this: This) -> u32 {
     left
 }
 
-/// Runs the lists' host lists and waits for them (decision 0007). A queue
+/// Runs the lists' host lists and waits for them. A queue
 /// that waits for a fence keeps them until the fence is reached.
 extern "system" fn execute(this: This, count: u32, lists: *const This) {
     if lists.is_null() {

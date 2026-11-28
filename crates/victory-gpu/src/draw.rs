@@ -1,4 +1,4 @@
-//! Draws on the host GPU (decision 0007, step 3). A list keeps the state
+//! Draws on the host GPU. A list keeps the state
 //! the title sets for its draws (pipeline, descriptor heaps, root
 //! arguments, vertex and index buffers, targets); each draw then brings the
 //! host list up to date: the host pipeline and our root signature, the

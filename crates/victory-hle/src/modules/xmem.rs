@@ -137,7 +137,7 @@ pub extern "system" fn XMemVirtualAlloc(
     if constrained {
         kind |= MEM_RESERVE;
         // The GPU side copies only the pages the title wrote since its last
-        // copy (`victory_gpu`, decision 0007); placeholders cannot be
+        // copy (`victory_gpu`); placeholders cannot be
         // watched (their physical-page views are copied whole).
         if kind & MEM_RESERVE_PLACEHOLDER == 0 {
             kind |= MEM_WRITE_WATCH;

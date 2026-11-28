@@ -1,4 +1,4 @@
-//! I/O raising (decision 0003): what a program's input registers, its
+//! I/O raising: what a program's input registers, its
 //! interpolation and its exports mean.
 //!
 //! Pixel shaders get the VGPRs `SPI_PS_INPUT_ADDR` enables, in a fixed

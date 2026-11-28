@@ -1,4 +1,4 @@
-//! DXIL emission (decision 0003, step 3): a console vertex, pixel, compute
+//! DXIL emission, translation's last stage: a console vertex, pixel, compute
 //! or mesh shader as a PC DXIL container (SM 6.6) that host D3D12 accepts.
 //! Compute shaders keep the console's thread-group size; one that depends
 //! on the lane layout (cross-lane operations) declares the console's wave

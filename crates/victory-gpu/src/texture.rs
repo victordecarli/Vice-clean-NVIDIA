@@ -1,9 +1,8 @@
-//! Texture contents the title writes itself (decision 0007, "Texture
-//! memory"): streamed pages, layout-library copies, movie frames, glyph
-//! atlases. Such a texture lives in console memory in its tiled layout;
-//! before a submission samples its host copy, the memory is detiled into a
-//! staging buffer when its content changed, and the staging buffer is
-//! copied into the host texture.
+//! Texture contents the title writes itself: streamed pages, layout-library
+//! copies, movie frames, glyph atlases. Such a texture lives in console memory
+//! in its tiled layout; before a submission samples its host copy, the memory
+//! is detiled into a staging buffer when its content changed, and the staging
+//! buffer is copied into the host texture.
 //!
 //! "Changed" means a page of the memory was written since the last detiling
 //! ([`crate::watch`]), in write-watched memory; in physical-page views,

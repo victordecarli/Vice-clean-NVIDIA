@@ -1,4 +1,4 @@
-//! Control-flow structurisation (decision 0003): the program as one lane
+//! Control-flow structurisation: the program as one lane
 //! runs it, without EXEC.
 //!
 //! Lane masks (EXEC, compare and carry results, the SGPRs they are saved

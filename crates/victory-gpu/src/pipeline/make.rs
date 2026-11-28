@@ -4,8 +4,7 @@
 //! biggest compute programs ~0.4 s, some driver compiles 3.4 s), and
 //! the title's first world frame wants over 1,200 new pipelines: made
 //! on its recording threads, that frame took more than 30 s and the
-//! title's GPU watchdog ended the run (decision 0007, "Pipelines made off
-//! the title's threads").
+//! title's GPU watchdog ended the run.
 //!
 //! A first use queues the pipeline and waits for it within a budget per
 //! frame, so the cheap ones (menus, one-off passes such as a colour-grading

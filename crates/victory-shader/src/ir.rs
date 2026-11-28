@@ -1,4 +1,4 @@
-//! One-to-one SSA form of a native program (decision 0003, step 1).
+//! One-to-one SSA form of a native program, the first stage of translation.
 //!
 //! Every machine instruction becomes one [`Inst`], except scheduling-only
 //! ones (`s_nop`, `s_waitcnt*`, `s_inst_prefetch`...) and redundant conditional

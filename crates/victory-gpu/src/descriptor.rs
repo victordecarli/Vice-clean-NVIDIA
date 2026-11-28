@@ -107,8 +107,8 @@ pub(crate) struct Heap {
     pub(crate) start: u64,
     memory: Option<Memory>,
     /// Shader-visible view and sampler heaps get a host heap with the same
-    /// descriptor order when a draw first uses them (decision 0007, step
-    /// 3); slots written before wait in `pending`.
+    /// descriptor order when a draw first uses them; slots written before
+    /// wait in `pending`.
     #[cfg(windows)]
     host: std::sync::OnceLock<Option<host::HostHeap>>,
     #[cfg(windows)]

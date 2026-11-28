@@ -1,4 +1,4 @@
-//! Host pipelines for title pipelines (decision 0007, step 3): the
+//! Host pipelines for title pipelines: the
 //! title's graphics state with the translated shaders, under a root
 //! signature of our own that the translated shaders' bindings define
 //! (`victory_shader::emit`): per stage one block of root constants for the

@@ -1,4 +1,4 @@
-//! The host GPU: one D3D12 device and direct queue (decision 0007), and a
+//! The host GPU: one D3D12 device and direct queue, and a
 //! window to present on.
 //!
 //! shortcut: every submission is waited for, so CPU and GPU never overlap

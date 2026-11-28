@@ -1,4 +1,4 @@
-//! Whole-wave sections (decision 0003): code between `s_or_saveexec -1`
+//! Whole-wave sections: code between `s_or_saveexec -1`
 //! (or `s_nand_saveexec 0`) and the restore of the saved mask runs in every lane of the console's
 //! wave, the inactive ones included, which is how the compiler expands
 //! HLSL wave reductions and prefix sums (an identity put into the inactive

@@ -1,5 +1,6 @@
 //! The offline batch: every shader found goes through the translator, and
-//! what it cannot handle yet is tallied (decision 0003).
+//! what it cannot handle yet is tallied by reason, so the most common gaps
+//! show what to implement next.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};

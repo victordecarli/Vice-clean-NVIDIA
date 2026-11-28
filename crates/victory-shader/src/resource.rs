@@ -1,4 +1,4 @@
-//! Resource tracking (decision 0003): where each descriptor a program uses
+//! Resource tracking: where each descriptor a program uses
 //! comes from, in terms of the root signature.
 //!
 //! Root parameters arrive in user SGPRs ([`RootParam`]): a descriptor table

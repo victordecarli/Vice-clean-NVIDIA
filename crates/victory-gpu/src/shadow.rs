@@ -1,14 +1,13 @@
-//! Host copies of title buffers (decision 0007, step 3 and "Copies of title
-//! memory"). Title buffers are title memory, which the host GPU cannot
-//! read, so a buffer a draw uses gets a persistent host buffer of its size
-//! on first use (system memory shaders may also write), and the ranges each
-//! submission reads (vertex, index and constant data, buffer views) are
-//! brought up to date from title memory before it runs: the 64 KiB pages
-//! the title wrote since they were last copied ([`crate::watch`]: write
-//! watching, or read-only guards on physical-page views), all of it where
-//! neither works. A title GPU address inside the buffer is the same offset
-//! in its copy. Ranges shaders write go back to title memory after the
-//! submission ([`Shadow::gpu_writes`]).
+//! Host copies of title buffers. Title buffers are title memory, which the host
+//! GPU cannot read, so a buffer a draw uses gets a persistent host buffer of
+//! its size on first use (system memory shaders may also write), and the ranges
+//! each submission reads (vertex, index and constant data, buffer views) are
+//! brought up to date from title memory before it runs: the 64 KiB pages the
+//! title wrote since they were last copied ([`crate::watch`]: write watching,
+//! or read-only guards on physical-page views), all of it where neither works.
+//! A title GPU address inside the buffer is the same offset in its copy. Ranges
+//! shaders write go back to title memory after the submission
+//! ([`Shadow::gpu_writes`]).
 //!
 //! shortcut: only the ranges draws are known to read are brought up to
 //! date (vertex and index buffer views, constant buffers in tables, root
