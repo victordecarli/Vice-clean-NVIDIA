@@ -655,11 +655,24 @@ fn complete_call(call: &Call, block: *mut AsyncBlock, result: HRESULT, required_
     // SAFETY: a block in flight is valid.
     let (handle, routine) = unsafe { ((*block).queue, (*block).callback) };
     let (status, size) = words(block);
-    if result < 0 || required_size == 0 {
-        release(block);
+    let ends = result < 0 || required_size == 0;
+    if ends {
+        // Cleaned up before the status, for the reason above. The call stays
+        // filed meanwhile, so a wait that begins now finds it and waits.
+        call.provider(OP_CLEANUP, block, 0, std::ptr::null_mut());
     }
-    size.store(required_size, Ordering::Release);
-    status.store(result as u32 as usize, Ordering::Release);
+    {
+        // The status is set and the call unfiled under one lock, as the
+        // GDK's open-source XAsync (libHttpClient, `XAsyncComplete`) sets
+        // them under the block's: a wait that finds no call finds the final
+        // status, never `E_PENDING`.
+        let mut calls = lock(&CALLS);
+        size.store(required_size, Ordering::Release);
+        status.store(result as u32 as usize, Ordering::Release);
+        if ends {
+            calls.remove(&(block as usize));
+        }
+    }
     *done = true;
     call.finished.notify_all();
     drop(done);
@@ -1440,6 +1453,43 @@ mod tests {
             S_OK
         );
         assert_eq!(XAsyncGetStatus(&mut block, true), E_ABORT);
+    }
+
+    /// A wait that begins while a failed call is being cleaned up waits for
+    /// its status: it used to find the call already unfiled and return
+    /// `E_PENDING` (`run_returns_the_work_result` failed now and then).
+    #[test]
+    fn a_wait_during_cleanup_sees_the_final_status() {
+        static WAITER: Mutex<Option<std::thread::JoinHandle<HRESULT>>> = Mutex::new(None);
+        extern "system" fn fails(op: u32, data: *const ProviderData) -> HRESULT {
+            match op {
+                OP_BEGIN => E_ABORT,
+                OP_CLEANUP => {
+                    // SAFETY: the runtime passes valid provider data.
+                    let block = unsafe { (*data).block } as usize;
+                    let waiter =
+                        std::thread::spawn(move || XAsyncGetStatus(block as *mut AsyncBlock, true));
+                    // Long enough for a wait that does not wait to return.
+                    let start = std::time::Instant::now();
+                    while !waiter.is_finished() && start.elapsed() < Duration::from_millis(200) {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    *lock(&WAITER) = Some(waiter);
+                    S_OK
+                }
+                _ => S_OK,
+            }
+        }
+        let mut block = AsyncBlock {
+            queue: std::ptr::null(),
+            context: std::ptr::null_mut(),
+            callback: None,
+            internal: [0; 4],
+        };
+        assert_eq!(begin(&mut block, std::ptr::null_mut(), fails), S_OK);
+        let waiter = lock(&WAITER).take().unwrap();
+        assert_eq!(waiter.join().unwrap(), E_ABORT, "the wait must see the call's result");
+        assert_eq!(XAsyncGetStatus(&mut block, false), E_ABORT);
     }
 
     #[test]
