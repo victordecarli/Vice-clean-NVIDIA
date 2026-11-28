@@ -388,6 +388,20 @@ fn stamp(seconds: u64) -> String {
     format!("{year:04}{month:02}{day:02}-{:02}{:02}{:02}", rest / 3600, rest % 3600 / 60, rest % 60)
 }
 
+/// The log file's first line, written before logging is up: the console
+/// model, the build, the switches and the mods beside this program (DLLs
+/// Windows loads instead of its own).
+fn run_start(console: &str, switches: &BTreeMap<String, String>, mods: &[String]) -> String {
+    let mut fields = serde_json::Map::new();
+    fields.insert("console".into(), console.into());
+    let build = if cfg!(feature = "diagnostics") { "diag" } else { "release" };
+    fields.insert("build".into(), build.into());
+    let switches = switches.iter().map(|(k, v)| (k.clone(), v.clone().into())).collect();
+    fields.insert("switches".into(), serde_json::Value::Object(switches));
+    fields.insert("mods".into(), mods.iter().map(String::as_str).collect());
+    victory_core::logging::event_line("INFO", "run_start", fields)
+}
+
 /// A new log file's name under `logs`, the ten newest of ours kept. The
 /// process id is part of it: two starts in one second (a test beside a
 /// player's own start, 2026-11-26) had the same name, and one of them was
@@ -414,7 +428,7 @@ fn log_file(logs: &Path) -> Result<PathBuf> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    Ok(logs.join(format!("{LOG_PREFIX}{}-{}.log", stamp(now), std::process::id())))
+    Ok(logs.join(format!("{LOG_PREFIX}{}-{}.jsonl", stamp(now), std::process::id())))
 }
 
 /// The start of the built-in launcher's log names (scripts\play-foxhound.ps1's
@@ -931,21 +945,14 @@ pub(crate) fn prepare(o: &Play) -> Result<Ready> {
     );
     let log = log_file(&home.join("logs"))?;
     let console = if series_s { "series-s" } else { "series-x" };
-    let line: Vec<String> = s.iter().map(|(k, v)| format!("{k}={v}")).collect();
-    let mods_line = if mods.is_empty() {
-        String::new()
-    } else {
+    if !mods.is_empty() {
         println!(
             "Beside this program, loaded in its place by Windows: {} (a mod, e.g. MFG Unlocker).",
             mods.join(", ")
         );
-        format!("# beside victory.exe (mods, loaded instead of Windows' own): {}\n", mods.join(" "))
-    };
-    std::fs::write(
-        &log,
-        format!("# console={console} build=release switches: {}\n{mods_line}", line.join(" ")),
-    )
-    .with_context(|| format!("writing {}", log.display()))?;
+    }
+    std::fs::write(&log, run_start(console, &s, &mods) + "\n")
+        .with_context(|| format!("writing {}", log.display()))?;
     println!("Log: {}", log.display());
     s.insert("VICTORY_LOG_FILE".to_owned(), log.to_string_lossy().into_owned());
 
@@ -978,6 +985,19 @@ pub(crate) fn hold_window() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_first_log_line_is_a_run_start_event() {
+        let switches = BTreeMap::from([("VICTORY_DLSS".to_owned(), "1".to_owned())]);
+        let line = run_start("series-x", &switches, &["winmm.dll".to_owned()]);
+        let json: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(json["message"], "run_start");
+        assert_eq!(json["target"], victory_core::logging::SUMMARY);
+        assert_eq!(json["console"], "series-x");
+        assert_eq!(json["switches"]["VICTORY_DLSS"], "1");
+        assert_eq!(json["mods"][0], "winmm.dll");
+        assert!(!line.contains('\n'), "one line: {line}");
+    }
 
     fn options() -> Play {
         Play {

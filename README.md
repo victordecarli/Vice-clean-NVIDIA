@@ -26,7 +26,7 @@ only guess. Paste `%LOCALAPPDATA%` into the address bar of File Explorer to
 get there.
 
 1. **The play log**, in `%LOCALAPPDATA%\victory\logs\`: the newest
-   `victory-nvidia-play-<date>-<time>-<number>.log` (from `victory.exe`) or
+   `victory-nvidia-play-<date>-<time>-<number>.jsonl` (from `victory.exe`) or
    `victory-nvidia-<date>-<time>.log` (from the script launcher). The window
    shows its path at the start, on the line `Log: ...`.
 2. **The crash log**: `%LOCALAPPDATA%\VIctory\data\7952987A\crashes.log`, and,
@@ -280,8 +280,13 @@ outside the repository).
 
 Logs: `victory play` writes one per start under `%LOCALAPPDATA%\victory\logs`
 (the ten newest are kept); any command writes its lines to a file too with
-`VICTORY_LOG_FILE=<path>`. `VICTORY_LOG=victory_loader=trace,info` filters
-them. A release build logs info and above; debug and trace lines, and most
+`VICTORY_LOG_FILE=<path>`. The file has one JSON object per line, each
+event's fields beside its `timestamp` (UTC), `level`, `target` and thread; a
+crash is the last line (`"message":"crash"`), and a `victory play` log starts
+with `run_start` (the console model, build, switches and mods). For example:
+`jq -c 'select(.level == "WARN")' victory-nvidia-play-*.jsonl`. Events with
+the target `victory::summary` are logged whatever the filter;
+`VICTORY_LOG=victory_loader=trace,info` filters the rest. A release build logs info and above; debug and trace lines, and most
 switches below, need the diagnostics build:
 
 ```powershell
