@@ -157,7 +157,10 @@ fn write(bytes: &mut [u8], at: usize, v: &[u8]) -> Result<(), PrepareError> {
     Ok(())
 }
 
+// Every test here reads the test binary as a PE image, which it is on
+// Windows only.
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 
