@@ -5469,7 +5469,7 @@ mod many_askers_tests {
         super::title_memory_allocated(at, PAGE);
         assert!(!super::published(at, end));
         let (_, all) = ask(fifth);
-        assert_eq!(all, []);
+        assert_eq!(all, Vec::<usize>::new());
         // A reservation of the ordinary kind is no placeholder.
         let plain =
             // SAFETY: a placeholder and a section of our own, which stay.

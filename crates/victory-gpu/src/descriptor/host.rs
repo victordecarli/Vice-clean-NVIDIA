@@ -6569,7 +6569,7 @@ mod tests {
         let (queued, write) = heap.texture_slots_due(u64::MAX, 8).0[0];
         assert_eq!(queued, 1);
         heap.texture_slot_done(1, write, None);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
         // Uploaded and out of the queue. Memory elsewhere: nothing.
         assert_eq!(
             heap.slots_written_under(&[(at + 0x10_0000, at + 0x10_1000)], 60, true),
@@ -6577,10 +6577,10 @@ mod tests {
         );
         // Under it, counted only: it stays out of the queue.
         assert_eq!(heap.slots_written_under(&written, 60, false), [1, 1, 0]);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
         // Under it, asked for: due two frames on, not before.
         assert_eq!(heap.slots_written_under(&written, 60, true), [1, 1, 1]);
-        assert_eq!(slots(61), []);
+        assert_eq!(slots(61), Vec::<u32>::new());
         assert_eq!(slots(62), [1]);
     }
 
@@ -6657,12 +6657,12 @@ mod tests {
         let (queued, write) = heap.texture_slots_due(u64::MAX, 8).0[0];
         assert_eq!(queued, 1);
         heap.texture_slot_done(1, write, None);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
         // Memory elsewhere: nothing. Under the texture: due from the next frame.
         remapped((at + 2 * len) as usize, 0x1000);
         remapped(at as usize, 0x1000);
         assert_eq!(heap.texture_slots_remapped(50), 1);
-        assert_eq!(slots(50), []);
+        assert_eq!(slots(50), Vec::<u32>::new());
         assert_eq!(slots(51), [1]);
         // A wider texture written at the same address: slot 1 is stale.
         assert_eq!(heap.note_buffer(2, Some(&view(at, 128)), false), [(1, 0)]);
@@ -6749,7 +6749,7 @@ mod tests {
         heap.tabled_in(2, false, frame + 1);
         assert_eq!(slots(frame + 1), [2]);
         heap.queue_texture(2, true, false, frame + 2);
-        assert_eq!(slots(frame + 2), []);
+        assert_eq!(slots(frame + 2), Vec::<u32>::new());
         // Long after the last table, a write is due at once.
         heap.queue_texture(2, true, false, frame + 3 + TABLED_FRAMES);
         assert_eq!(slots(frame + 3 + TABLED_FRAMES), [2]);
@@ -6767,7 +6767,7 @@ mod tests {
         assert_eq!(slots(u64::MAX), [2]);
         assert_eq!(marks(&heap), held(&[2]));
         heap.queue_texture(2, false, false, frame + 5 + TABLED_FRAMES);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
         assert_eq!(marks(&heap), held(&[]));
     }
 
@@ -6788,7 +6788,7 @@ mod tests {
         };
         heap.tabled_in_as(4, true, frame, true);
         heap.queue_texture(4, true, false, frame);
-        assert_eq!(slots(frame + TABLED_GRACE - 1), []);
+        assert_eq!(slots(frame + TABLED_GRACE - 1), Vec::<u32>::new());
         assert_eq!(slots(frame + TABLED_GRACE), [4]);
         // Read again in that frame, as before: it stays.
         heap.tabled_in_as(4, true, frame, false);
@@ -6796,13 +6796,13 @@ mod tests {
         // With the re-read: out, and counted.
         let before = TABLED_WRITES[2].load(std::sync::atomic::Ordering::Relaxed);
         heap.tabled_in_as(4, true, frame, true);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
         assert!(TABLED_WRITES[2].load(std::sync::atomic::Ordering::Relaxed) > before);
         assert!(!heap.texture_slot_queued(4));
         // A slot not queued: nothing to take out.
         heap.tabled_in_as(5, true, frame, true);
         heap.tabled_in_as(5, true, frame, true);
-        assert_eq!(slots(u64::MAX), []);
+        assert_eq!(slots(u64::MAX), Vec::<u32>::new());
     }
 
     /// The slots due come in their order with what the queue knew of each
