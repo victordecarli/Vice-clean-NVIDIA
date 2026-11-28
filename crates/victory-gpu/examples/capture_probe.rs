@@ -20,14 +20,20 @@
     reason = "a tool run by hand: what it prints is its output, and a failure stops it"
 )]
 #![allow(dead_code, reason = "the example includes the whole wire module and uses part of it")]
+#[cfg(windows)]
 #[path = "../src/replay/wire.rs"]
 mod wire;
 
+#[cfg(windows)]
 use std::collections::HashMap;
+#[cfg(windows)]
 use std::io::{Read, Seek, SeekFrom};
+#[cfg(windows)]
 use windows::Win32::Graphics::Direct3D12::*;
+#[cfg(windows)]
 use wire::*;
 
+#[cfg(windows)]
 fn half(h: u16) -> f32 {
     let (sign, exp, man) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as i32, (h & 0x3ff) as f32);
     let v = match exp {
@@ -38,6 +44,7 @@ fn half(h: u16) -> f32 {
     if sign == 1 { -v } else { v }
 }
 
+#[cfg(windows)]
 fn samplers(blob: &[u8]) {
     // SAFETY: `blob` lives through the calls; the description read from the
     // deserializer, and its sampler array, are read while `d` holds them.
@@ -79,6 +86,7 @@ fn samplers(blob: &[u8]) {
     }
 }
 
+#[cfg(windows)]
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let folder = std::path::PathBuf::from(&args[1]);
@@ -329,3 +337,7 @@ fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+/// The probe drives the host D3D12 runtime, so it does nothing elsewhere.
+#[cfg(not(windows))]
+fn main() {}

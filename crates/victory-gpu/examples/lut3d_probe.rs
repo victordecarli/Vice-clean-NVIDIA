@@ -31,14 +31,22 @@
     clippy::print_stdout,
     reason = "a tool run by hand: what it prints is its output, and a failure stops it"
 )]
+#[cfg(windows)]
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
+#[cfg(windows)]
 use windows::Win32::Graphics::Direct3D::{D3D_FEATURE_LEVEL_12_0, ID3DBlob};
+#[cfg(windows)]
 use windows::Win32::Graphics::Direct3D12::*;
+#[cfg(windows)]
 use windows::Win32::Graphics::Dxgi::Common::*;
+#[cfg(windows)]
 use windows::Win32::Graphics::Dxgi::*;
+#[cfg(windows)]
 use windows::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
+#[cfg(windows)]
 use windows::core::{Interface, PCSTR, s};
 
+#[cfg(windows)]
 const SRC: &str = r#"
 #define RS "DescriptorTable(UAV(u0), SRV(t0)), UAV(u1), RootConstants(num32BitConstants=4, b0), StaticSampler(s0, filter=FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU=TEXTURE_ADDRESS_CLAMP, addressV=TEXTURE_ADDRESS_CLAMP, addressW=TEXTURE_ADDRESS_CLAMP, maxLOD=12)"
 RWTexture3D<float4> lut : register(u0);
@@ -57,6 +65,7 @@ void probe(uint3 id : SV_DispatchThreadID) {
 
 /// The composite's way: SM 6.6, the texture from the heap (slot 1), its three
 /// static samplers alike but for the filter.
+#[cfg(windows)]
 const SRC66: &str = r#"
 #define SS(r, f) "StaticSampler(" r ", filter=" f ", addressU=TEXTURE_ADDRESS_CLAMP, addressV=TEXTURE_ADDRESS_CLAMP, addressW=TEXTURE_ADDRESS_CLAMP, maxAnisotropy=1, comparisonFunc=COMPARISON_NEVER, borderColor=STATIC_BORDER_COLOR_TRANSPARENT_BLACK, minLOD=0, maxLOD=12)"
 #define RS "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), UAV(u1), " SS("s0", "FILTER_MIN_MAG_MIP_POINT") ", " SS("s1", "FILTER_MIN_MAG_LINEAR_MIP_POINT") ", " SS("s2", "FILTER_MIN_MAG_MIP_LINEAR")
@@ -76,6 +85,7 @@ void probe(uint3 id : SV_DispatchThreadID) {
 "#;
 
 /// `source` compiled by dxc.exe for compute, entry `probe`.
+#[cfg(windows)]
 fn dxc(source: &str) -> Vec<u8> {
     let exe = std::env::var_os("DXC").map_or_else(
         || {
@@ -98,6 +108,7 @@ fn dxc(source: &str) -> Vec<u8> {
     std::fs::read(&cso).expect("cso")
 }
 
+#[cfg(windows)]
 fn compile(entry: PCSTR) -> Vec<u8> {
     let mut code: Option<ID3DBlob> = None;
     let mut errors: Option<ID3DBlob> = None;
@@ -132,6 +143,7 @@ fn compile(entry: PCSTR) -> Vec<u8> {
     }
 }
 
+#[cfg(windows)]
 fn main() -> windows::core::Result<()> {
     // SAFETY: D3D12 and DXGI calls on objects made here and held to the end; the
     // mapped read-back buffer is read within the 64 samples it holds.
@@ -682,3 +694,7 @@ fn main() -> windows::core::Result<()> {
     }
     Ok(())
 }
+
+/// The probe drives the host D3D12 runtime, so it does nothing elsewhere.
+#[cfg(not(windows))]
+fn main() {}

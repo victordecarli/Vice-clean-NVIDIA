@@ -23,11 +23,14 @@
 
 #[cfg(windows)]
 mod console_insn;
+#[cfg(windows)]
 mod crash;
 pub mod frame_rate;
 pub mod prepare;
 #[cfg(all(windows, feature = "diagnostics"))]
 mod profile;
+// Portable and tested everywhere, but only the Windows loader publishes.
+#[cfg(any(windows, test))]
 pub(crate) mod publish;
 pub mod resolve;
 #[cfg(all(windows, feature = "diagnostics"))]

@@ -1214,6 +1214,7 @@ fn signature(part: &[u8]) -> Result<Vec<container::SigElement>, ShaderError> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
     use super::bitcode::Attr;
     use super::lower::LOOP_LIMIT;
     use super::parse_loop_limit;
@@ -1355,6 +1356,7 @@ mod tests {
         }
     }
     use super::container::SigElement;
+    #[cfg(windows)]
     use super::shader::Shader;
     use super::*;
     use crate::native::{ComputeIo, StageIo};
@@ -1982,6 +1984,7 @@ mod tests {
     }
 
     /// A pixel program of `words` with no user data.
+    #[cfg(windows)]
     fn emit_native(words: &[u32], input_addr: u32) -> NativeProgram {
         NativeProgram {
             stage: HwStage::Ps,
@@ -2203,6 +2206,13 @@ mod tests {
         )
         .ok();
         for prim in [TRIANGLE, TRIANGLE | EDGE_FLAGS, TRIANGLE | EDGE_FLAGS | CULL] {
+            #[cfg_attr(
+                not(windows),
+                allow(
+                    unused_variables,
+                    reason = "off Windows the translation succeeding is the check; only Windows validates it"
+                )
+            )]
             let ms = triangle_mesh(prim).unwrap_or_else(|e| panic!("{prim:#x}: {e}"));
             #[cfg(windows)]
             if let Some(v) = validator.as_mut() {
@@ -2670,6 +2680,14 @@ mod tests {
             mesh_stride: 0,
         })
         .unwrap();
+        #[cfg_attr(
+            not(windows),
+            allow(
+                unused_variables,
+                unused_mut,
+                reason = "off Windows the translation succeeding is the check; only Windows validates it"
+            )
+        )]
         let mut dxil = l.dxil;
         #[cfg(windows)]
         if let Ok(mut v) = super::validator::Validator::load(

@@ -2019,6 +2019,13 @@ impl ValueWait {
         met
     }
 
+    /// Off Windows there is no title memory: as memory that is not mapped, met.
+    #[cfg(not(windows))]
+    fn holds(&self) -> bool {
+        true
+    }
+
+    #[cfg(windows)]
     fn holds(&self) -> bool {
         let bytes = if self.wide { 8 } else { 4 };
         if self.address == 0 {
