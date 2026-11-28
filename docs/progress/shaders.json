@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "complete": true,
+  "host_lanes": 32,
+  "vertex_pixel": {
+    "found": 14649,
+    "validated": 14232
+  },
+  "compute": {
+    "found": 2763,
+    "validated": 2736
+  },
+  "mesh": {
+    "found": 8765,
+    "validated": 8673
+  },
+  "commit": "68816f16b5",
+  "commit_date": "2026-11-28"
+}
