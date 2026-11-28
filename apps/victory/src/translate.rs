@@ -2,6 +2,8 @@
 //! what it cannot handle yet is tallied by reason, so the most common gaps
 //! show what to implement next.
 
+mod summary;
+
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -70,6 +72,13 @@ struct Tally {
     ms_emitted: usize,
     ms_validated: usize,
     ms_pipelines: usize,
+    /// Every program found of each kind (vertex/pixel and the other graphics
+    /// stages, compute, mesh), whichever stage stopped it: the base of a
+    /// translated share. `emit_programs` and its kin count only the
+    /// programs every earlier stage handled.
+    found: usize,
+    cs_found: usize,
+    ms_found: usize,
     /// Reason → programs stopped by it, and the first one.
     failed: BTreeMap<String, (usize, String)>,
     /// With `--list`: one line per program and outcome.
@@ -128,6 +137,9 @@ impl Tally {
         self.ms_emitted += other.ms_emitted;
         self.ms_validated += other.ms_validated;
         self.ms_pipelines += other.ms_pipelines;
+        self.found += other.found;
+        self.cs_found += other.cs_found;
+        self.ms_found += other.ms_found;
         for (k, n) in other.exports {
             *self.exports.entry(k).or_default() += n;
         }
@@ -242,6 +254,7 @@ pub fn run(
     pipelines: bool,
     list: bool,
     jobs: Option<usize>,
+    json: Option<PathBuf>,
 ) -> Result<()> {
     // Dumped shaders and validator reports are game-derived (rule #1).
     if let Some(dir) = std::env::var_os("VICTORY_EMIT_DUMP") {
@@ -279,13 +292,29 @@ pub fn run(
         jobs.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
     let seen = Mutex::new(HashSet::new());
     let total = Mutex::new(Tally::default());
+    // Entries the walk could not read, and files that would not open: with
+    // any, the run measured less than it was given (`--json`'s `complete`).
+    let mut unread = 0usize;
     for root in &paths {
-        for entry in walkdir::WalkDir::new(root).into_iter().filter_map(Result::ok) {
+        for entry in walkdir::WalkDir::new(root) {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    eprintln!("not read: {e}");
+                    unread += 1;
+                    continue;
+                }
+            };
             if !entry.file_type().is_file() || entry.metadata().map_or(0, |m| m.len()) > MAX_FILE {
                 continue;
             }
-            let Ok(data) = std::fs::read(entry.path()) else {
-                continue;
+            let data = match std::fs::read(entry.path()) {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("not read: {}: {e}", entry.path().display());
+                    unread += 1;
+                    continue;
+                }
             };
             let jobs = sources(&data);
             let next = AtomicUsize::new(0);
@@ -312,6 +341,14 @@ pub fn run(
         }
     }
     let t = total.into_inner().unwrap_or_else(|e| e.into_inner());
+    if let Some(path) = &json {
+        summary::write(path, &t, unread)?;
+    }
+    if unread > 0 {
+        println!(
+            "unread       {unread} files or folders (named above): every count is a lower bound"
+        );
+    }
     println!("containers   {} ({} duplicates skipped)", t.containers, t.duplicates);
     println!(
         "programs     {} translated of {} ({} IR instructions)",
@@ -563,6 +600,7 @@ fn translate_programs(
 ) {
     for p in programs {
         t.programs += 1;
+        *counter(t, p.stage, Count::Found) += 1;
         match victory_shader::spill::build(&p) {
             Ok(program) => {
                 t.translated += 1;
@@ -788,24 +826,36 @@ enum Count {
     Emitted,
     Validated,
     Pipelines,
+    Found,
 }
 
 /// Emission count `k` of `stage`'s kind.
 fn counter(t: &mut Tally, stage: HwStage, k: Count) -> &mut usize {
-    let [a, b, c, d] = match stage {
-        HwStage::Cs => {
-            [&mut t.cs_programs, &mut t.cs_emitted, &mut t.cs_validated, &mut t.cs_pipelines]
+    let [a, b, c, d, e] = match stage {
+        HwStage::Cs => [
+            &mut t.cs_programs,
+            &mut t.cs_emitted,
+            &mut t.cs_validated,
+            &mut t.cs_pipelines,
+            &mut t.cs_found,
+        ],
+        HwStage::Ms => [
+            &mut t.ms_programs,
+            &mut t.ms_emitted,
+            &mut t.ms_validated,
+            &mut t.ms_pipelines,
+            &mut t.ms_found,
+        ],
+        HwStage::Ls | HwStage::Hs | HwStage::Es | HwStage::Gs | HwStage::Vs | HwStage::Ps => {
+            [&mut t.emit_programs, &mut t.emitted, &mut t.validated, &mut t.pipelines, &mut t.found]
         }
-        HwStage::Ms => {
-            [&mut t.ms_programs, &mut t.ms_emitted, &mut t.ms_validated, &mut t.ms_pipelines]
-        }
-        _ => [&mut t.emit_programs, &mut t.emitted, &mut t.validated, &mut t.pipelines],
     };
     match k {
         Count::Programs => a,
         Count::Emitted => b,
         Count::Validated => c,
         Count::Pipelines => d,
+        Count::Found => e,
     }
 }
 
@@ -948,7 +998,7 @@ mod tests {
         // SAFETY: no other test in this binary touches the environment.
         unsafe { std::env::set_var("VICTORY_EMIT_DUMP", env!("CARGO_MANIFEST_DIR")) };
         let missing = std::env::temp_dir().join("victory-translate-no-such-dir");
-        let err = super::run(vec![missing], false, false, false, Some(1)).unwrap_err();
+        let err = super::run(vec![missing], false, false, false, Some(1), None).unwrap_err();
         // SAFETY: as above; unset so a later test's `run` is not refused.
         unsafe { std::env::remove_var("VICTORY_EMIT_DUMP") };
         assert!(
