@@ -1,4 +1,4 @@
-//! Resource tracking (decision 0003): where each descriptor a program uses
+//! Resource tracking: where each descriptor a program uses
 //! comes from, in terms of the root signature.
 //!
 //! Root parameters arrive in user SGPRs ([`RootParam`]): a descriptor table
@@ -63,11 +63,7 @@ pub enum Source {
     Loaded { load: Site, first: u8 },
     /// A buffer descriptor built around an address: `bits` OR-ed into
     /// dword 1 (stride, swizzle), dwords 2 and 3 as given.
-    Built {
-        address: Address,
-        bits: u32,
-        words: [u32; 2],
-    },
+    Built { address: Address, bits: u32, words: [u32; 2] },
     /// Fixed in the code (an immediate sampler, say).
     Constant(Vec<u32>),
     /// Chosen by control flow: one source per predecessor of `block`, in
@@ -90,10 +86,7 @@ pub enum Source {
     /// `block`, in [`crate::ir::Block::preds`] order, `None` on an edge no
     /// lane that accesses the descriptor takes. A descriptor that differs
     /// between lanes.
-    LanePhi {
-        block: usize,
-        args: Vec<Option<Source>>,
-    },
+    LanePhi { block: usize, args: Vec<Option<Source>> },
 }
 
 impl Source {
@@ -233,10 +226,7 @@ pub fn track(
             if let Some(value) = t.restored(inst, Some(b)) {
                 out.restored_lanes.insert(site, value);
             }
-            let fail = |what| ShaderError::Unsupported {
-                offset: inst.machine.offset,
-                what,
-            };
+            let fail = |what| ShaderError::Unsupported { offset: inst.machine.offset, what };
             let mut first_lane = Vec::new();
             let mut offset = Vec::new();
             let mut descriptor = |op: &Operand, role| -> Result<(), ShaderError> {
@@ -298,24 +288,16 @@ pub fn track(
                 Fields::Smem { base, .. } if inst.name().starts_with("s_buffer_") => {
                     descriptor(base, Role::Resource)?;
                 }
-                Fields::Smem {
-                    base,
-                    offset,
-                    soffset,
-                    ..
-                } if inst.name().contains("_load_") || inst.name().contains("_store_") => {
+                Fields::Smem { base, offset, soffset, .. }
+                    if inst.name().contains("_load_") || inst.name().contains("_store_") =>
+                {
                     let address = t
                         .smem_address(inst, base, *offset, soffset)
                         .or_else(|why| t.by_address(why))
                         .map_err(fail)?;
                     out.scalar.push((site, address));
                 }
-                Fields::Flat {
-                    addr,
-                    saddr,
-                    offset,
-                    ..
-                } if inst.name().starts_with("global_") => {
+                Fields::Flat { addr, saddr, offset, .. } if inst.name().starts_with("global_") => {
                     let address = t
                         .flat_address(inst, addr.as_ref(), saddr.as_ref(), *offset)
                         .or_else(|why| t.by_address(why))
@@ -349,12 +331,9 @@ pub fn track(
     for (block, (accesses, mut reads)) in first_lane_at {
         reads.sort_unstable();
         reads.dedup();
-        let proof = t
-            .waterfall(block, &accesses, &reads)
-            .map_err(|what| ShaderError::Unsupported {
-                offset: t.inst((block, accesses[0])).machine.offset,
-                what,
-            })?;
+        let proof = t.waterfall(block, &accesses, &reads).map_err(|what| {
+            ShaderError::Unsupported { offset: t.inst((block, accesses[0])).machine.offset, what }
+        })?;
         out.waterfall.compares.extend(proof.compares);
         out.waterfall.reads.extend(proof.reads);
     }
@@ -372,11 +351,8 @@ pub fn track(
     out.lane_copied = t.lane_copied.take();
     out.lane_copied.sort_unstable();
     out.lane_copied.dedup();
-    out.root_indexed_views = out
-        .descriptors
-        .iter()
-        .filter_map(|d| t.root_indexed_view(d, &out.scalar))
-        .collect();
+    out.root_indexed_views =
+        out.descriptors.iter().filter_map(|d| t.root_indexed_view(d, &out.scalar)).collect();
     Ok(out)
 }
 
@@ -438,15 +414,12 @@ impl<'a> Tracer<'a> {
         lanes: Option<&'a Structured>,
     ) -> Result<Self, ShaderError> {
         let all = || {
-            p.inputs
-                .iter()
-                .map(|i| i.1)
-                .chain(p.blocks.iter().flat_map(|b| {
-                    b.phis
-                        .iter()
-                        .map(|phi| phi.value)
-                        .chain(b.insts.iter().flat_map(|i| i.writes.iter().map(|w| w.1)))
-                }))
+            p.inputs.iter().map(|i| i.1).chain(p.blocks.iter().flat_map(|b| {
+                b.phis
+                    .iter()
+                    .map(|phi| phi.value)
+                    .chain(b.insts.iter().flat_map(|i| i.writes.iter().map(|w| w.1)))
+            }))
         };
         let n = all().map(|v| v.0 as usize + 1).max().unwrap_or(0);
         let mut defs = vec![None; n];
@@ -466,10 +439,7 @@ impl<'a> Tracer<'a> {
             }
         }
         let mut rpo = vec![usize::MAX; p.blocks.len()];
-        for (n, b) in crate::ir::reverse_postorder(&p.blocks)
-            .into_iter()
-            .enumerate()
-        {
+        for (n, b) in crate::ir::reverse_postorder(&p.blocks).into_iter().enumerate() {
             rpo[b] = n;
         }
         let mut t = Tracer {
@@ -505,14 +475,10 @@ impl<'a> Tracer<'a> {
                 let block = &self.p.blocks[b];
                 for phi in &block.phis {
                     let own = Term::Value(phi.value);
-                    let mut args = phi
-                        .args
-                        .iter()
-                        .filter_map(|a| o[a.0 as usize])
-                        .filter(|&t| t != own);
-                    let new = args
-                        .next()
-                        .map(|first| if args.all(|t| t == first) { first } else { own });
+                    let mut args =
+                        phi.args.iter().filter_map(|a| o[a.0 as usize]).filter(|&t| t != own);
+                    let new =
+                        args.next().map(|first| if args.all(|t| t == first) { first } else { own });
                     if new.is_some() && new != o[phi.value.0 as usize] {
                         o[phi.value.0 as usize] = new;
                         changed = true;
@@ -540,19 +506,14 @@ impl<'a> Tracer<'a> {
                     .collect());
             }
         }
-        Err(ShaderError::Unsupported {
-            offset: 0,
-            what: "copies that do not settle",
-        })
+        Err(ShaderError::Unsupported { offset: 0, what: "copies that do not settle" })
     }
 
     /// Whether some lane can satisfy all of `conditions` ([`Bools::meet`]).
     ///
     /// [`Bools::meet`]: crate::structure::Bools::meet
     fn meet(&self, lanes: &Structured, conditions: &[(Bool, bool)]) -> bool {
-        lanes
-            .bools
-            .meet_seen(conditions, &mut self.meets.borrow_mut())
+        lanes.bools.meet_seen(conditions, &mut self.meets.borrow_mut())
     }
 
     fn inst(&self, (b, i): Site) -> &'a Inst {
@@ -597,13 +558,7 @@ impl<'a> Tracer<'a> {
         let Fields::Sop { src, .. } = &inst.fields else {
             return None;
         };
-        Some((
-            inst,
-            [
-                self.term(inst, src.first()?)?,
-                self.term(inst, src.get(1)?)?,
-            ],
-        ))
+        Some((inst, [self.term(inst, src.first()?)?, self.term(inst, src.get(1)?)?]))
     }
 
     fn root_indexed_view(
@@ -645,35 +600,19 @@ impl<'a> Tracer<'a> {
     fn sum(&self, t: Term) -> Sum {
         let v = match t {
             Term::Const(c) => {
-                return Sum {
-                    base: None,
-                    offset: c,
-                    dynamic: None,
-                };
+                return Sum { base: None, offset: c, dynamic: None };
             }
             Term::Value(v) => v,
         };
-        let dynamic = Sum {
-            base: None,
-            offset: 0,
-            dynamic: Some(v),
-        };
+        let dynamic = Sum { base: None, offset: 0, dynamic: Some(v) };
         if let Some(reg) = self.inputs[v.0 as usize] {
             return match self.param_of(reg) {
-                Some((_, 0)) => Sum {
-                    base: Some(v),
-                    offset: 0,
-                    dynamic: None,
-                },
+                Some((_, 0)) => Sum { base: Some(v), offset: 0, dynamic: None },
                 _ => dynamic,
             };
         }
         if self.getpc(v).is_some() {
-            return Sum {
-                base: Some(v),
-                offset: 0,
-                dynamic: None,
-            };
+            return Sum { base: Some(v), offset: 0, dynamic: None };
         }
         // Paths that each add an index to a table in the code and meet before one
         // load: the join itself is the computed term. Lowering gives every
@@ -681,11 +620,7 @@ impl<'a> Tracer<'a> {
         // byte in the code whichever table a path took ([`Self::address`] adds no
         // base to it).
         if let Some(pc) = self.code_join(v) {
-            return Sum {
-                base: Some(pc),
-                offset: 0,
-                dynamic: Some(v),
-            };
+            return Sum { base: Some(pc), offset: 0, dynamic: Some(v) };
         }
         // An address computed in VGPRs and taken from the first lane (a
         // table in the code indexed by a value held per lane, or a table
@@ -703,10 +638,8 @@ impl<'a> Tracer<'a> {
                 dynamic
             };
         }
-        let Some([a, b]) = self
-            .sop2(v, &["s_add_u32", "s_add_i32"])
-            .map(|(_, t)| t)
-            .or_else(|| self.vadd(v))
+        let Some([a, b]) =
+            self.sop2(v, &["s_add_u32", "s_add_i32"]).map(|(_, t)| t).or_else(|| self.vadd(v))
         else {
             return dynamic;
         };
@@ -753,9 +686,10 @@ impl<'a> Tracer<'a> {
     /// [`Self::code_high`], at most `depth` additions deep.
     fn code_high_in(&self, t: Term, depth: u32) -> bool {
         let Term::Value(x) = t else { return false };
-        if self.def(x).is_some_and(|i| {
-            i.name() == "s_getpc_b64" && i.writes.get(1).is_some_and(|w| w.1 == x)
-        }) {
+        if self
+            .def(x)
+            .is_some_and(|i| i.name() == "s_getpc_b64" && i.writes.get(1).is_some_and(|w| w.1 == x))
+        {
             return true;
         }
         depth > 0
@@ -780,10 +714,8 @@ impl<'a> Tracer<'a> {
         if depth == 0 || self.phis[v.0 as usize].is_some() {
             return None;
         }
-        let terms = self
-            .sop2(v, &["s_add_u32", "s_add_i32"])
-            .map(|(_, t)| t)
-            .or_else(|| self.vadd(v))?;
+        let terms =
+            self.sop2(v, &["s_add_u32", "s_add_i32"]).map(|(_, t)| t).or_else(|| self.vadd(v))?;
         terms.into_iter().find_map(|t| match t {
             Term::Value(x) => self.code_base(x, depth - 1),
             Term::Const(_) => None,
@@ -848,10 +780,7 @@ impl<'a> Tracer<'a> {
         {
             return None;
         }
-        Some([
-            self.vterm(inst, f.src.first()?)?,
-            self.vterm(inst, f.src.get(1)?)?,
-        ])
+        Some([self.vterm(inst, f.src.first()?)?, self.vterm(inst, f.src.get(1)?)?])
     }
 
     /// The origin of a VALU operand.
@@ -883,11 +812,7 @@ impl<'a> Tracer<'a> {
     /// compute program.
     fn by_address(&self, why: &'static str) -> Result<Address, &'static str> {
         if self.stage == HwStage::Cs && RAW.contains(&why) {
-            Ok(Address {
-                param: MEMORY,
-                offset: 0,
-                dynamic: None,
-            })
+            Ok(Address { param: MEMORY, offset: 0, dynamic: None })
         } else {
             Err(why)
         }
@@ -925,15 +850,7 @@ impl<'a> Tracer<'a> {
                 let (Some(lo), Some(hi)) = (word(0), word(1)) else {
                     return Err("a global address");
                 };
-                self.address(
-                    lo,
-                    hi,
-                    Sum {
-                        base: None,
-                        offset: off,
-                        dynamic: None,
-                    },
-                )
+                self.address(lo, hi, Sum { base: None, offset: off, dynamic: None })
             }
         }
     }
@@ -972,9 +889,7 @@ impl<'a> Tracer<'a> {
             });
         }
         let reg = self.inputs[base.0 as usize].ok_or("an address not from a root parameter")?;
-        let (param, _) = self
-            .param_of(reg)
-            .ok_or("an address not from a root parameter")?;
+        let (param, _) = self.param_of(reg).ok_or("an address not from a root parameter")?;
         let high = match self.layout[param].root {
             RootType::Table | RootType::ResourceHeap | RootType::SamplerHeap => None,
             RootType::Descriptor => {
@@ -1070,10 +985,7 @@ impl<'a> Tracer<'a> {
         if self.inputs[v.0 as usize].is_some() {
             return "an address in an SGPR that is no root parameter";
         }
-        if self
-            .leaves(v)
-            .any(|l| self.def(l).is_some_and(|i| i.name() == "s_getpc_b64"))
-        {
+        if self.leaves(v).any(|l| self.def(l).is_some_and(|i| i.name() == "s_getpc_b64")) {
             return "an address relative to the program counter";
         }
         match self.def(v).map(|i| i.name()) {
@@ -1108,10 +1020,7 @@ impl<'a> Tracer<'a> {
         let (Some(lo), Some(hi)) = (word(0), word(1)) else {
             return Err("an address not in SGPRs");
         };
-        let mut extra = self.sum(
-            self.term(inst, soffset)
-                .ok_or("an unknown offset operand")?,
-        );
+        let mut extra = self.sum(self.term(inst, soffset).ok_or("an unknown offset operand")?);
         if extra.base.is_some() {
             return Err("an offset from a root parameter");
         }
@@ -1197,20 +1106,8 @@ impl<'a> Tracer<'a> {
             {
                 (hi, bits) = (x, bits | more);
             }
-            let address = self.address(
-                lo,
-                hi,
-                Sum {
-                    base: None,
-                    offset: 0,
-                    dynamic: None,
-                },
-            )?;
-            return Ok(Source::Built {
-                address,
-                bits,
-                words: [w2, w3],
-            });
+            let address = self.address(lo, hi, Sum { base: None, offset: 0, dynamic: None })?;
+            return Ok(Source::Built { address, bits, words: [w2, w3] });
         }
         let loaded = |w: &Term| {
             matches!(*w, Term::Value(v)
@@ -1242,11 +1139,7 @@ impl<'a> Tracer<'a> {
         for (j, &q) in preds.iter().enumerate() {
             let n = known.len();
             known.push((lanes.reach[q], true));
-            if let LaneExit::Branch {
-                when,
-                taken,
-                not_taken,
-            } = lanes.exits[q]
+            if let LaneExit::Branch { when, taken, not_taken } = lanes.exits[q]
                 && taken != not_taken
             {
                 known.push((when, taken == block));
@@ -1273,12 +1166,7 @@ impl<'a> Tracer<'a> {
             Source::Loaded { load, .. } => {
                 let inst = self.inst(*load);
                 match &inst.fields {
-                    Fields::Smem {
-                        base,
-                        offset,
-                        soffset,
-                        ..
-                    } => self
+                    Fields::Smem { base, offset, soffset, .. } => self
                         .smem_address(inst, base, *offset, soffset)
                         .is_ok_and(|a| a.dynamic.is_none()),
                     _ => false,
@@ -1442,11 +1330,7 @@ impl<'a> Tracer<'a> {
             Operand::Const(c) if !wide => inline(c).map(Term::Const),
             Operand::Const(c @ 128..=208) => {
                 let low = inline(c)?;
-                Some(Term::Const(if k == 0 {
-                    low
-                } else {
-                    ((low as i32) >> 31) as u32
-                }))
+                Some(Term::Const(if k == 0 { low } else { ((low as i32) >> 31) as u32 }))
             }
             Operand::Literal(x) if !wide => Some(Term::Const(x)),
             _ => None,
@@ -1468,12 +1352,7 @@ impl<'a> Tracer<'a> {
             return Some((x, bits));
         }
         let inst = self.def(v)?;
-        let Fields::Sop {
-            dst: Some(Operand::Scalar { code, .. }),
-            src,
-            ..
-        } = &inst.fields
-        else {
+        let Fields::Sop { dst: Some(Operand::Scalar { code, .. }), src, .. } = &inst.fields else {
             return None;
         };
         match (inst.name(), self.term(inst, src.first()?)?) {
@@ -1523,7 +1402,6 @@ impl<'a> Tracer<'a> {
         (x == d1).then_some([w0, d1, d2, d3])
     }
 
-
     /// For a `v_readfirstlane_b32` result: the VGPR value it reads.
     fn first_lane_source(&self, v: Value) -> Option<Value> {
         let inst = self.def(v)?;
@@ -1545,13 +1423,7 @@ impl<'a> Tracer<'a> {
     /// it, and lowering reads it per lane there.
     fn first_lane_offset(&self, load: Site) -> Option<Value> {
         let inst = self.inst(load);
-        let Fields::Smem {
-            base,
-            offset,
-            soffset,
-            ..
-        } = &inst.fields
-        else {
+        let Fields::Smem { base, offset, soffset, .. } = &inst.fields else {
             return None;
         };
         self.read_first_lane.set(true);
@@ -1608,10 +1480,9 @@ impl<'a> Tracer<'a> {
         let reg = match (self.inputs[v.0 as usize], self.phis[v.0 as usize]) {
             (Some(reg), _) => Some(reg),
             (None, Some((b, i))) => Some(self.p.blocks[b].phis[i].reg),
-            (None, None) => self
-                .def(v)
-                .and_then(|i| i.writes.iter().find(|w| w.1 == v))
-                .map(|w| w.0),
+            (None, None) => {
+                self.def(v).and_then(|i| i.writes.iter().find(|w| w.1 == v)).map(|w| w.0)
+            }
         };
         matches!(reg, Some(Reg::V(_)))
     }
@@ -1690,10 +1561,8 @@ impl<'a> Tracer<'a> {
         joins: &mut Vec<usize>,
         known: &mut Known,
     ) -> Result<Source, &'static str> {
-        let words = words
-            .iter()
-            .map(|&w| self.lane_value(w, known))
-            .collect::<Result<Vec<_>, _>>()?;
+        let words =
+            words.iter().map(|&w| self.lane_value(w, known)).collect::<Result<Vec<_>, _>>()?;
         let words = &words[..];
         let Some(&lane) = words.iter().find(|&&w| self.varies(w)) else {
             return self.classify(words, joins, known);
@@ -1738,11 +1607,8 @@ impl<'a> Tracer<'a> {
             if !inst.name().starts_with("global_load_dword") {
                 return None;
             }
-            let k = inst
-                .writes
-                .iter()
-                .filter(|w| matches!(w.0, Reg::V(_)))
-                .position(|w| w.1 == v)?;
+            let k =
+                inst.writes.iter().filter(|w| matches!(w.0, Reg::V(_))).position(|w| w.1 == v)?;
             Some((site, k))
         };
         let Some(sites) = words.iter().map(at).collect::<Option<Vec<_>>>() else {
@@ -1750,13 +1616,7 @@ impl<'a> Tracer<'a> {
         };
         let address = |site: Site| {
             let inst = self.inst(site);
-            let Fields::Flat {
-                addr,
-                saddr,
-                offset,
-                ..
-            } = &inst.fields
-            else {
+            let Fields::Flat { addr, saddr, offset, .. } = &inst.fields else {
                 return Err("a global load");
             };
             self.flat_address(inst, addr.as_ref(), saddr.as_ref(), *offset)
@@ -1773,10 +1633,7 @@ impl<'a> Tracer<'a> {
                 return Err("a descriptor read from the first lane of loads that do not line up");
             }
         }
-        Ok(Some(Source::Fetched {
-            load,
-            first: first as u8,
-        }))
+        Ok(Some(Source::Fetched { load, first: first as u8 }))
     }
 
     /// Words that `v_cndmask_b32` picks by one lane mask, traced per outcome
@@ -1927,11 +1784,7 @@ impl<'a> Tracer<'a> {
         for (j, &q) in preds.iter().enumerate() {
             let n = known.len();
             known.push((lanes.reach[q], true));
-            if let LaneExit::Branch {
-                when,
-                taken,
-                not_taken,
-            } = lanes.exits[q]
+            if let LaneExit::Branch { when, taken, not_taken } = lanes.exits[q]
                 && taken != not_taken
             {
                 known.push((when, taken == block));
@@ -2014,17 +1867,11 @@ impl<'a> Tracer<'a> {
         // The reads belong to this loop's own block: a loop around this one
         // (one per operand, as LLVM nests them for a per-lane image and
         // sampler) is not followed.
-        if reads
-            .iter()
-            .any(|v| self.defs[v.0 as usize].is_none_or(|at| at.0 != b))
-        {
+        if reads.iter().any(|v| self.defs[v.0 as usize].is_none_or(|at| at.0 != b)) {
             return Err(SPLIT);
         }
         let selected = exec(&block.insts[access]).ok_or(SELECT)?;
-        if accesses
-            .iter()
-            .any(|&i| exec(&block.insts[i]) != Some(selected))
-        {
+        if accesses.iter().any(|&i| exec(&block.insts[i]) != Some(selected)) {
             return Err(SELECT);
         }
         let retry = exec(exit).ok_or(RETRY)?;
@@ -2044,10 +1891,8 @@ impl<'a> Tracer<'a> {
             let Fields::Valu(f) = &inst.fields else {
                 continue;
             };
-            let Some(ty) = inst
-                .name()
-                .strip_prefix("v_cmp_eq_")
-                .or(inst.name().strip_prefix("v_cmpx_eq_"))
+            let Some(ty) =
+                inst.name().strip_prefix("v_cmp_eq_").or(inst.name().strip_prefix("v_cmpx_eq_"))
             else {
                 continue;
             };
@@ -2092,7 +1937,8 @@ impl<'a> Tracer<'a> {
                 } else {
                     continue;
                 };
-                let Some(matched) = mask(inst.write(Reg::S(code)), inst.write(Reg::S(code + 1))) else {
+                let Some(matched) = mask(inst.write(Reg::S(code)), inst.write(Reg::S(code + 1)))
+                else {
                     continue;
                 };
                 if meet(&[reach, (selected, true), (matched, false)]) {
@@ -2139,15 +1985,11 @@ impl<'a> Tracer<'a> {
             return None;
         }
         let first = inst.writes.iter().position(|w| w.1 == v0)?;
-        let same = words.iter().enumerate().all(|(k, w)| {
-            inst.writes
-                .get(first + k)
-                .is_some_and(|x| *w == Term::Value(x.1))
-        });
-        same.then_some(Source::Loaded {
-            load,
-            first: first as u8,
-        })
+        let same = words
+            .iter()
+            .enumerate()
+            .all(|(k, w)| inst.writes.get(first + k).is_some_and(|x| *w == Term::Value(x.1)));
+        same.then_some(Source::Loaded { load, first: first as u8 })
     }
 
     /// A descriptor the code keeps per lane: every dword of `words` is the
@@ -2200,12 +2042,9 @@ impl<'a> Tracer<'a> {
         let address = |site: Site| {
             let inst = self.inst(site);
             match &inst.fields {
-                Fields::Smem {
-                    base,
-                    offset,
-                    soffset,
-                    ..
-                } => self.smem_address(inst, base, *offset, soffset).ok(),
+                Fields::Smem { base, offset, soffset, .. } => {
+                    self.smem_address(inst, base, *offset, soffset).ok()
+                }
                 _ => None,
             }
         };
@@ -2218,10 +2057,7 @@ impl<'a> Tracer<'a> {
         loads.sort_unstable();
         let load = *loads.iter().find(|&&l| self.base_from_entry(l))?;
         self.lane_copied.borrow_mut().extend(&loads);
-        Some(Source::Loaded {
-            load,
-            first: first? as u8,
-        })
+        Some(Source::Loaded { load, first: first? as u8 })
     }
 
     /// The scalars (as origins) that `v_mov_b32` copies put in VGPR value
@@ -2340,9 +2176,7 @@ impl Tracer<'_> {
         if lane >= if self.p.wave64 { 64 } else { 32 } {
             return None;
         }
-        self.spilled(inst.read(Reg::V(reg))?, lane, block, &mut Vec::new())
-            .ok()
-            .flatten()
+        self.spilled(inst.read(Reg::V(reg))?, lane, block, &mut Vec::new()).ok().flatten()
     }
 
     /// What lane `lane` of VGPR value `v` holds: `Ok(None)` for a phi in
@@ -2450,11 +2284,7 @@ fn copy_source(inst: &Inst, k: usize) -> Option<Moved> {
         // 64-bit inline integers are sign-extended.
         ("s_mov_b64", Operand::Const(c @ 128..=208)) => {
             let low = inline(c)?;
-            Some(Moved::Const(if k == 0 {
-                low
-            } else {
-                ((low as i32) >> 31) as u32
-            }))
+            Some(Moved::Const(if k == 0 { low } else { ((low as i32) >> 31) as u32 }))
         }
         _ => None,
     }
@@ -2498,22 +2328,11 @@ pub(crate) mod tests {
     }
 
     fn param(root: RootType, user_data: u8, sgprs: u32) -> RootParam {
-        RootParam {
-            root,
-            table_offset_dwords: 0,
-            sgprs,
-            base_register: 0,
-            user_data,
-            slot: 0,
-        }
+        RootParam { root, table_offset_dwords: 0, sgprs, base_register: 0, user_data, slot: 0 }
     }
 
     fn at(param: usize, offset: u32) -> Address {
-        Address {
-            param,
-            offset,
-            dynamic: None,
-        }
+        Address { param, offset, dynamic: None }
     }
 
     #[test]
@@ -2539,20 +2358,8 @@ pub(crate) mod tests {
         assert_eq!(
             roles,
             [
-                (
-                    Role::Resource,
-                    &Source::Loaded {
-                        load: (0, 4),
-                        first: 0
-                    }
-                ),
-                (
-                    Role::Sampler,
-                    &Source::Loaded {
-                        load: (0, 3),
-                        first: 0
-                    }
-                ),
+                (Role::Resource, &Source::Loaded { load: (0, 4), first: 0 }),
+                (Role::Sampler, &Source::Loaded { load: (0, 3), first: 0 }),
             ]
         );
     }
@@ -2576,16 +2383,9 @@ pub(crate) mod tests {
         );
         assert_eq!(
             r.descriptors[0].source,
-            Source::Built {
-                address: at(0, 0),
-                bits: 0x10_0000,
-                words: [u32::MAX, 0x1101_4FAC]
-            }
+            Source::Built { address: at(0, 0), bits: 0x10_0000, words: [u32::MAX, 0x1101_4FAC] }
         );
-        assert_eq!(
-            r.params.iter().map(|p| (p.1, p.2)).collect::<Vec<_>>(),
-            [(0, 0), (0, 1)]
-        );
+        assert_eq!(r.params.iter().map(|p| (p.1, p.2)).collect::<Vec<_>>(), [(0, 0), (0, 1)]);
     }
 
     #[test]
@@ -2601,28 +2401,16 @@ pub(crate) mod tests {
             0x8002_0400, // buffer_load_format_x v4, v0, s[8:11], 0 idxen
             S_ENDPGM,
         ];
-        let r = track_words(
-            &code,
-            &[param(Constants, 6, 1), param(ResourceHeap, 10, 1)],
-            HwStage::Ms,
-        );
+        let r =
+            track_words(&code, &[param(Constants, 6, 1), param(ResourceHeap, 10, 1)], HwStage::Ms);
         let index = r.params.iter().find(|p| p.1 == 0).unwrap().0;
         let shift = r.scalar[0].1.dynamic.unwrap();
         assert_eq!(r.scalar[0].1.param, 1);
         // The computed term is the shifted constant, not the constant itself.
         assert_ne!(shift, index);
-        assert_eq!(
-            r.descriptors[0].source,
-            Source::Loaded {
-                load: (0, 2),
-                first: 0
-            }
-        );
+        assert_eq!(r.descriptors[0].source, Source::Loaded { load: (0, 2), first: 0 });
         assert!(r.root_indexed_views.is_empty());
-        let table = RootParam {
-            slot: 7,
-            ..param(Table, 10, 1)
-        };
+        let table = RootParam { slot: 7, ..param(Table, 10, 1) };
         let indexed = track_words(&code, &[param(Constants, 6, 1), table], HwStage::Ms);
         assert_eq!(
             indexed.root_indexed_views,
@@ -2778,10 +2566,7 @@ pub(crate) mod tests {
             })
             .collect();
         assert_eq!(offsets.len(), 2);
-        assert!(
-            offsets.contains(&0) && offsets.contains(&0x10),
-            "{offsets:?}"
-        );
+        assert!(offsets.contains(&0) && offsets.contains(&0x10), "{offsets:?}");
     }
 
     /// Two paths add an index to one table in the code and meet before one load
@@ -2901,15 +2686,10 @@ pub(crate) mod tests {
             &[param(Table, 9, 1)],
             HwStage::Ps,
         );
-        let [(_, a), (_, b)] = r.scalar[..] else {
-            panic!("{:?}", r.scalar)
-        };
+        let [(_, a), (_, b)] = r.scalar[..] else { panic!("{:?}", r.scalar) };
         assert_eq!(a, b);
         assert_eq!((a.param, a.offset), (0, 0));
-        assert!(
-            a.dynamic.is_some(),
-            "the lane's offset is the computed term"
-        );
+        assert!(a.dynamic.is_some(), "the lane's offset is the computed term");
     }
 
     #[test]
@@ -2941,16 +2721,7 @@ pub(crate) mod tests {
         // SCC set picks the first operand.
         assert_eq!(
             args[..],
-            [
-                Source::Loaded {
-                    load: (0, 2),
-                    first: 0
-                },
-                Source::Loaded {
-                    load: (0, 3),
-                    first: 0
-                },
-            ]
+            [Source::Loaded { load: (0, 2), first: 0 }, Source::Loaded { load: (0, 3), first: 0 },]
         );
         assert_eq!(r.scalar, [((0, 2), at(0, 0)), ((0, 3), at(0, 0x10))]);
     }
@@ -2993,10 +2764,7 @@ pub(crate) mod tests {
         assert!(run(0xC000_FFFF).is_ok());
         assert_eq!(
             run(0xC000_FFFE).unwrap_err(),
-            ShaderError::Unsupported {
-                offset: 0x3c,
-                what: "a descriptor changed after loading"
-            }
+            ShaderError::Unsupported { offset: 0x3c, what: "a descriptor changed after loading" }
         );
     }
 
@@ -3024,7 +2792,6 @@ pub(crate) mod tests {
         assert_eq!(value(2, 1), Term::Const(0));
     }
 
-
     #[test]
     fn a_selection_that_mixes_two_descriptors_fails() {
         // The high half picked from the first load whatever SCC is: when
@@ -3050,10 +2817,7 @@ pub(crate) mod tests {
         let err = track(&p, &[param(Table, 9, 1)], HwStage::Ps, lanes(&p).as_ref()).unwrap_err();
         assert_eq!(
             err,
-            ShaderError::Unsupported {
-                offset: 36,
-                what: "a descriptor changed after loading"
-            }
+            ShaderError::Unsupported { offset: 36, what: "a descriptor changed after loading" }
         );
     }
 
@@ -3367,14 +3131,8 @@ pub(crate) mod tests {
     #[test]
     fn the_console_waterfall_over_a_first_lane_offset_is_one() {
         let r = waterfall(WATERFALL_INDEXED_WAVE32, false).unwrap();
-        let image = r
-            .descriptors
-            .iter()
-            .find(|d| d.role == Role::Resource)
-            .unwrap();
-        let Source::Loaded { load, first: 0 } = image.source else {
-            panic!("{:?}", image.source)
-        };
+        let image = r.descriptors.iter().find(|d| d.role == Role::Resource).unwrap();
+        let Source::Loaded { load, first: 0 } = image.source else { panic!("{:?}", image.source) };
         let (_, address) = r.scalar.iter().find(|s| s.0 == load).unwrap();
         assert!(address.dynamic.is_some(), "{address:?}");
         assert_eq!(r.waterfall.compares.len(), 1);
@@ -3609,16 +3367,10 @@ pub(crate) mod tests {
 
     #[test]
     fn descriptors_read_from_the_first_lane_of_per_lane_loads_are_traced_to_them() {
-        for (words, wave64) in [
-            (WATERFALL_FETCHED_WAVE32, false),
-            (WATERFALL_FETCHED_WAVE64, true),
-        ] {
+        for (words, wave64) in [(WATERFALL_FETCHED_WAVE32, false), (WATERFALL_FETCHED_WAVE64, true)]
+        {
             let r = waterfall(words, wave64).unwrap();
-            let image = r
-                .descriptors
-                .iter()
-                .find(|d| d.role == Role::Resource)
-                .unwrap();
+            let image = r.descriptors.iter().find(|d| d.role == Role::Resource).unwrap();
             let Source::Fetched { load, first: 0 } = image.source else {
                 panic!("{:?}", image.source)
             };
@@ -3628,10 +3380,7 @@ pub(crate) mod tests {
             assert!(a.dynamic.is_some());
             // The sampler is the same for every lane.
             let sampler = r.descriptors.iter().find(|d| d.role == Role::Sampler);
-            assert!(matches!(
-                sampler.unwrap().source,
-                Source::Loaded { first: 0, .. }
-            ));
+            assert!(matches!(sampler.unwrap().source, Source::Loaded { first: 0, .. }));
             // Four 64-bit compares of the first lane's dwords with the lane's
             // own; the eight reads become the lane's own dwords.
             assert_eq!(r.waterfall.compares.len(), 4);
@@ -3643,9 +3392,7 @@ pub(crate) mod tests {
     fn descriptors_read_from_the_first_lane_of_a_per_lane_choice_are_traced_per_lane() {
         let r = waterfall(WATERFALL_PICKED_WAVE32, false).unwrap();
         let image = &r.descriptors[0];
-        let Source::Lanes { args, .. } = &image.source else {
-            panic!("{:?}", image.source)
-        };
+        let Source::Lanes { args, .. } = &image.source else { panic!("{:?}", image.source) };
         // Lanes with their bit set take the first load (offset 0), the
         // others the second (0x20).
         let offsets: Vec<u32> = args
@@ -3952,31 +3699,20 @@ pub(crate) mod tests {
     fn descriptors_read_from_the_first_lane_of_an_if_else_join_are_traced_per_path() {
         let words = WATERFALL_JOINED_WAVE32;
         let r = waterfall(words, false).unwrap();
-        let image = r
-            .descriptors
-            .iter()
-            .find(|d| matches!(d.source, Source::LanePhi { .. }))
-            .unwrap();
+        let image =
+            r.descriptors.iter().find(|d| matches!(d.source, Source::LanePhi { .. })).unwrap();
         // The join after the else arm: lanes that ran it (lanes from 16 on)
         // take the second entry (0x20); the others come through the flow
         // block, whose join gives lanes that ran the then arm the first one
         // (0). No lane that skipped the then arm comes that way, so the
         // dwords they held before (the inputs) are not traced.
-        let Source::LanePhi { block, args } = &image.source else {
-            unreachable!()
-        };
+        let Source::LanePhi { block, args } = &image.source else { unreachable!() };
         assert_eq!(*block, block_at(words, 0x9c));
-        let [Some(flow), Some(other)] = &args[..] else {
-            panic!("{args:?}")
-        };
+        let [Some(flow), Some(other)] = &args[..] else { panic!("{args:?}") };
         assert_eq!(table_offset(&r, other), 0x20);
-        let Source::LanePhi { block, args } = flow else {
-            panic!("{flow:?}")
-        };
+        let Source::LanePhi { block, args } = flow else { panic!("{flow:?}") };
         assert_eq!(*block, block_at(words, 0x70));
-        let [None, Some(then)] = &args[..] else {
-            panic!("{args:?}")
-        };
+        let [None, Some(then)] = &args[..] else { panic!("{args:?}") };
         assert_eq!(table_offset(&r, then), 0);
         // The loop's compares are of the joined dwords; still recognised.
         assert_eq!(r.waterfall.compares.len(), 4);
@@ -4002,26 +3738,17 @@ pub(crate) mod tests {
     fn descriptors_joined_from_a_per_lane_load_and_a_per_lane_choice_are_traced_per_path() {
         let words = WATERFALL_JOINED_MIXED_WAVE32;
         let r = waterfall(words, false).unwrap();
-        let image = r
-            .descriptors
-            .iter()
-            .find(|d| matches!(d.source, Source::LanePhi { .. }))
-            .unwrap();
-        let Source::LanePhi { block, args } = &image.source else {
-            unreachable!()
-        };
+        let image =
+            r.descriptors.iter().find(|d| matches!(d.source, Source::LanePhi { .. })).unwrap();
+        let Source::LanePhi { block, args } = &image.source else { unreachable!() };
         assert_eq!(*block, block_at(words, 0xb8));
-        let [
-            Some(Source::LanePhi { args: flow, .. }),
-            Some(Source::Lanes { args: picked, .. }),
-        ] = &args[..]
+        let [Some(Source::LanePhi { args: flow, .. }), Some(Source::Lanes { args: picked, .. })] =
+            &args[..]
         else {
             panic!("{args:?}")
         };
         // The then arm loads each lane's entry from the table at s0.
-        let [None, Some(Source::Fetched { load, first: 0 })] = flow[..] else {
-            panic!("{flow:?}")
-        };
+        let [None, Some(Source::Fetched { load, first: 0 })] = flow[..] else { panic!("{flow:?}") };
         let a = r.scalar.iter().find(|s| s.0 == load).unwrap().1;
         assert_eq!((a.param, a.offset), (0, 0));
         assert!(a.dynamic.is_some());
@@ -4072,37 +3799,25 @@ pub(crate) mod tests {
     fn a_buffer_descriptor_joined_per_lane_is_traced_on_the_paths_of_lanes_that_load() {
         let words = WATERFALL_JOINED_BUFFER_WAVE32;
         let r = waterfall(words, false).unwrap();
-        let buffer = r
-            .descriptors
-            .iter()
-            .find(|d| matches!(d.source, Source::LanePhi { .. }))
-            .unwrap();
+        let buffer =
+            r.descriptors.iter().find(|d| matches!(d.source, Source::LanePhi { .. })).unwrap();
         // The outer join: lanes from the else arm's inner join, or (below
         // 16) through the flow block.
-        let Source::LanePhi { block, args } = &buffer.source else {
-            unreachable!()
-        };
+        let Source::LanePhi { block, args } = &buffer.source else { unreachable!() };
         assert_eq!(*block, block_at(words, 0x78));
         let [
             Some(Source::LanePhi { args: flow, .. }),
-            Some(Source::LanePhi {
-                block: inner,
-                args: nested,
-            }),
+            Some(Source::LanePhi { block: inner, args: nested }),
         ] = &args[..]
         else {
             panic!("{args:?}")
         };
-        let [None, Some(then)] = &flow[..] else {
-            panic!("{flow:?}")
-        };
+        let [None, Some(then)] = &flow[..] else { panic!("{flow:?}") };
         assert_eq!(table_offset(&r, then), 0);
         // Lanes from 24 on skip the inner arm and keep the inputs, but do
         // not load: that edge is not traced.
         assert_eq!(*inner, block_at(words, 0x74));
-        let [None, Some(other)] = &nested[..] else {
-            panic!("{nested:?}")
-        };
+        let [None, Some(other)] = &nested[..] else { panic!("{nested:?}") };
         assert_eq!(table_offset(&r, other), 0x20);
         assert_eq!(r.waterfall.compares.len(), 2);
         assert_eq!(r.waterfall.reads.len(), 4);
@@ -4118,19 +3833,19 @@ pub(crate) mod tests {
             0xBE84_0300u32, // s_mov_b32 s4, s0
             0xBE85_0380,    // s_mov_b32 s5, 0
             0xF40C_0302,
-            0xFA00_0000,    // s_load_dwordx8 s[12:19], s[4:5], 0x0
-            0x7E04_0D00,    // v_cvt_f32_u32 v2, v0
-            0x7E06_0302,    // v_mov_b32 v3, v2
-            0x7D88_0090,    // v_cmp_gt_u32 vcc_lo, 16, v0
-            0xBF8C_C07F,    // s_waitcnt lgkmcnt(0)
-            0x877E_6A7E,    // s_and_b32 exec_lo, exec_lo, vcc_lo
-            0xBF88_0004,    // s_cbranch_execz -> join (skips 4 dwords)
-            0xBE88_0380,    // s_mov_b32 s8, 0
-            0xBE89_0380,    // s_mov_b32 s9, 0
-            0xBE8A_0380,    // s_mov_b32 s10, 0
-            0xBE8B_0380,    // s_mov_b32 s11, 0
+            0xFA00_0000, // s_load_dwordx8 s[12:19], s[4:5], 0x0
+            0x7E04_0D00, // v_cvt_f32_u32 v2, v0
+            0x7E06_0302, // v_mov_b32 v3, v2
+            0x7D88_0090, // v_cmp_gt_u32 vcc_lo, 16, v0
+            0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
+            0x877E_6A7E, // s_and_b32 exec_lo, exec_lo, vcc_lo
+            0xBF88_0004, // s_cbranch_execz -> join (skips 4 dwords)
+            0xBE88_0380, // s_mov_b32 s8, 0
+            0xBE89_0380, // s_mov_b32 s9, 0
+            0xBE8A_0380, // s_mov_b32 s10, 0
+            0xBE8B_0380, // s_mov_b32 s11, 0
             0xF09C_0F08,
-            0x0043_0C02,    // image_sample_lz v[12:15], v[2:3], s[12:19], s[8:11]
+            0x0043_0C02, // image_sample_lz v[12:15], v[2:3], s[12:19], s[8:11]
             S_ENDPGM,
         ]
         .iter()

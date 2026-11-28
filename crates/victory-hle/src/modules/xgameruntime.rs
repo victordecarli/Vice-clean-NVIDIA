@@ -15,10 +15,16 @@
 //! saves (`xgamesave`), networking (`xnetworking`), the package
 //! (`xpackage`), the store (`xstore`), system dialogs (`xgameui`), speech
 //! (`speech`), HDR, URIs, display deferrals and screenshots (`display`).
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (XGameRuntimeInitialize) that title imports are bound by"
+)]
 // Title code calls these through its import table, passing pointers the real
 // API would trust.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{CStr, c_char, c_void};
 use std::sync::Mutex;
@@ -46,12 +52,7 @@ pub struct Guid {
 
 impl Guid {
     pub const fn new(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Guid {
-        Guid {
-            data1,
-            data2,
-            data3,
-            data4,
-        }
+        Guid { data1, data2, data3, data4 }
     }
 }
 
@@ -80,10 +81,7 @@ unsafe impl Sync for Object {}
 
 impl Object {
     pub const fn new<const N: usize>(area: &'static str, methods: &'static Methods<N>) -> Object {
-        Object {
-            vtable: methods.0.as_ptr(),
-            area,
-        }
+        Object { vtable: methods.0.as_ptr(), area }
     }
 }
 
@@ -122,11 +120,7 @@ pub extern "system" fn add_ref(_: *const Object) -> u32 {
 pub extern "system" fn missing<const SLOT: usize>(this: *const Object) -> HRESULT {
     // SAFETY: title code calls methods on objects we handed out.
     let area = unsafe { (*this).area };
-    tracing::warn!(
-        area,
-        slot = format_args!("{:#x}", SLOT * 8),
-        "runtime method not implemented"
-    );
+    tracing::warn!(area, slot = format_args!("{:#x}", SLOT * 8), "runtime method not implemented");
     xasync::E_NOTIMPL
 }
 
@@ -241,10 +235,8 @@ pub extern "system" fn QueryApiImpl(
             calls.push(from);
         }
     }
-    let found = AREAS
-        .iter()
-        .flat_map(|area| area.iter())
-        .find(|(p, i, _)| (*p, *i) == (provider, iid));
+    let found =
+        AREAS.iter().flat_map(|area| area.iter()).find(|(p, i, _)| (*p, *i) == (provider, iid));
     if let Some(&(_, _, object)) = found
         && !out.is_null()
     {
@@ -322,12 +314,7 @@ mod tests {
             )
         };
         assert_eq!(init(1, 2, 2), S_OK);
-        let guid = Guid {
-            data1: 1,
-            data2: 2,
-            data3: 3,
-            data4: [4; 8],
-        };
+        let guid = Guid { data1: 1, data2: 2, data3: 3, data4: [4; 8] };
         let untouched = 0x1234 as *mut c_void;
         let mut out = untouched;
         assert!(query(&guid, &guid, &mut out) < 0);

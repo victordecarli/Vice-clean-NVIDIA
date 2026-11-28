@@ -6,7 +6,7 @@
 //! binary is part of this repository; the library is loaded at run time
 //! (`super::load`). The offsets the SDK asserts in `sl.api/sl.cpp` are asserted
 //! again in the tests below.
-#![allow(dead_code)]
+#![allow(dead_code, reason = "mirrors the SDK's ABI, not every item of which is used")]
 
 use std::ffi::{c_char, c_void};
 
@@ -39,21 +39,32 @@ impl BaseStructure {
     }
 }
 
-pub const PREFERENCES: StructType = guid(0x1ca1_0965, 0xbf8e, 0x432b, [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14]);
-pub const RESOURCE: StructType = guid(0x3a9d_70cf, 0x2418, 0x4b72, [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61]);
-pub const RESOURCE_TAG: StructType = guid(0x4c6a_5aad, 0xb445, 0x496c, [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53]);
-pub const CONSTANTS: StructType = guid(0xdcd3_5ad7, 0x4e4a, 0x4bad, [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe]);
-pub const VIEWPORT_HANDLE: StructType = guid(0x171b_6435, 0x9b3c, 0x4fc8, [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4]);
-pub const FEATURE_VERSION: StructType = guid(0x6d5b_51f0, 0x076b, 0x486d, [0x99, 0x95, 0x5a, 0x56, 0x10, 0x43, 0xf5, 0xc1]);
-pub const ADAPTER_INFO: StructType = guid(0x0677_315f, 0xa746, 0x4492, [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4]);
+pub const PREFERENCES: StructType =
+    guid(0x1ca1_0965, 0xbf8e, 0x432b, [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14]);
+pub const RESOURCE: StructType =
+    guid(0x3a9d_70cf, 0x2418, 0x4b72, [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61]);
+pub const RESOURCE_TAG: StructType =
+    guid(0x4c6a_5aad, 0xb445, 0x496c, [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53]);
+pub const CONSTANTS: StructType =
+    guid(0xdcd3_5ad7, 0x4e4a, 0x4bad, [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe]);
+pub const VIEWPORT_HANDLE: StructType =
+    guid(0x171b_6435, 0x9b3c, 0x4fc8, [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4]);
+pub const FEATURE_VERSION: StructType =
+    guid(0x6d5b_51f0, 0x076b, 0x486d, [0x99, 0x95, 0x5a, 0x56, 0x10, 0x43, 0xf5, 0xc1]);
+pub const ADAPTER_INFO: StructType =
+    guid(0x0677_315f, 0xa746, 0x4492, [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4]);
 pub const FEATURE_REQUIREMENTS: StructType =
     guid(0x6671_4097, 0xac6d, 0x4bc6, [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f]);
-pub const DLSS_OPTIONS: StructType = guid(0x6ac8_26e4, 0x4c61, 0x4101, [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8]);
+pub const DLSS_OPTIONS: StructType =
+    guid(0x6ac8_26e4, 0x4c61, 0x4101, [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8]);
 pub const DLSS_OPTIMAL_SETTINGS: StructType =
     guid(0xef1d_0957, 0xfd58, 0x4df7, [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76]);
-pub const DLSSG_OPTIONS: StructType = guid(0xfac5_f1cb, 0x2dfd, 0x4f36, [0xa1, 0xe6, 0x3a, 0x9e, 0x86, 0x52, 0x56, 0xc5]);
-pub const DLSSG_STATE: StructType = guid(0xcc8a_c8e1, 0xa179, 0x44f5, [0x97, 0xfa, 0xe7, 0x41, 0x12, 0xf9, 0xbc, 0x61]);
-pub const REFLEX_OPTIONS: StructType = guid(0xf03a_f81a, 0x6d0b, 0x4902, [0xa6, 0x51, 0xc4, 0x96, 0x5e, 0x21, 0x54, 0x34]);
+pub const DLSSG_OPTIONS: StructType =
+    guid(0xfac5_f1cb, 0x2dfd, 0x4f36, [0xa1, 0xe6, 0x3a, 0x9e, 0x86, 0x52, 0x56, 0xc5]);
+pub const DLSSG_STATE: StructType =
+    guid(0xcc8a_c8e1, 0xa179, 0x44f5, [0x97, 0xfa, 0xe7, 0x41, 0x12, 0xf9, 0xbc, 0x61]);
+pub const REFLEX_OPTIONS: StructType =
+    guid(0xf03a_f81a, 0x6d0b, 0x4902, [0xa6, 0x51, 0xc4, 0x96, 0x5e, 0x21, 0x54, 0x34]);
 
 /// `sl::kSDKVersion` of the headers mirrored here (2.14.16).
 pub const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (16 << 16) | 0xfedc;
@@ -550,25 +561,39 @@ pub type SlInit = unsafe extern "C" fn(*const Preferences, u64) -> i32;
 pub type SlShutdown = unsafe extern "C" fn() -> i32;
 pub type SlIsFeatureSupported = unsafe extern "C" fn(u32, *const AdapterInfo) -> i32;
 pub type SlSetFeatureLoaded = unsafe extern "C" fn(u32, bool) -> i32;
-pub type SlEvaluateFeature =
-    unsafe extern "C" fn(u32, *const FrameToken, *const *const BaseStructure, u32, *mut c_void) -> i32;
+pub type SlEvaluateFeature = unsafe extern "C" fn(
+    u32,
+    *const FrameToken,
+    *const *const BaseStructure,
+    u32,
+    *mut c_void,
+) -> i32;
 pub type SlFreeResources = unsafe extern "C" fn(u32, *const ViewportHandle) -> i32;
-pub type SlSetTagForFrame =
-    unsafe extern "C" fn(*const FrameToken, *const ViewportHandle, *const ResourceTag, u32, *mut c_void) -> i32;
+pub type SlSetTagForFrame = unsafe extern "C" fn(
+    *const FrameToken,
+    *const ViewportHandle,
+    *const ResourceTag,
+    u32,
+    *mut c_void,
+) -> i32;
 pub type SlGetFeatureRequirements = unsafe extern "C" fn(u32, *mut FeatureRequirements) -> i32;
 pub type SlGetFeatureVersion = unsafe extern "C" fn(u32, *mut FeatureVersion) -> i32;
 pub type SlUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
-pub type SlSetConstants = unsafe extern "C" fn(*const Constants, *const FrameToken, *const ViewportHandle) -> i32;
+pub type SlSetConstants =
+    unsafe extern "C" fn(*const Constants, *const FrameToken, *const ViewportHandle) -> i32;
 pub type SlGetNativeInterface = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
 pub type SlGetFeatureFunction = unsafe extern "C" fn(u32, *const c_char, *mut *mut c_void) -> i32;
 pub type SlGetNewFrameToken = unsafe extern "C" fn(*mut *mut FrameToken, *const u32) -> i32;
 pub type SlSetD3DDevice = unsafe extern "C" fn(*mut c_void) -> i32;
 
 // Per-feature functions (`slGetFeatureFunction`).
-pub type SlDlssGetOptimalSettings = unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettings) -> i32;
+pub type SlDlssGetOptimalSettings =
+    unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettings) -> i32;
 pub type SlDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssOptions) -> i32;
-pub type SlDlssgSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssgOptions) -> i32;
-pub type SlDlssgGetState = unsafe extern "C" fn(*const ViewportHandle, *mut DlssgState, *const DlssgOptions) -> i32;
+pub type SlDlssgSetOptions =
+    unsafe extern "C" fn(*const ViewportHandle, *const DlssgOptions) -> i32;
+pub type SlDlssgGetState =
+    unsafe extern "C" fn(*const ViewportHandle, *mut DlssgState, *const DlssgOptions) -> i32;
 pub type SlReflexSetOptions = unsafe extern "C" fn(*const ReflexOptions) -> i32;
 pub type SlPclSetMarker = unsafe extern "C" fn(u32, *const FrameToken) -> i32;
 

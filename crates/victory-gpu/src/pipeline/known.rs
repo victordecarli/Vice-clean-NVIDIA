@@ -61,7 +61,9 @@ fn book() -> Option<&'static Mutex<Book>> {
         let mut keys = HashSet::new();
         let mut shaders = HashSet::new();
         let ends = [
-            walk_shaders(&dir, |_, hash, _, _| drop(shaders.insert(hash))),
+            walk_shaders(&dir, |_, hash, _, _| {
+                shaders.insert(hash);
+            }),
             walk_pipelines(&dir, |_, bytes| {
                 keys.extend(bytes.first_chunk::<16>().copied());
             }),
@@ -74,7 +76,11 @@ fn book() -> Option<&'static Mutex<Book>> {
                 let _ = f.set_len(end);
             }
         }
-        tracing::info!(pipelines = keys.len(), shaders = shaders.len(), "title pipelines known from earlier runs");
+        tracing::info!(
+            pipelines = keys.len(),
+            shaders = shaders.len(),
+            "title pipelines known from earlier runs"
+        );
         let spawned = std::thread::Builder::new().name("victory-known".into()).spawn(|| {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -233,7 +239,9 @@ pub fn keep_library() {
 /// there is one.
 pub fn make(dir: &Path, which: &[usize], mut each: impl FnMut(usize, Option<(f64, bool)>)) {
     let mut places = HashMap::new();
-    walk_shaders(dir, |stage, hash, at, len| drop(places.insert(hash, (stage, at, len))));
+    walk_shaders(dir, |stage, hash, at, len| {
+        places.insert(hash, (stage, at, len));
+    });
     let Ok(mut file) = std::fs::File::open(dir.join(SHADERS)) else { return };
     let wanted: HashSet<usize> = which.iter().copied().collect();
     let mut entries = HashMap::new();
@@ -260,7 +268,7 @@ pub fn make(dir: &Path, which: &[usize], mut each: impl FnMut(usize, Option<(f64
     }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, reason = "a parser of one file format, returning its parts")]
 fn parse(
     entry: &[u8],
     read: &mut impl FnMut(&[u8; 32]) -> Option<Vec<u8>>,
@@ -404,7 +412,7 @@ impl GraphicsState {
             let (numbers, after) = after.split_first_chunk::<24>()?;
             rest = after;
             let mut v = [0u32; 6];
-            for (v, b) in v.iter_mut().zip(numbers.chunks_exact(4)) {
+            for (v, b) in v.iter_mut().zip(numbers.as_chunks::<4>().0.iter()) {
                 *v = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
             }
             elements.push((CString::new(name).ok()?, v));
@@ -486,7 +494,10 @@ mod tests {
         shader.extend_from_slice(&shader.clone()[..20]);
         std::fs::write(dir.join(SHADERS), &shader).unwrap();
         let mut seen = Vec::new();
-        assert_eq!(walk_shaders(&dir, |stage, hash, at, len| seen.push((stage, hash[0], at, len))), one);
+        assert_eq!(
+            walk_shaders(&dir, |stage, hash, at, len| seen.push((stage, hash[0], at, len))),
+            one
+        );
         assert_eq!(seen, [(5, 9, 37, 4)]);
         let _ = std::fs::remove_dir_all(&dir);
     }

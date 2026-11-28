@@ -5,8 +5,14 @@
 //! (activate, process, reset, deactivate) and dequeues one result per
 //! command. We decode each command when it is queued, so its result is ready
 //! at once; the order of results is the order of commands.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (XApuConnect) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::alloc::Layout;
 use std::collections::VecDeque;
@@ -162,10 +168,7 @@ pub extern "system" fn XApuConnect(
     if input.process != DECODE_OPUS {
         // shortcut: rate conversion (decode-convert, PCM convert) is not
         // implemented; add a resampler if a title connects for it.
-        tracing::warn!(
-            process = input.process,
-            "audio decoder: processing kind not implemented"
-        );
+        tracing::warn!(process = input.process, "audio decoder: processing kind not implemented");
         return E_NOTIMPL;
     }
     if input.frames_per_output != 0 {
@@ -214,10 +217,7 @@ pub extern "system" fn XApuConnect(
     });
     // SAFETY: checked non-null.
     unsafe {
-        output.write(ConnectOutput {
-            memory: memory.cast(),
-            result_event: event,
-        });
+        output.write(ConnectOutput { memory: memory.cast(), result_event: event });
         handle.write(Box::into_raw(connection));
     }
     S_OK
@@ -421,13 +421,7 @@ mod tests {
     use opus_pure::{Application, OpusEncoder};
 
     fn id(kind: u32, stream: u32) -> CommandId {
-        CommandId {
-            kind,
-            stream,
-            sequence: 7,
-            options: 0,
-            context: 0x1234,
-        }
+        CommandId { kind, stream, sequence: 7, options: 0, context: 0x1234 }
     }
 
     #[test]
@@ -442,10 +436,8 @@ mod tests {
             frames_per_output: 0,
             options: 1,
         };
-        let mut output = ConnectOutput {
-            memory: std::ptr::null_mut(),
-            result_event: std::ptr::null_mut(),
-        };
+        let mut output =
+            ConnectOutput { memory: std::ptr::null_mut(), result_event: std::ptr::null_mut() };
         let mut handle = std::ptr::null_mut();
         assert_eq!(XApuConnect(&input, &mut output, &mut handle), S_OK);
         let base = output.memory.cast::<u8>();
@@ -485,16 +477,10 @@ mod tests {
             output: base.wrapping_add(0x14000),
         };
         let mut total = 0;
-        assert_eq!(
-            XApuEnqueueCommand(handle, (&raw const process).cast(), &mut total),
-            S_OK
-        );
+        assert_eq!(XApuEnqueueCommand(handle, (&raw const process).cast(), &mut total), S_OK);
         assert_eq!(total, 2);
         // Two results queued for stream 3: its queue is full.
-        assert_eq!(
-            XApuEnqueueCommand(handle, (&raw const process).cast(), &mut total),
-            QUEUE_FULL
-        );
+        assert_eq!(XApuEnqueueCommand(handle, (&raw const process).cast(), &mut total), QUEUE_FULL);
         assert_eq!(XApuGetResultCount(handle, std::ptr::null_mut()), 2);
 
         let mut result = std::mem::MaybeUninit::<ApuResult>::zeroed();
@@ -506,22 +492,15 @@ mod tests {
         assert_eq!(XApuDequeueResult(handle, result.as_mut_ptr()), S_OK);
         // SAFETY: written above.
         let decoded = unsafe { result.assume_init() };
-        let (kind, error, frames, length) = (
-            decoded.id.kind,
-            decoded.error,
-            decoded.frames,
-            decoded.output_length,
-        );
+        let (kind, error, frames, length) =
+            (decoded.id.kind, decoded.error, decoded.frames, decoded.output_length);
         assert_eq!((kind, error, frames, length), (PROCESS, S_OK, 960, 960 * 8));
         // SAFETY: the decoder wrote 960 stereo frames there.
         let pcm =
             unsafe { std::slice::from_raw_parts(base.wrapping_add(0x14000).cast::<f32>(), 1920) };
         let energy: f32 = pcm.iter().map(|s| s * s).sum::<f32>() / 1920.0;
         assert!(energy > 0.01, "decoded a tone, energy {energy}");
-        assert_eq!(
-            XApuDequeueResult(handle, result.as_mut_ptr()),
-            PENDING_RESULTS
-        );
+        assert_eq!(XApuDequeueResult(handle, result.as_mut_ptr()), PENDING_RESULTS);
         let mut dequeued = 0;
         assert_eq!(XApuGetResultCount(handle, &mut dequeued), 0);
         assert_eq!(dequeued, 2);
@@ -529,10 +508,7 @@ mod tests {
         // A process on a stream that was never activated fails in its result.
         let mut stray = process;
         stray.id.stream = 4;
-        assert_eq!(
-            XApuEnqueueCommand(handle, (&raw const stray).cast(), &mut total),
-            S_OK
-        );
+        assert_eq!(XApuEnqueueCommand(handle, (&raw const stray).cast(), &mut total), S_OK);
         assert_eq!(XApuDequeueResult(handle, result.as_mut_ptr()), S_OK);
         // SAFETY: written above.
         let error = unsafe { result.assume_init() }.error;
@@ -545,11 +521,7 @@ mod tests {
         let tone: Vec<f32> = (0..960 * 2)
             .map(|i| {
                 let phase = (i / 2) as f32 * std::f32::consts::TAU / 48_000.0;
-                if i % 2 == 0 {
-                    (phase * 440.0).sin() * 0.5
-                } else {
-                    (phase * 880.0).sin() * 0.25
-                }
+                if i % 2 == 0 { (phase * 440.0).sin() * 0.5 } else { (phase * 880.0).sin() * 0.25 }
             })
             .collect();
         let mut encoder = OpusEncoder::new(48_000, 2, Application::Audio).unwrap();
@@ -565,10 +537,8 @@ mod tests {
                 frames_per_output: 0,
                 options,
             };
-            let mut output = ConnectOutput {
-                memory: std::ptr::null_mut(),
-                result_event: std::ptr::null_mut(),
-            };
+            let mut output =
+                ConnectOutput { memory: std::ptr::null_mut(), result_event: std::ptr::null_mut() };
             let mut handle = std::ptr::null_mut();
             assert_eq!(XApuConnect(&input, &mut output, &mut handle), S_OK);
             let base = output.memory.cast::<u8>();
@@ -661,12 +631,8 @@ mod tests {
                 unaligned_bytes, aligned_bytes,
                 "unaligned output must match aligned output (deinterleaved={deinterleaved})"
             );
-            let samples: Vec<f32> = unaligned_bytes
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|c| f32::from_le_bytes(*c))
-                .collect();
+            let samples: Vec<f32> =
+                unaligned_bytes.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect();
             let energy: f32 = samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32;
             assert!(
                 energy > 0.01,

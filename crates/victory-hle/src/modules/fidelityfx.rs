@@ -16,9 +16,15 @@
 //! The description layouts are the FidelityFX SDK's API (MIT) as DexNom's fork
 //! reads them (DexNom/VIctory, `crates/victory-hle/src/modules/fidelityfx.rs`,
 //! GPL-3.0-or-later), from which they are ported.
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (ffxCreateContext) that title imports are bound by"
+)]
 // Title code calls these through its import table.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::HashMap;
 use std::ffi::c_void;
@@ -107,7 +113,8 @@ type Call = unsafe extern "C" fn(*mut *mut c_void, *mut Header) -> u32;
 
 /// The title's own functions, by [`NAMES`].
 static ORIGINALS: [AtomicUsize; 5] = [const { AtomicUsize::new(0) }; 5];
-const NAMES: [&str; 5] = ["ffxCreateContext", "ffxDestroyContext", "ffxConfigure", "ffxQuery", "ffxDispatch"];
+const NAMES: [&str; 5] =
+    ["ffxCreateContext", "ffxDestroyContext", "ffxConfigure", "ffxQuery", "ffxDispatch"];
 
 /// An upscaler context the title made: its creation flags and largest
 /// sizes.
@@ -144,10 +151,12 @@ impl ImportResolver for Interpose<'_> {
             return found;
         }
         match (&found, symbol) {
-            (&Resolution::Found { address, .. }, ImportSymbol::Name { name, .. }) => match interpose(name, address) {
-                Some(ours) => Resolution::Found { address: ours, provenance: Provenance::Hle },
-                None => found,
-            },
+            (&Resolution::Found { address, .. }, ImportSymbol::Name { name, .. }) => {
+                match interpose(name, address) {
+                    Some(ours) => Resolution::Found { address: ours, provenance: Provenance::Hle },
+                    None => found,
+                }
+            }
             _ => found,
         }
     }
@@ -164,7 +173,11 @@ fn interpose(name: &str, original: usize) -> Option<usize> {
         ffxQuery as *const () as usize,
         ffxDispatch as *const () as usize,
     ][i];
-    tracing::info!(name, original = format_args!("{original:#x}"), "FidelityFX: the title's import goes through ours (DLSS / frame generation)");
+    tracing::info!(
+        name,
+        original = format_args!("{original:#x}"),
+        "FidelityFX: the title's import goes through ours (DLSS / frame generation)"
+    );
     Some(ours)
 }
 
@@ -191,13 +204,20 @@ const SHIPPING_MAX_RENDER: [u32; 2] = [1280, 720];
 /// The sizes the title's shipping FSR4 accepts for a context, if `render` and
 /// `output` are not those: (render, output).
 fn shipping_sizes(render: [u32; 2], output: [u32; 2]) -> Option<([u32; 2], [u32; 2])> {
-    ((render, output) != (SHIPPING_MAX_RENDER, SHIPPING_MAX_OUTPUT)).then_some((SHIPPING_MAX_RENDER, SHIPPING_MAX_OUTPUT))
+    ((render, output) != (SHIPPING_MAX_RENDER, SHIPPING_MAX_OUTPUT))
+        .then_some((SHIPPING_MAX_RENDER, SHIPPING_MAX_OUTPUT))
 }
 
-extern "C" fn ffxCreateContext(context: *mut *mut c_void, desc: *mut Header, memory: *const c_void) -> u32 {
+extern "C" fn ffxCreateContext(
+    context: *mut *mut c_void,
+    desc: *mut Header,
+    memory: *const c_void,
+) -> u32 {
     let Some(create) = original(0) else { return PARAMETER };
     // SAFETY: the title's own function, with its arguments.
-    let call = |desc: *mut Header| unsafe { std::mem::transmute::<*const (), Create>(create)(context, desc, memory) };
+    let call = |desc: *mut Header| unsafe {
+        std::mem::transmute::<*const (), Create>(create)(context, desc, memory)
+    };
     // SAFETY: the title passes a chain of descriptions.
     let upscaler = !desc.is_null() && unsafe { (*desc).kind } == CREATE_UPSCALE;
     if !upscaler {
@@ -208,7 +228,9 @@ extern "C" fn ffxCreateContext(context: *mut *mut c_void, desc: *mut Header, mem
     // With DLSS taking the upscalings, the title's own context only has to
     // exist (for its queries and our bookkeeping): it is made at a size its
     // shipping tables accept, and DLSS gets the sizes the title asked for.
-    let shipping = streamline::upscaling().then(|| shipping_sizes(asked.max_render, asked.max_output)).flatten();
+    let shipping = streamline::upscaling()
+        .then(|| shipping_sizes(asked.max_render, asked.max_output))
+        .flatten();
     let clamped = shipping.is_some();
     let code = if let Some((render, output)) = shipping {
         let mut fitted = asked;
@@ -246,7 +268,12 @@ extern "C" fn ffxCreateContext(context: *mut *mut c_void, desc: *mut Header, mem
     }
     // SAFETY: the context was made.
     let handle = unsafe { *context } as usize;
-    let created = Created { flags: asked.flags, max_render: asked.max_render, max_output: asked.max_output, clamped };
+    let created = Created {
+        flags: asked.flags,
+        max_render: asked.max_render,
+        max_output: asked.max_output,
+        clamped,
+    };
     tracing::info!(
         context = format_args!("{handle:#x}"),
         flags = format_args!("{:#x}", created.flags),
@@ -286,7 +313,10 @@ extern "C" fn ffxQuery(context: *mut *mut c_void, desc: *mut Header) -> u32 {
         let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
         if !seen.contains(&kind) && seen.len() < 32 {
             seen.push(kind);
-            tracing::info!(kind = format_args!("{kind:#x}"), "FidelityFX: the title asks a query of this kind (answered by its own DLL)");
+            tracing::info!(
+                kind = format_args!("{kind:#x}"),
+                "FidelityFX: the title asks a query of this kind (answered by its own DLL)"
+            );
         }
     }
     // SAFETY: the title's own function, with its arguments.
@@ -306,7 +336,10 @@ extern "C" fn ffxDispatch(context: *mut *mut c_void, desc: *mut Header) -> u32 {
         return own();
     }
     let Some(created) = contexts(|c| c.get(&handle).copied()) else {
-        once!(warn, "FidelityFX: an upscale dispatch on a context we did not see made; the title's own runs");
+        once!(
+            warn,
+            "FidelityFX: an upscale dispatch on a context we did not see made; the title's own runs"
+        );
         return own();
     };
     // SAFETY: an upscaling, by its type.
@@ -321,7 +354,10 @@ extern "C" fn ffxDispatch(context: *mut *mut c_void, desc: *mut Header) -> u32 {
             // output size asked would read past its tables: no upscaling
             // this frame (the output keeps the last one) rather than that.
             refused(why);
-            once!(warn, "FidelityFX: DLSS did not take an upscaling on a context made smaller than asked; none ran");
+            once!(
+                warn,
+                "FidelityFX: DLSS did not take an upscaling on a context made smaller than asked; none ran"
+            );
             OK
         }
         Taken::No(why) => {
@@ -414,7 +450,11 @@ mod tests {
     }
 
     fn resource(at: usize, state: u32) -> Resource {
-        Resource { resource: at as *mut c_void, description: [1, 10, 2560, 1440, 1, 1, 0, 0], state }
+        Resource {
+            resource: at as *mut c_void,
+            description: [1, 10, 2560, 1440, 1, 1, 0, 0],
+            state,
+        }
     }
 
     fn dispatch(output: [u32; 2]) -> DispatchUpscale {
@@ -451,7 +491,12 @@ mod tests {
     /// the context's largest is the output.
     #[test]
     fn a_dispatch_reads_as_its_upscaling() {
-        let created = Created { flags: 0x29, max_render: [2560, 1440], max_output: [2560, 1440], clamped: false };
+        let created = Created {
+            flags: 0x29,
+            max_render: [2560, 1440],
+            max_output: [2560, 1440],
+            clamped: false,
+        };
         let up = upscale(&dispatch([2560, 1440]), &created, 0xabc);
         assert_eq!(up.context, 0xabc);
         assert_eq!(up.list as usize, 0x1000);

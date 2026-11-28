@@ -120,7 +120,11 @@ impl Front {
             self.words.resize(from + blob.len().div_ceil(8), 0);
             // SAFETY: the words just made hold the bytes; plain data.
             unsafe {
-                std::ptr::copy_nonoverlapping(blob.as_ptr(), self.words.as_mut_ptr().add(from).cast(), blob.len())
+                std::ptr::copy_nonoverlapping(
+                    blob.as_ptr(),
+                    self.words.as_mut_ptr().add(from).cast(),
+                    blob.len(),
+                )
             };
         }
         let len = (self.words.len() - at - 1) as u64;
@@ -300,7 +304,11 @@ fn back_list(kind: u32) -> This {
 }
 
 fn start() {
-    let threads = std::env::var("VICTORY_THIN_THREADS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(8usize).clamp(1, 32);
+    let threads = std::env::var("VICTORY_THIN_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(8usize)
+        .clamp(1, 32);
     for i in 0..threads {
         let worker = move || {
             crate::cores::keep_many_on_fast_cores("victory-list");
@@ -315,16 +323,22 @@ fn start() {
                         }
                     }
                 };
-                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| recording.run())).is_err() {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| recording.run()))
+                    .is_err()
+                {
                     crate::host::fail(format_args!("a thread that translates lists panicked"));
                 }
             }
         };
-        if let Err(e) = std::thread::Builder::new().name(format!("victory-list-{i}")).spawn(worker) {
+        if let Err(e) = std::thread::Builder::new().name(format!("victory-list-{i}")).spawn(worker)
+        {
             tracing::warn!(error = %e, "a thread less to translate lists");
         }
     }
-    tracing::info!(threads, "list calls are written down and translated by threads of ours (VICTORY_THIN=1)");
+    tracing::info!(
+        threads,
+        "list calls are written down and translated by threads of ours (VICTORY_THIN=1)"
+    );
 }
 
 /// The recordings of submitted lists, in order (one that was not begun is left
@@ -395,7 +409,7 @@ impl Word for f32 {
 /// and the call made of it later.
 macro_rules! plain {
     ($($op:ident $name:ident = $was:path, ($($a:ident: $t:ty),*);)*) => {
-        #[allow(clippy::upper_case_acronyms, non_camel_case_types)]
+        #[allow(clippy::upper_case_acronyms, non_camel_case_types, reason = "the variants are named after the D3D12.X operations they stand for")]
         #[repr(u64)]
         enum Plain { $($op),* , END }
         $(extern "system" fn $name(this: This $(, $a: $t)*) {
@@ -513,7 +527,11 @@ fn record(handle: u64) -> [u64; RECORD] {
     if handle != 0 {
         // SAFETY: a descriptor slot the title passes (they are larger).
         unsafe {
-            std::ptr::copy_nonoverlapping(handle as *const u8, words.as_mut_ptr().cast(), size_of::<RtvRecord>())
+            std::ptr::copy_nonoverlapping(
+                handle as *const u8,
+                words.as_mut_ptr().cast(),
+                size_of::<RtvRecord>(),
+            )
         };
     }
     words
@@ -533,7 +551,12 @@ extern "system" fn list_reset(this: This, allocator: This, pipeline: This) -> HR
     front(this).begin(kind, pipeline);
     S_OK
 }
-extern "system" fn list_reset_x(this: This, allocator: This, pipeline: This, _flags: u32) -> HRESULT {
+extern "system" fn list_reset_x(
+    this: This,
+    allocator: This,
+    pipeline: This,
+    _flags: u32,
+) -> HRESULT {
     list_reset(this, allocator, pipeline)
 }
 extern "system" fn allocate_upload(this: This, size: u64, alignment: u64) -> *mut u8 {
@@ -576,7 +599,11 @@ extern "system" fn scissors(this: This, count: u32, items: *const RECT) {
 }
 extern "system" fn blend_factor(this: This, factor: *const [f32; 4]) {
     let given = !factor.is_null();
-    front(this).put_with(BLEND_FACTOR, &[u64::from(given)], &[bytes_of(factor, usize::from(given))]);
+    front(this).put_with(
+        BLEND_FACTOR,
+        &[u64::from(given)],
+        &[bytes_of(factor, usize::from(given))],
+    );
 }
 extern "system" fn heaps(this: This, count: u32, items: *const This) {
     let count = if items.is_null() { 0 } else { count };
@@ -590,10 +617,22 @@ fn constants(this: This, op: u64, slot: u32, count: u32, values: *const u32, off
         &[bytes_of(values, count as usize)],
     );
 }
-extern "system" fn compute_constants(this: This, slot: u32, count: u32, values: *const u32, offset: u32) {
+extern "system" fn compute_constants(
+    this: This,
+    slot: u32,
+    count: u32,
+    values: *const u32,
+    offset: u32,
+) {
     constants(this, COMPUTE_CONSTANTS, slot, count, values, offset);
 }
-extern "system" fn graphics_constants(this: This, slot: u32, count: u32, values: *const u32, offset: u32) {
+extern "system" fn graphics_constants(
+    this: This,
+    slot: u32,
+    count: u32,
+    values: *const u32,
+    offset: u32,
+) {
     constants(this, GRAPHICS_CONSTANTS, slot, count, values, offset);
 }
 extern "system" fn index_buffer(this: This, view: *const IndexView) {
@@ -608,7 +647,13 @@ extern "system" fn vertex_buffers(this: This, start: u32, count: u32, views: *co
         &[bytes_of(views, count as usize)],
     );
 }
-extern "system" fn targets(this: This, count: u32, handles: *const u64, one_range: i32, depth: *const u64) {
+extern "system" fn targets(
+    this: This,
+    count: u32,
+    handles: *const u64,
+    one_range: i32,
+    depth: *const u64,
+) {
     let count = if handles.is_null() { 0 } else { (count as usize).min(8) };
     // SAFETY: the title passes a handle or null.
     let depth = unsafe { depth.as_ref() }.copied().unwrap_or(0);
@@ -617,7 +662,8 @@ extern "system" fn targets(this: This, count: u32, handles: *const u64, one_rang
     for i in 0..count {
         // SAFETY: the title passes `count` handles, or the first of a range
         // of views of 128 bytes.
-        let handle = unsafe { if one_range != 0 { *handles + 128 * i as u64 } else { *handles.add(i) } };
+        let handle =
+            unsafe { if one_range != 0 { *handles + 128 * i as u64 } else { *handles.add(i) } };
         present |= u64::from(handle != 0) << i;
         records[i * RECORD..(i + 1) * RECORD].copy_from_slice(&record(handle));
     }
@@ -629,7 +675,13 @@ extern "system" fn targets(this: This, count: u32, handles: *const u64, one_rang
         &[bytes_of(records.as_ptr(), records.len())],
     );
 }
-extern "system" fn clear_rtv(this: This, handle: u64, color: *const [f32; 4], count: u32, rects: *const Rect) {
+extern "system" fn clear_rtv(
+    this: This,
+    handle: u64,
+    color: *const [f32; 4],
+    count: u32,
+    rects: *const Rect,
+) {
     if handle == 0 || color.is_null() {
         return;
     }
@@ -680,7 +732,10 @@ extern "system" fn copy_texture_region(
         &[bytes_of(dst, 1), bytes_of(src, 1), bytes_of(source_box, usize::from(boxed))],
     );
 }
-#[allow(clippy::too_many_arguments)] // the method's own arguments
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)] // the method's own arguments
 extern "system" fn copy_texture_region_x(
     this: This,
     dst: *const CopyLocation,
@@ -734,7 +789,8 @@ fn translate(list: This, stream: &[u64], left: impl Fn() -> bool) -> (u64, bool)
         match op {
             RESET => {
                 // (Only whether there is an allocator is looked at.)
-                let allocator: This = std::ptr::NonNull::<u64>::dangling().as_ptr().cast_const().cast();
+                let allocator: This =
+                    std::ptr::NonNull::<u64>::dangling().as_ptr().cast_const().cast();
                 super::reset(list, allocator, w[0] as This);
             }
             CLOSE => {
@@ -749,12 +805,20 @@ fn translate(list: This, stream: &[u64], left: impl Fn() -> bool) -> (u64, bool)
             SCISSORS => state::scissors(list, n as u32, at(w, 1, n)),
             BLEND_FACTOR => state::blend_factor(list, at(w, 1, n)),
             HEAPS => state::heaps(list, n as u32, at(w, 1, n)),
-            COMPUTE_CONSTANTS => {
-                state::compute_constants(list, w[0] as u32, w[1] as u32, at(w, 2, w[1] as usize), (w[0] >> 32) as u32)
-            }
-            GRAPHICS_CONSTANTS => {
-                state::graphics_constants(list, w[0] as u32, w[1] as u32, at(w, 2, w[1] as usize), (w[0] >> 32) as u32)
-            }
+            COMPUTE_CONSTANTS => state::compute_constants(
+                list,
+                w[0] as u32,
+                w[1] as u32,
+                at(w, 2, w[1] as usize),
+                (w[0] >> 32) as u32,
+            ),
+            GRAPHICS_CONSTANTS => state::graphics_constants(
+                list,
+                w[0] as u32,
+                w[1] as u32,
+                at(w, 2, w[1] as usize),
+                (w[0] >> 32) as u32,
+            ),
             INDEX_BUFFER => state::index_buffer(list, at(w, 1, n)),
             VERTEX_BUFFERS => {
                 let views = if w[1] != 0 { at_or(w, 2) } else { std::ptr::null() };
@@ -971,7 +1035,7 @@ mod tests {
         let mut slot = [0x5256_5476u64, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
         let kept = record(slot.as_ptr() as u64);
         slot[1] = 99;
-        assert_eq!(kept[1], 2);
+        assert_eq!((slot[1], kept[1]), (99, 2));
         assert_eq!(record(0), [0; RECORD]);
     }
 }

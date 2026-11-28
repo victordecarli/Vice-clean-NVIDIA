@@ -24,10 +24,79 @@ jobs:
       # The version and components pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # --keep-going/--no-fail-fast and `!cancelled()` make one run report
+      # every failing crate and step, not just the first: Windows is the only
+      # place all code compiles, so each round trip here is expensive.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Clippy, diagnostics build
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        if: ${{ !cancelled() }}
+        run: cargo clippy --workspace --all-targets --all-features --locked --keep-going -- -D warnings
       # Includes xtask's repository_passes_policy, the asset-policy check.
       - name: Tests
-        run: cargo test --workspace --locked
+        if: ${{ !cancelled() }}
+        run: cargo test --workspace --locked --no-fail-fast
+
+  # The pure crates must keep building and passing on any host, so a
+  # Windows-only assumption in them shows up here rather than in a port.
+  # victory-hle and the victory app do not compile off Windows yet, and
+  # victory-gpu warns there about code only its Windows paths use; see the
+  # lint ratchet in AGENTS.md for widening this.
+  portable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # Clippy treats a module as test code only under a plain `#[cfg(test)]`;
+      # `cfg(all(test, windows))` turns its helpers into library code for the
+      # print/exit lints, and Linux never compiles them, so only Windows CI
+      # would notice.
+      - name: Test modules use a plain cfg(test)
+        shell: bash
+        run: |
+          if git grep -nE 'cfg\(all\(test|cfg\(all\([^)]*,\s*test' -- '*.rs'; then
+            echo "::error::split into #[cfg(test)] and #[cfg(<platform>)]; see AGENTS.md, Pitfalls"
+            exit 1
+          fi
+      # Paths AGENTS.md cites must exist, so renaming or deleting a cited
+      # file fails here instead of leaving the contract stale. The Tests
+      # steps run it too (agents_md_citations_resolve); this names it.
+      - name: AGENTS.md citations
+        if: ${{ !cancelled() }}
+        run: cargo xtask citations
+      # This form cited decision records the repository never held (26 such
+      # citations were removed with this job). ADRs are cited as ADR-NNNN or
+      # by path.
+      - name: No citations of decision records
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          if git grep -nE 'decision 0[0-9]{3}' -- '*.rs' '*.md'; then
+            echo "::error::cite an ADR as ADR-NNNN or by path, or state the reason inline (AGENTS.md, Citations)"
+            exit 1
+          fi
+      # The whole tree is formatted, so a diff here is the change's own.
+      - name: Formatting
+        if: ${{ !cancelled() }}
+        run: cargo fmt --all -- --check
+      - name: Check
+        if: ${{ !cancelled() }}
+        run: cargo check --workspace --all-targets --locked --keep-going --exclude victory-hle --exclude victory
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: >-
+          cargo clippy --workspace --all-targets --locked --keep-going
+          --exclude victory-hle --exclude victory --exclude victory-gpu
+          -- -D warnings
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: cargo test --workspace --locked --no-fail-fast --exclude victory-hle --exclude victory
+      # The check job's two clippy runs, for the Windows target: Windows-only
+      # code type-checks and lints here, without linking or running tests.
+      # `rustup toolchain install` above adds the target, as
+      # rust-toolchain.toml lists it.
+      - name: Clippy for Windows
+        if: ${{ !cancelled() }}
+        run: cargo xtask wincheck

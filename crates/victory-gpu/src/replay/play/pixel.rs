@@ -84,10 +84,7 @@ fn same_shape(a: (f32, f32), b: (f32, f32)) -> bool {
 /// A float from a small one's bits (5 bits of exponent, `mantissa` of
 /// mantissa, no sign).
 fn small(bits: u32, mantissa: u32) -> f32 {
-    let (e, m) = (
-        bits >> mantissa & 31,
-        (bits & ((1 << mantissa) - 1)) as f32,
-    );
+    let (e, m) = (bits >> mantissa & 31, (bits & ((1 << mantissa) - 1)) as f32);
     let unit = (1u32 << mantissa) as f32;
     match e {
         0 => m / unit * 2f32.powi(-14),
@@ -141,11 +138,9 @@ fn texel_text(format: i32, b: &[u8]) -> String {
             (word(0) >> 20 & 1023) as f32 / 1023.0,
             (word(0) >> 30) as f32 / 3.0,
         ],
-        26 => vec![
-            small(word(0) & 2047, 6),
-            small(word(0) >> 11 & 2047, 6),
-            small(word(0) >> 22, 5),
-        ],
+        26 => {
+            vec![small(word(0) & 2047, 6), small(word(0) >> 11 & 2047, 6), small(word(0) >> 22, 5)]
+        }
         27..=29 | 87 | 90 | 91 => (0..4).map(unorm8).collect(),
         31 => (0..4).map(snorm8).collect(),
         33 | 34 => (0..2).map(half).collect(),
@@ -168,12 +163,7 @@ fn texel_text(format: i32, b: &[u8]) -> String {
 /// One draw of an indirect call that has many.
 fn part_of(c: &Cmd, i: u32, stride: u32) -> Cmd {
     match c {
-        Cmd::Indirect {
-            signature,
-            args,
-            at,
-            ..
-        } => Cmd::Indirect {
+        Cmd::Indirect { signature, args, at, .. } => Cmd::Indirect {
             signature: *signature,
             most: 1,
             args: *args,
@@ -186,13 +176,7 @@ fn part_of(c: &Cmd, i: u32, stride: u32) -> Cmd {
 }
 
 fn transition(res: u32, sub: u32, before: u32, after: u32) -> Barrier {
-    Barrier::Transition {
-        flags: 0,
-        res,
-        sub,
-        before: before as i32,
-        after: after as i32,
-    }
+    Barrier::Transition { flags: 0, res, sub, before: before as i32, after: after as i32 }
 }
 
 /// What is known of the frame's textures.
@@ -242,10 +226,7 @@ impl Player {
         }
         let mips = u32::from(r.desc.mips.max(1));
         let mip = mip.min(mips - 1);
-        let size = (
-            (r.desc.width as u32 >> mip).max(1),
-            (r.desc.height >> mip).max(1),
-        );
+        let size = ((r.desc.width as u32 >> mip).max(1), (r.desc.height >> mip).max(1));
         Some((mip + slice * mips, z, size, format))
     }
 
@@ -272,6 +253,7 @@ impl Player {
             p.points
         ));
         report.notes.drain(..).for_each(&mut *say);
+        #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
         let mut last: HashMap<(u32, u32, (u32, u32), usize), Vec<u8>> = HashMap::new();
         let mut said = None;
         for (i, s) in samples.iter().enumerate() {
@@ -286,13 +268,8 @@ impl Player {
                 OWN => String::new(),
                 n => format!("point {n} "),
             };
-            let spot = format!(
-                "    {point}{} sub {} at {},{}:",
-                self.called(t.res),
-                t.sub,
-                t.x,
-                t.y
-            );
+            let spot =
+                format!("    {point}{} sub {} at {},{}:", self.called(t.res), t.sub, t.x, t.y);
             let now = texel_text(t.format, &now);
             if s.before {
                 // Seen for the first time, or changed by what is not looked
@@ -358,12 +335,7 @@ impl Player {
             let mut out = Vec::new();
             for (n, c) in std::mem::take(cmds).into_iter().enumerate() {
                 let key = (here as u32, n as u32);
-                if let Cmd::Indirect {
-                    most,
-                    count,
-                    count_at,
-                    ..
-                } = c
+                if let Cmd::Indirect { most, count, count_at, .. } = c
                     && p.split.contains(&key)
                 {
                     counts.insert(key, most);
@@ -389,7 +361,7 @@ impl Player {
             *cmds = out;
         }
         let bytes = self.probed(o, &made, asked.len() as u64 * 4)?;
-        for (key, n) in asked.iter().zip(bytes.chunks_exact(4)) {
+        for (key, n) in asked.iter().zip(bytes.as_chunks::<4>().0.iter()) {
             if let Some(most) = counts.get_mut(key) {
                 *most = (*most).min(u32::from_le_bytes([n[0], n[1], n[2], n[3]]));
             }
@@ -398,12 +370,7 @@ impl Player {
     }
 
     fn textures(&self, picture: (u32, u32)) -> Textures {
-        let textures = || {
-            self.frame
-                .resources
-                .iter()
-                .filter(|r| self.texture(r.id).is_some())
-        };
+        let textures = || self.frame.resources.iter().filter(|r| self.texture(r.id).is_some());
         let shaped = textures()
             .filter(|r| {
                 let d = &r.desc;
@@ -423,11 +390,7 @@ impl Player {
                 (r.id, f[0].Footprint.Format.0)
             })
             .collect();
-        Textures {
-            copied_as,
-            shaped,
-            drawn: HashMap::new(),
-        }
+        Textures { copied_as, shaped, drawn: HashMap::new() }
     }
 
     /// The spots of a texture (of its subresource `sub`) that is written not
@@ -465,29 +428,24 @@ impl Player {
         let view = t.drawn.get(&size).copied().unwrap_or(whole);
         for (point, at) in p.points.iter().enumerate() {
             if let Some((x, y)) = texel(*at, picture, view, size) {
-                out.push(Spot {
-                    res: id,
-                    sub: 0,
-                    x,
-                    y,
-                    z: 0,
-                    point,
-                    format: r.desc.format,
-                    depth,
-                });
+                out.push(Spot { res: id, sub: 0, x, y, z: 0, point, format: r.desc.format, depth });
             }
         }
     }
 
     /// Whether a texture is the one in use of those that share its memory.
     fn in_use(&self, states: &States, id: u32) -> bool {
-        self.objects.get(&id).is_some_and(|o| {
-            !self.frame.resources[o.index].idle || states.used.contains_key(&id)
-        })
+        self.objects
+            .get(&id)
+            .is_some_and(|o| !self.frame.resources[o.index].idle || states.used.contains_key(&id))
     }
 
     /// The commands that copy the texels of `spots` to [`PROBE`] from `first`
     /// on; `copied`: a copy to them went before.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one call site; a parameter struct would only rename them"
+    )]
     fn take(
         &self,
         spots: &[Spot],
@@ -505,11 +463,7 @@ impl Player {
                 continue;
             };
             let all = states.get(s.res).unwrap_or(vec![COMMON]);
-            let mut state = all
-                .get(s.sub as usize)
-                .or(all.first())
-                .copied()
-                .unwrap_or(COMMON);
+            let mut state = all.get(s.sub as usize).or(all.first()).copied().unwrap_or(COMMON);
             if copied && state == COMMON {
                 state = COPY_DEST;
             }
@@ -528,10 +482,7 @@ impl Player {
                         pitch: 256,
                     },
                     at: [0; 3],
-                    src: Loc::Sub {
-                        res: s.res,
-                        sub: s.sub,
-                    },
+                    src: Loc::Sub { res: s.res, sub: s.sub },
                     part: Some([s.x, s.y, s.z, s.x + 1, s.y + 1, s.z + 1]),
                 });
                 continue;
@@ -552,10 +503,7 @@ impl Player {
                     pitch,
                 },
                 at: [0; 3],
-                src: Loc::Sub {
-                    res: s.res,
-                    sub: s.sub,
-                },
+                src: Loc::Sub { res: s.res, sub: s.sub },
                 part: None,
             });
             copies.push(Cmd::Barriers {
@@ -590,20 +538,14 @@ impl Player {
         counts: &HashMap<(u32, u32), u32>,
         samples: &mut Vec<Sample>,
     ) -> Result<Vec<Vec<Vec<Cmd>>>> {
-        let strides: HashMap<u32, u32> = self
-            .frame
-            .signatures
-            .iter()
-            .map(|s| (s.id, s.stride))
-            .collect();
+        let strides: HashMap<u32, u32> =
+            self.frame.signatures.iter().map(|s| (s.id, s.stride)).collect();
         let dispatching: HashSet<u32> = self
             .frame
             .signatures
             .iter()
             .filter(|s| {
-                s.args
-                    .iter()
-                    .any(|a| a[0] == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH.0 as u32)
+                s.args.iter().any(|a| a[0] == D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH.0 as u32)
             })
             .map(|s| s.id)
             .collect();
@@ -642,16 +584,8 @@ impl Player {
                             continue;
                         };
                         let depth = s.kind == slot::DSV;
-                        let spot = |x, y, point| Spot {
-                            res: s.res,
-                            sub,
-                            x,
-                            y,
-                            z,
-                            point,
-                            format,
-                            depth,
-                        };
+                        let spot =
+                            |x, y, point| Spot { res: s.res, sub, x, y, z, point, format, depth };
                         let view = view.unwrap_or([0.0, 0.0, size.0 as f32, size.1 as f32]);
                         for (point, at) in p.points.iter().enumerate() {
                             if let Some((x, y)) = texel(*at, picture, view, size) {
@@ -683,10 +617,9 @@ impl Player {
                     if looked {
                         let mut to = None;
                         match c {
-                            Cmd::CopyTexture {
-                                dst: Loc::Sub { res, sub },
-                                ..
-                            } => to = Some((*res, *sub, true)),
+                            Cmd::CopyTexture { dst: Loc::Sub { res, sub }, .. } => {
+                                to = Some((*res, *sub, true))
+                            }
                             Cmd::CopyResource { dst, .. } => to = Some((*dst, ALL, true)),
                             Cmd::Resolve { dst, dst_sub, .. }
                             | Cmd::ResolveRegion { dst, dst_sub, .. } => {
@@ -790,20 +723,14 @@ mod tests {
         assert_eq!(texel((0, 0), picture, view, size), None);
         // A part of a larger target.
         let part = [0.0, 0.0, 1920.0, 1080.0];
-        assert_eq!(
-            texel((1920, 1080), picture, part, (3840, 2160)),
-            Some((960, 540))
-        );
+        assert_eq!(texel((1920, 1080), picture, part, (3840, 2160)), Some((960, 540)));
         let beside = [1920.0, 0.0, 1920.0, 1080.0];
         assert_eq!(texel((1920, 1080), picture, beside, (1920, 1080)), None);
     }
 
     #[test]
     fn texels_are_read() {
-        assert_eq!(
-            texel_text(41, &1.5f32.to_le_bytes()),
-            "1.50000 [00, 00, c0, 3f]"
-        );
+        assert_eq!(texel_text(41, &1.5f32.to_le_bytes()), "1.50000 [00, 00, c0, 3f]");
         assert_eq!(
             texel_text(28, &[255, 0, 0, 51]),
             "1.00000 0.00000 0.00000 0.20000 [ff, 00, 00, 33]"
@@ -822,22 +749,9 @@ mod tests {
 
     #[test]
     fn an_indirect_draw_is_taken_apart() {
-        let all = Cmd::Indirect {
-            signature: 1,
-            most: 8,
-            args: 2,
-            at: 100,
-            count: 3,
-            count_at: 4,
-        };
-        let one = Cmd::Indirect {
-            signature: 1,
-            most: 1,
-            args: 2,
-            at: 124,
-            count: NONE,
-            count_at: 0,
-        };
+        let all = Cmd::Indirect { signature: 1, most: 8, args: 2, at: 100, count: 3, count_at: 4 };
+        let one =
+            Cmd::Indirect { signature: 1, most: 1, args: 2, at: 124, count: NONE, count_at: 0 };
         assert_eq!(part_of(&all, 2, 12), one);
     }
 }

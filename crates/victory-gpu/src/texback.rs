@@ -53,8 +53,7 @@ fn kinds() -> &'static [(u64, u32, u32)] {
 /// Whether title texture `resource` is of a kind copied back.
 pub(crate) fn wanted(resource: This) -> bool {
     let kinds = kinds();
-    !kinds.is_empty()
-        && crate::resource::texture_kind(resource).is_some_and(|k| kinds.contains(&k))
+    !kinds.is_empty() && crate::resource::texture_kind(resource).is_some_and(|k| kinds.contains(&k))
 }
 
 /// An outstanding write to a specific allocation. Mapping and resource
@@ -121,7 +120,9 @@ impl Target {
         Some(Self { copy, layout, ticket })
     }
 
-    pub(crate) fn owner(&self) -> usize { self.ticket.owner }
+    pub(crate) fn owner(&self) -> usize {
+        self.ticket.owner
+    }
 }
 
 /// The readback resources and the allocation the pixels belong to.
@@ -230,10 +231,16 @@ pub(crate) fn land(back: &Back) {
         let pitch = f.RowPitch as usize;
         let len = pitch * rows as usize * f.Depth as usize;
         // SAFETY: the subresource's part of the mapped buffer.
-        let linear = unsafe { std::slice::from_raw_parts(data.cast::<u8>().add(footprint.Offset as usize), len) };
-        if let Err(e) = back.layout.tile(&mut tiled, mip, slice, linear, pitch, pitch * rows as usize) {
+        let linear = unsafe {
+            std::slice::from_raw_parts(data.cast::<u8>().add(footprint.Offset as usize), len)
+        };
+        if let Err(e) =
+            back.layout.tile(&mut tiled, mip, slice, linear, pitch, pitch * rows as usize)
+        {
             static ONCE: std::sync::Once = std::sync::Once::new();
-            ONCE.call_once(|| tracing::warn!(?e, mip, slice, "a texture copied back could not be tiled"));
+            ONCE.call_once(|| {
+                tracing::warn!(?e, mip, slice, "a texture copied back could not be tiled")
+            });
             // SAFETY: mapped above.
             unsafe { back.buffer.Unmap(0, None) };
             return;
@@ -247,7 +254,6 @@ pub(crate) fn land(back: &Back) {
         tracing::info!(copied, bytes = size, "texture readback landed");
     }
 }
-
 
 #[cfg(test)]
 mod tests {

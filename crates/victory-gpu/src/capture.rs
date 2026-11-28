@@ -11,9 +11,7 @@ use windows::Win32::Graphics::Dxgi::Common::*;
 /// The folder frames go to, if capturing.
 pub(crate) fn folder() -> Option<&'static PathBuf> {
     static FOLDER: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    FOLDER
-        .get_or_init(|| std::env::var_os("VICTORY_CAPTURE").map(PathBuf::from))
-        .as_ref()
+    FOLDER.get_or_init(|| std::env::var_os("VICTORY_CAPTURE").map(PathBuf::from)).as_ref()
 }
 
 /// Frames listed in `VICTORY_CAPTURE_FRAMES` (comma-separated): saved
@@ -23,9 +21,7 @@ pub(crate) fn listed(n: u64) -> bool {
     let named = LIST
         .get_or_init(|| {
             let list = std::env::var("VICTORY_CAPTURE_FRAMES").unwrap_or_default();
-            list.split(',')
-                .filter_map(|f| f.trim().parse().ok())
-                .collect()
+            list.split(',').filter_map(|f| f.trim().parse().ok()).collect()
         })
         .contains(&n);
     // `VICTORY_CAPTURE_WORLD`: also the 2nd and the 6th frame after the first
@@ -41,9 +37,7 @@ pub(crate) fn listed(n: u64) -> bool {
     static ALSO: std::sync::OnceLock<Vec<u64>> = std::sync::OnceLock::new();
     let also = ALSO.get_or_init(|| {
         let list = std::env::var("VICTORY_CAPTURE_WORLD_ALSO").unwrap_or_default();
-        list.split(',')
-            .filter_map(|f| f.trim().parse().ok())
-            .collect()
+        list.split(',').filter_map(|f| f.trim().parse().ok()).collect()
     });
     let first = WORLD.load(std::sync::atomic::Ordering::Relaxed);
     let after = n.wrapping_sub(first);
@@ -132,12 +126,23 @@ pub(crate) fn frame_drew(frame: u64, drawn: u64) {
         && drawn.saturating_sub(before) >= 500
         && WORLD.compare_exchange(u64::MAX, frame, Relaxed, Relaxed).is_ok()
     {
-        tracing::info!(frame, "the first frame of 500 draws or more: frames {} and {} are captured", frame + 2, frame + 6);
+        tracing::info!(
+            frame,
+            "the first frame of 500 draws or more: frames {} and {} are captured",
+            frame + 2,
+            frame + 6
+        );
         #[cfg(feature = "diagnostics")]
         if let Some(folder) = folder() {
-            let lines: Vec<String> = std::mem::take(&mut *RING.lock().unwrap_or_else(|e| e.into_inner())).into();
-            let _ = std::fs::write(folder.join("before-world-ops.txt"), lines.join("
-"));
+            let lines: Vec<String> =
+                std::mem::take(&mut *RING.lock().unwrap_or_else(|e| e.into_inner())).into();
+            let _ = std::fs::write(
+                folder.join("before-world-ops.txt"),
+                lines.join(
+                    "
+",
+                ),
+            );
         }
     }
 }
@@ -146,7 +151,9 @@ pub(crate) fn frame_drew(frame: u64, drawn: u64) {
 pub(crate) fn wanted(n: u64) -> bool {
     // Before the world, with `VICTORY_CAPTURE_WORLD`: every 16th frame too
     // (small pictures of menus, loading screens and title cards).
-    let before_world = world_on() && n.is_multiple_of(16) && WORLD.load(std::sync::atomic::Ordering::Relaxed) == u64::MAX;
+    let before_world = world_on()
+        && n.is_multiple_of(16)
+        && WORLD.load(std::sync::atomic::Ordering::Relaxed) == u64::MAX;
     // In the world: every 8th frame's picture, a timeline of the opening
     // cutscene (its shots do not fall on the same frame numbers from run to
     // run, so single frames cannot be compared between runs).
@@ -267,20 +274,14 @@ fn read_back_of(
             Some(&mut total),
         );
     }
-    let heap = D3D12_HEAP_PROPERTIES {
-        Type: D3D12_HEAP_TYPE_READBACK,
-        ..Default::default()
-    };
+    let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_READBACK, ..Default::default() };
     let desc = D3D12_RESOURCE_DESC {
         Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
         Width: total,
         Height: 1,
         DepthOrArraySize: 1,
         MipLevels: 1,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
         ..Default::default()
     };
@@ -301,16 +302,12 @@ fn read_back_of(
         let to = D3D12_TEXTURE_COPY_LOCATION {
             pResource: std::mem::transmute_copy(&buffer),
             Type: D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                PlacedFootprint: footprint,
-            },
+            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { PlacedFootprint: footprint },
         };
         let from = D3D12_TEXTURE_COPY_LOCATION {
             pResource: std::mem::transmute_copy(texture),
             Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                SubresourceIndex: sub,
-            },
+            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: sub },
         };
         list.CopyTextureRegion(&to, 0, 0, 0, &from, None);
         Some((buffer, footprint))
@@ -407,8 +404,7 @@ fn dump_one(
     // SAFETY: an open list of ours and a live texture.
     let read = unsafe {
         if state != copy {
-            list.list
-                .ResourceBarrier(&[crate::host::transition(texture, state, copy)]);
+            list.list.ResourceBarrier(&[crate::host::transition(texture, state, copy)]);
         }
         let read = read_back(&host.device, &list.list, texture);
         // The stencil plane of a depth-stencil target, which the title's
@@ -421,8 +417,7 @@ fn dump_one(
             .then(|| read_back_of(&host.device, &list.list, texture, 1))
             .flatten();
         if state != copy {
-            list.list
-                .ResourceBarrier(&[crate::host::transition(texture, copy, state)]);
+            list.list.ResourceBarrier(&[crate::host::transition(texture, copy, state)]);
         }
         (read, stencil)
     };
@@ -462,7 +457,9 @@ fn dump_one(
             };
             tracing::info!(?resource, depths = ?most(depths), top_bytes = ?most(tops), "24-bit depth plane values (value, texels)");
         }
-        if let Some(rgba) = to_rgba(f.Format.0 as u32, f.Width as usize, f.Height as usize, pitch, rows) {
+        if let Some(rgba) =
+            to_rgba(f.Format.0 as u32, f.Width as usize, f.Height as usize, pitch, rows)
+        {
             let name = format!(
                 "frame-{frame}-{i:02}-{resource:?}-{}x{}-f{}",
                 d.Width, d.Height, d.Format.0
@@ -514,12 +511,8 @@ fn stencil_values(
                 }
             }
         }
-        let mut most: Vec<(usize, u32)> = values
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|v| v.1 != 0)
-            .collect();
+        let mut most: Vec<(usize, u32)> =
+            values.iter().copied().enumerate().filter(|v| v.1 != 0).collect();
         most.sort_by_key(|v| std::cmp::Reverse(v.1));
         most.truncate(16);
         tracing::info!(
@@ -565,7 +558,8 @@ fn to_rgba(format: u32, w: usize, h: usize, pitch: usize, rows: &[u8]) -> Option
     let mut out = Vec::with_capacity(w * h * 4);
     let px = |x: usize, y: usize, n: usize| &rows[y * pitch + x * n..][..n];
     let u16_at = |b: &[u8], i: usize| u16::from_le_bytes([b[2 * i], b[2 * i + 1]]);
-    let u32_at = |b: &[u8], i: usize| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap_or([0; 4]));
+    let u32_at =
+        |b: &[u8], i: usize| u32::from_le_bytes(b[4 * i..4 * i + 4].try_into().unwrap_or([0; 4]));
     // Channel values as floats, then scaled.
     type Decode = Box<dyn Fn(&[u8]) -> [f32; 3]>;
     let (n, decode): (usize, Decode) = match format {
@@ -588,21 +582,34 @@ fn to_rgba(format: u32, w: usize, h: usize, pitch: usize, rows: &[u8]) -> Option
             }
             return Some(out);
         }
-        23..=25 | 89 => (4, Box::new(move |b| {
-            let v = u32_at(b, 0);
-            [(v & 0x3ff) as f32, (v >> 10 & 0x3ff) as f32, (v >> 20 & 0x3ff) as f32]
-        })),
-        26 => (4, Box::new(move |b| {
-            let v = u32_at(b, 0);
-            [small_float(v & 0x7ff, 6), small_float(v >> 11 & 0x7ff, 6), small_float(v >> 22, 5)]
-        })),
-        9..=10 => (8, Box::new(move |b| [half(u16_at(b, 0)), half(u16_at(b, 1)), half(u16_at(b, 2))])),
+        23..=25 | 89 => (
+            4,
+            Box::new(move |b| {
+                let v = u32_at(b, 0);
+                [(v & 0x3ff) as f32, (v >> 10 & 0x3ff) as f32, (v >> 20 & 0x3ff) as f32]
+            }),
+        ),
+        26 => (
+            4,
+            Box::new(move |b| {
+                let v = u32_at(b, 0);
+                [
+                    small_float(v & 0x7ff, 6),
+                    small_float(v >> 11 & 0x7ff, 6),
+                    small_float(v >> 22, 5),
+                ]
+            }),
+        ),
+        9..=10 => {
+            (8, Box::new(move |b| [half(u16_at(b, 0)), half(u16_at(b, 1)), half(u16_at(b, 2))]))
+        }
         11..=14 => (8, Box::new(move |b| [0, 1, 2].map(|i| f32::from(u16_at(b, i))))),
         33..=34 => (4, Box::new(move |b| [half(u16_at(b, 0)), half(u16_at(b, 1)), 0.0])),
-        1..=2 => (16, Box::new(move |b| {
-            [0, 1, 2].map(|i| f32::from_bits(u32_at(b, i)))
-        })),
-        15..=16 => (8, Box::new(move |b| [f32::from_bits(u32_at(b, 0)), f32::from_bits(u32_at(b, 1)), 0.0])),
+        1..=2 => (16, Box::new(move |b| [0, 1, 2].map(|i| f32::from_bits(u32_at(b, i))))),
+        15..=16 => (
+            8,
+            Box::new(move |b| [f32::from_bits(u32_at(b, 0)), f32::from_bits(u32_at(b, 1)), 0.0]),
+        ),
         35..=38 => (4, Box::new(move |b| [f32::from(u16_at(b, 0)), f32::from(u16_at(b, 1)), 0.0])),
         48..=52 => (2, Box::new(move |b| [f32::from(b[0]), f32::from(b[1]), 0.0])),
         // Single channels (and depth planes): shown as grey.
@@ -739,17 +746,11 @@ pub(crate) fn probe(
         Height: 1,
         DepthOrArraySize: 1,
         MipLevels: 1,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
         ..Default::default()
     };
-    let heap = D3D12_HEAP_PROPERTIES {
-        Type: D3D12_HEAP_TYPE_READBACK,
-        ..Default::default()
-    };
+    let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_READBACK, ..Default::default() };
     let mut buffer: Option<ID3D12Resource> = None;
     // SAFETY: plain creation; an open list; locations naming live resources.
     unsafe {
@@ -788,18 +789,10 @@ pub(crate) fn probe(
             let from = D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(texture),
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    SubresourceIndex: 0,
-                },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
             };
-            let pixel = D3D12_BOX {
-                left: x,
-                top: y,
-                front: 0,
-                right: x + 1,
-                bottom: y + 1,
-                back: 1,
-            };
+            let pixel =
+                D3D12_BOX { left: x, top: y, front: 0, right: x + 1, bottom: y + 1, back: 1 };
             list.CopyTextureRegion(&to, 0, 0, 0, &from, Some(&pixel));
         }
         Some(buffer)

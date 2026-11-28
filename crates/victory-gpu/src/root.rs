@@ -4,7 +4,10 @@
 //! versioned form): the description is laid out as on PC, and the blob it
 //! returns works as the console's, whose two methods sit in the same slots.
 //! The console's own flags (bit 24 and up) are dropped first.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{CStr, c_void};
 use std::sync::OnceLock;
@@ -15,12 +18,7 @@ use crate::object::{
 use crate::resource::PAGEABLE_IIDS;
 
 const ROOT_SIGNATURE_IIDS: [Iid; 3] = [
-    guid(
-        0xc54a6b66,
-        0x72df,
-        0x4ee8,
-        [0x8b, 0xe5, 0xa9, 0x46, 0xa1, 0x42, 0x92, 0x14],
-    ),
+    guid(0xc54a6b66, 0x72df, 0x4ee8, [0x8b, 0xe5, 0xa9, 0x46, 0xa1, 0x42, 0x92, 0x14]),
     PAGEABLE_IIDS[1],
     PAGEABLE_IIDS[2],
 ];
@@ -61,11 +59,7 @@ fn host_export(cache: &OnceLock<Option<usize>>, name: &CStr) -> Option<usize> {
             let dll: Vec<u16> = "d3d12.dll".encode_utf16().chain([0]).collect();
             // SAFETY: a NUL-terminated name; System32 only.
             let module = unsafe {
-                LoadLibraryExW(
-                    dll.as_ptr(),
-                    std::ptr::null_mut(),
-                    LOAD_LIBRARY_SEARCH_SYSTEM32,
-                )
+                LoadLibraryExW(dll.as_ptr(), std::ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
             };
             if module.is_null() {
                 return None;
@@ -85,10 +79,7 @@ fn without_console_flags(desc: Desc) -> Desc {
             "console root signature flags dropped"
         );
     }
-    Desc {
-        flags: desc.flags & !CONSOLE_FLAGS,
-        ..desc
-    }
+    Desc { flags: desc.flags & !CONSOLE_FLAGS, ..desc }
 }
 
 /// `d3d12_xs!D3D12SerializeRootSignature`.
@@ -133,10 +124,7 @@ pub extern "system" fn serialize_versioned(
         tracing::warn!("no host d3d12.dll to serialize root signatures");
         return E_NOTIMPL;
     };
-    let desc = VersionedDesc {
-        desc: without_console_flags(desc.desc),
-        ..desc
-    };
+    let desc = VersionedDesc { desc: without_console_flags(desc.desc), ..desc };
     // SAFETY: the export has this signature; it takes what the title passed.
     unsafe { std::mem::transmute::<usize, SerializeVersioned>(address)(&desc, blob, error) }
 }
@@ -191,10 +179,7 @@ pub(crate) extern "system" fn create(
     // SAFETY: the title passes `size` bytes.
     let blob = unsafe { std::slice::from_raw_parts(blob, size) }.to_vec();
     tracing::debug!(size, "root signature");
-    let root = Box::new(RootSignature {
-        object: Object::new(&FUNCTIONS),
-        blob,
-    });
+    let root = Box::new(RootSignature { object: Object::new(&FUNCTIONS), blob });
     object::hand_out(ROOT_SIGNATURE, root, iid, &ROOT_SIGNATURE_IIDS, out)
 }
 
@@ -229,14 +214,7 @@ mod tests {
 
     fn created(iid: &Iid) -> This {
         let mut out = std::ptr::null();
-        let hr = create(
-            std::ptr::null(),
-            0,
-            BLOB.as_ptr(),
-            BLOB.len(),
-            iid,
-            &mut out,
-        );
+        let hr = create(std::ptr::null(), 0, BLOB.as_ptr(), BLOB.len(), iid, &mut out);
         assert_eq!(hr, S_OK);
         assert!(!out.is_null());
         out
@@ -273,10 +251,7 @@ mod tests {
         assert!(std::ptr::eq(plain.parameters, desc.parameters));
         assert!(std::ptr::eq(plain.samplers, desc.samplers));
 
-        let low = Desc {
-            flags: 0x00ab_cdef,
-            ..desc
-        };
+        let low = Desc { flags: 0x00ab_cdef, ..desc };
         assert_eq!(without_console_flags(low).flags, 0x00ab_cdef);
         let none = Desc { flags: 0, ..desc };
         assert_eq!(without_console_flags(none).flags, 0);
@@ -286,14 +261,8 @@ mod tests {
     fn serializers_reject_a_null_description() {
         let mut blob = std::ptr::null_mut();
         let mut error = std::ptr::null_mut();
-        assert_eq!(
-            serialize(std::ptr::null(), 1, &mut blob, &mut error),
-            E_INVALIDARG
-        );
-        assert_eq!(
-            serialize_versioned(std::ptr::null(), &mut blob, &mut error),
-            E_INVALIDARG
-        );
+        assert_eq!(serialize(std::ptr::null(), 1, &mut blob, &mut error), E_INVALIDARG);
+        assert_eq!(serialize_versioned(std::ptr::null(), &mut blob, &mut error), E_INVALIDARG);
         assert!(blob.is_null() && error.is_null());
     }
 
@@ -303,18 +272,12 @@ mod tests {
     fn deserializer_creation_rejects_missing_arguments() {
         let iid = ROOT_SIGNATURE_IIDS[0];
         let mut out = std::ptr::null_mut();
-        assert_eq!(
-            create_deserializer(std::ptr::null(), BLOB.len(), &iid, &mut out),
-            E_INVALIDARG
-        );
+        assert_eq!(create_deserializer(std::ptr::null(), BLOB.len(), &iid, &mut out), E_INVALIDARG);
         assert_eq!(
             create_deserializer(BLOB.as_ptr(), BLOB.len(), std::ptr::null(), &mut out),
             E_INVALIDARG
         );
-        assert_eq!(
-            create_deserializer(BLOB.as_ptr(), 0, &iid, &mut out),
-            E_INVALIDARG
-        );
+        assert_eq!(create_deserializer(BLOB.as_ptr(), 0, &iid, &mut out), E_INVALIDARG);
         assert_eq!(
             create_deserializer(BLOB.as_ptr(), BLOB.len(), &iid, std::ptr::null_mut()),
             E_INVALIDARG
@@ -327,58 +290,27 @@ mod tests {
         let iid = ROOT_SIGNATURE_IIDS[0];
         let mut out = std::ptr::null();
         assert_eq!(
-            create(
-                std::ptr::null(),
-                0,
-                std::ptr::null(),
-                BLOB.len(),
-                &iid,
-                &mut out
-            ),
+            create(std::ptr::null(), 0, std::ptr::null(), BLOB.len(), &iid, &mut out),
             E_INVALIDARG
         );
-        assert_eq!(
-            create(std::ptr::null(), 0, BLOB.as_ptr(), 0, &iid, &mut out),
-            E_INVALIDARG
-        );
+        assert_eq!(create(std::ptr::null(), 0, BLOB.as_ptr(), 0, &iid, &mut out), E_INVALIDARG);
         assert!(out.is_null());
 
         // An unknown interface is dropped, and the answer is null.
         assert_eq!(
-            create(
-                std::ptr::null(),
-                0,
-                BLOB.as_ptr(),
-                BLOB.len(),
-                &OTHER_IID,
-                &mut out
-            ),
+            create(std::ptr::null(), 0, BLOB.as_ptr(), BLOB.len(), &OTHER_IID, &mut out),
             E_NOINTERFACE
         );
         assert!(out.is_null());
         assert_eq!(
-            create(
-                std::ptr::null(),
-                0,
-                BLOB.as_ptr(),
-                BLOB.len(),
-                std::ptr::null(),
-                &mut out
-            ),
+            create(std::ptr::null(), 0, BLOB.as_ptr(), BLOB.len(), std::ptr::null(), &mut out),
             E_NOINTERFACE
         );
         assert!(out.is_null());
 
         // Nowhere to write means the title only asked whether creation works.
         assert_eq!(
-            create(
-                std::ptr::null(),
-                0,
-                BLOB.as_ptr(),
-                BLOB.len(),
-                &iid,
-                std::ptr::null_mut()
-            ),
+            create(std::ptr::null(), 0, BLOB.as_ptr(), BLOB.len(), &iid, std::ptr::null_mut()),
             S_FALSE
         );
     }
@@ -397,10 +329,7 @@ mod tests {
         assert_eq!(query(root, &OTHER_IID, &mut out), E_NOINTERFACE);
         assert!(out.is_null());
         assert_eq!(query(root, std::ptr::null(), &mut out), E_NOINTERFACE);
-        assert_eq!(
-            query(root, &ROOT_SIGNATURE_IIDS[0], std::ptr::null_mut()),
-            E_POINTER
-        );
+        assert_eq!(query(root, &ROOT_SIGNATURE_IIDS[0], std::ptr::null_mut()), E_POINTER);
         assert_eq!(object::release(root), 0);
     }
 
@@ -408,10 +337,7 @@ mod tests {
     fn the_table_has_the_object_and_device_child_slots() {
         let root = created(&ROOT_SIGNATURE_IIDS[1]);
         // SetPrivateDataInterface is the one object method left out.
-        assert_eq!(
-            slot::<extern "system" fn() -> HRESULT>(root, 0x28)(),
-            E_NOTIMPL
-        );
+        assert_eq!(slot::<extern "system" fn() -> HRESULT>(root, 0x28)(), E_NOTIMPL);
         assert_eq!(
             slot::<extern "system" fn(This, *const u16) -> HRESULT>(root, 0x30)(
                 root,
@@ -423,10 +349,7 @@ mod tests {
         let mut device = std::ptr::null();
         let get_device =
             slot::<extern "system" fn(This, *const Iid, *mut This) -> HRESULT>(root, 0x38);
-        assert_eq!(
-            get_device(root, std::ptr::null(), &mut device),
-            E_NOINTERFACE
-        );
+        assert_eq!(get_device(root, std::ptr::null(), &mut device), E_NOINTERFACE);
         assert!(device.is_null());
         assert_eq!(object::release(root), 0);
     }
@@ -465,10 +388,7 @@ mod tests {
         assert!(size > 0);
         let null = std::ptr::null();
         let mut root = null;
-        assert_eq!(
-            create(null, 0, data, size, &ROOT_SIGNATURE_IIDS[0], &mut root),
-            S_OK
-        );
+        assert_eq!(create(null, 0, data, size, &ROOT_SIGNATURE_IIDS[0], &mut root), S_OK);
         assert_eq!(slot::<extern "system" fn(This) -> u32>(root, 0x10)(root), 0);
         slot::<extern "system" fn(This) -> u32>(blob, 0x10)(blob);
     }
@@ -566,10 +486,7 @@ mod tests {
             iid[8..16].try_into().unwrap(),
         );
         let mut out = std::ptr::null_mut();
-        assert_eq!(
-            create_deserializer(data, size - 1, &iid, &mut out),
-            E_INVALIDARG
-        );
+        assert_eq!(create_deserializer(data, size - 1, &iid, &mut out), E_INVALIDARG);
         assert!(out.is_null());
         let garbage = [0xffu8; 64];
         assert_eq!(

@@ -1,4 +1,4 @@
-//! I/O raising (decision 0003): what a program's input registers, its
+//! I/O raising: what a program's input registers, its
 //! interpolation and its exports mean.
 //!
 //! Pixel shaders get the VGPRs `SPI_PS_INPUT_ADDR` enables, in a fixed
@@ -130,11 +130,7 @@ pub enum Interp {
     /// This site's result (`v_interp_p2*`) is the attribute interpolated
     /// with `barycentric`; `first` are the `v_interp_p1*` halves it
     /// completes (one per path where the compiler shares a first half).
-    Interpolated {
-        attribute: Attribute,
-        barycentric: Barycentric,
-        first: Vec<Site>,
-    },
+    Interpolated { attribute: Attribute, barycentric: Barycentric, first: Vec<Site> },
     /// One vertex's value (`v_interp_mov_f32`), as encoded: 0 for P10,
     /// 1 for P20, 2 for P0 (the provoking vertex).
     Vertex { attribute: Attribute, vertex: u8 },
@@ -197,17 +193,9 @@ pub struct Io {
 pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
     let unsupported = |offset, what| ShaderError::Unsupported { offset, what };
     let (loaded, ps_inputs, params) = match (&native.io, native.stage) {
-        (
-            StageIo::Ps {
-                inputs, input_addr, ..
-            },
-            HwStage::Ps,
-        ) => {
+        (StageIo::Ps { inputs, input_addr, .. }, HwStage::Ps) => {
             // A pixel shader exports no parameters; `[]` never reaches `Unread`.
-            let loaded = ps_vgprs(*input_addr)
-                .into_iter()
-                .map(|(r, i)| (Reg::V(r), i))
-                .collect();
+            let loaded = ps_vgprs(*input_addr).into_iter().map(|(r, i)| (Reg::V(r), i)).collect();
             (loaded, &inputs[..], &[][..])
         }
         (StageIo::Vs { inputs, outputs }, HwStage::Vs) => {
@@ -218,10 +206,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
             ];
             for i in inputs {
                 for channel in (0..4).filter(|c| i.mask >> c & 1 != 0) {
-                    let input = Input::Attribute {
-                        row: i.row,
-                        channel,
-                    };
+                    let input = Input::Attribute { row: i.row, channel };
                     loaded.push((Reg::V(i.vgpr + channel), input));
                 }
             }
@@ -231,9 +216,8 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
         // SGPRs after the user data.
         (StageIo::Cs(cs), HwStage::Cs) => {
             let (ids, info) = cs.system_sgprs();
-            let mut loaded: Vec<(Reg, Input)> = (0..cs.thread_id_vgprs())
-                .map(|c| (Reg::V(c), Input::ThreadIdInGroup(c)))
-                .collect();
+            let mut loaded: Vec<(Reg, Input)> =
+                (0..cs.thread_id_vgprs()).map(|c| (Reg::V(c), Input::ThreadIdInGroup(c))).collect();
             for (c, s) in ids.into_iter().enumerate() {
                 if let Some(s) = s {
                     loaded.push((Reg::S(s), Input::GroupId(c as u8)));
@@ -244,12 +228,8 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
         }
         (StageIo::Ms(ms), HwStage::Ms) => {
             // The group input, and the phis that may carry it past a join.
-            let mut group: Vec<Value> = p
-                .inputs
-                .iter()
-                .filter(|i| i.0 == Reg::V(5))
-                .map(|i| i.1)
-                .collect();
+            let mut group: Vec<Value> =
+                p.inputs.iter().filter(|i| i.0 == Reg::V(5)).map(|i| i.1).collect();
             // No lane is active over the EXEC-zero edge of s_cbranch_execz or
             // _execnz, the same case as a partial-EXEC write below.
             let no_lanes = |q: usize, b: usize| match (
@@ -291,15 +271,9 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
                     && (i.write(Reg::V(5)).is_none() || operand_reads(p, i).contains(&Reg::V(5)))
             });
             if let Some(i) = per_lane {
-                return Err(unsupported(
-                    i.machine.offset,
-                    "the mesh group input read per lane",
-                ));
+                return Err(unsupported(i.machine.offset, "the mesh group input read per lane"));
             }
-            let loaded = vec![
-                (Reg::V(5), Input::MeshGroup),
-                (Reg::S(3), Input::MergedWaveInfo),
-            ];
+            let loaded = vec![(Reg::V(5), Input::MeshGroup), (Reg::S(3), Input::MergedWaveInfo)];
             (loaded, &[][..], &ms.outputs[..])
         }
         _ => return Err(unsupported(0, "I/O of this stage")),
@@ -314,12 +288,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
         Operand::Attr { index, chan, high } => ps_inputs
             .iter()
             .find(|i: &&PsInput| i.attr == index)
-            .map(|i| Attribute {
-                usage: i.usage,
-                row: i.row,
-                channel: chan,
-                high,
-            })
+            .map(|i| Attribute { usage: i.usage, row: i.row, channel: chan, high })
             .ok_or(unsupported(
                 inst.machine.offset,
                 "an interpolated attribute the stage data does not list",
@@ -357,18 +326,10 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
         .iter()
         .enumerate()
         .flat_map(|(b, block)| {
-            block
-                .phis
-                .iter()
-                .enumerate()
-                .map(move |(i, phi)| (phi.value, (b, i)))
+            block.phis.iter().enumerate().map(move |(i, phi)| (phi.value, (b, i)))
         })
         .collect();
-    let halves = Halves {
-        p,
-        defs: &defs,
-        phis: &phis,
-    };
+    let halves = Halves { p, defs: &defs, phis: &phis };
     let mut first_halves = Vec::new();
     for (b, block) in p.blocks.iter().enumerate() {
         for (i, inst) in block.insts.iter().enumerate() {
@@ -380,8 +341,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
                     let attribute = attribute(inst, attr)?;
                     match (name, *src) {
                         ("v_interp_mov_f32", Operand::Const(vertex)) => {
-                            io.interps
-                                .push((site, Interp::Vertex { attribute, vertex }));
+                            io.interps.push((site, Interp::Vertex { attribute, vertex }));
                         }
                         ("v_interp_p1_f32", _) => first_halves.push((site, attribute)),
                         ("v_interp_p2_f32", Operand::Vector { reg, .. }) => {
@@ -419,13 +379,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
                     }
                     _ => return Err(unsupported(at, "an interpolation form")),
                 },
-                Fields::Exp {
-                    target,
-                    src,
-                    compr,
-                    done,
-                    ..
-                } => {
+                Fields::Exp { target, src, compr, done, .. } => {
                     let target = match *target {
                         t @ 0..=7 => Target::Color(t),
                         8 => Target::Depth,
@@ -479,12 +433,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
         .blocks
         .iter()
         .enumerate()
-        .flat_map(|(b, blk)| {
-            blk.insts
-                .iter()
-                .enumerate()
-                .map(move |(i, inst)| ((b, i), inst))
-        })
+        .flat_map(|(b, blk)| blk.insts.iter().enumerate().map(move |(i, inst)| ((b, i), inst)))
         .filter(|(s, _)| !folded.contains(s))
         .flat_map(|(_, inst)| inst.reads.iter().map(|r| r.1))
         .collect();
@@ -501,10 +450,7 @@ pub fn raise(p: &Program, native: &NativeProgram) -> Result<Io, ShaderError> {
     }
     for (site, attribute) in first_halves {
         if !io.interps.iter().any(|(s, _)| *s == site)
-            && p.blocks[site.0].insts[site.1]
-                .writes
-                .iter()
-                .any(|w| used.contains(&w.1))
+            && p.blocks[site.0].insts[site.1].writes.iter().any(|w| used.contains(&w.1))
         {
             io.interps.push((site, Interp::Weighted { attribute }));
         }
@@ -542,11 +488,7 @@ struct Pair {
 impl Pair {
     fn with(self, attribute: Attribute) -> Interp {
         match self.barycentric {
-            Some(barycentric) => Interp::Interpolated {
-                attribute,
-                barycentric,
-                first: self.first,
-            },
+            Some(barycentric) => Interp::Interpolated { attribute, barycentric, first: self.first },
             None => Interp::Weighted { attribute },
         }
     }
@@ -598,11 +540,11 @@ impl Halves<'_> {
         for &(b, i) in &first {
             let inst = &self.p.blocks[b].insts[i];
             let (a, i) = match &inst.fields {
-                Fields::Vintrp {
-                    src: Operand::Vector { reg, .. },
-                    attr,
-                    ..
-                } if inst.name() == "v_interp_p1_f32" => (*attr, inst.read(Reg::V(*reg))),
+                Fields::Vintrp { src: Operand::Vector { reg, .. }, attr, .. }
+                    if inst.name() == "v_interp_p1_f32" =>
+                {
+                    (*attr, inst.read(Reg::V(*reg)))
+                }
                 Fields::Valu(v) if inst.name() == "v_interp_p1ll_f16" => match v.src.get(1) {
                     Some(&Operand::Vector { reg, .. }) => (v.src[0], inst.read(Reg::V(reg))),
                     _ => return Err("an interpolation without its first half"),
@@ -616,10 +558,7 @@ impl Halves<'_> {
                 kind = None;
             }
         }
-        Ok(Pair {
-            barycentric: kind,
-            first,
-        })
+        Ok(Pair { barycentric: kind, first })
     }
 
     /// The instructions `v` comes from, through phis (`seen`: phis on the
@@ -636,10 +575,7 @@ impl Halves<'_> {
             }
             return Ok(());
         }
-        let &(b, i) = self
-            .phis
-            .get(&v)
-            .ok_or("an interpolation without its first half")?;
+        let &(b, i) = self.phis.get(&v).ok_or("an interpolation without its first half")?;
         if !seen.contains(&v) {
             seen.push(v);
             for &a in &self.p.blocks[b].phis[i].args {
@@ -703,10 +639,7 @@ mod tests {
         ]);
         let io = raise(&p, &pixel(vec![TEXCOORD], 2)).unwrap();
         let input = |reg| p.inputs.iter().find(|i| i.0 == Reg::V(reg)).unwrap().1;
-        let center = |index| Input::Barycentric {
-            kind: Barycentric::PerspectiveCenter,
-            index,
-        };
+        let center = |index| Input::Barycentric { kind: Barycentric::PerspectiveCenter, index };
         assert!(io.inputs.contains(&(input(0), center(0))));
         assert!(io.inputs.contains(&(input(1), center(1))));
         // v2 and v3 are read before written but hold nothing.
@@ -716,24 +649,14 @@ mod tests {
             [(
                 (0, 1),
                 Interp::Interpolated {
-                    attribute: Attribute {
-                        usage: Usage::Generic,
-                        row: 1,
-                        channel: 0,
-                        high: false
-                    },
+                    attribute: Attribute { usage: Usage::Generic, row: 1, channel: 0, high: false },
                     barycentric: Barycentric::PerspectiveCenter,
                     first: vec![(0, 0)],
                 }
             )]
         );
-        let [e] = &io.exports[..] else {
-            panic!("{:?}", io.exports)
-        };
-        assert_eq!(
-            (e.target, e.done, e.compressed),
-            (Target::Color(0), true, false)
-        );
+        let [e] = &io.exports[..] else { panic!("{:?}", io.exports) };
+        assert_eq!((e.target, e.done, e.compressed), (Target::Color(0), true, false));
         assert_eq!(e.values[0], p.blocks[0].insts[1].write(Reg::V(2)));
     }
 
@@ -757,20 +680,12 @@ mod tests {
             S_ENDPGM,
         ]);
         let io = raise(&p, &pixel(vec![TEXCOORD], 2)).unwrap();
-        let attribute = Attribute {
-            usage: Usage::Generic,
-            row: 1,
-            channel: 0,
-            high: false,
-        };
+        let attribute = Attribute { usage: Usage::Generic, row: 1, channel: 0, high: false };
         let mut interps = io.interps.clone();
         interps.sort_by_key(|i| i.0);
         assert_eq!(
             interps,
-            [
-                ((0, 1), Interp::Weighted { attribute }),
-                ((0, 2), Interp::Weighted { attribute }),
-            ]
+            [((0, 1), Interp::Weighted { attribute }), ((0, 2), Interp::Weighted { attribute }),]
         );
     }
 
@@ -788,11 +703,7 @@ mod tests {
         ]);
         let io = raise(&p, &pixel(vec![TEXCOORD], 2)).unwrap();
         assert_eq!(io.interps.len(), 2);
-        assert!(
-            io.interps
-                .iter()
-                .all(|(_, i)| matches!(i, Interp::Weighted { .. }))
-        );
+        assert!(io.interps.iter().all(|(_, i)| matches!(i, Interp::Weighted { .. })));
     }
 
     #[test]
@@ -804,17 +715,7 @@ mod tests {
             0x0202_0202,
             S_ENDPGM,
         ]);
-        let io = raise(
-            &p,
-            &pixel(
-                vec![PsInput {
-                    fp16: true,
-                    ..TEXCOORD
-                }],
-                2,
-            ),
-        )
-        .unwrap();
+        let io = raise(&p, &pixel(vec![PsInput { fp16: true, ..TEXCOORD }], 2)).unwrap();
         assert!(matches!(&io.interps[..], [(_, Interp::Weighted { .. })]));
     }
 
@@ -897,20 +798,8 @@ mod tests {
         assert_eq!(
             v,
             [
-                (
-                    0,
-                    Input::Barycentric {
-                        kind: Barycentric::LinearCenter,
-                        index: 0
-                    }
-                ),
-                (
-                    1,
-                    Input::Barycentric {
-                        kind: Barycentric::LinearCenter,
-                        index: 1
-                    }
-                ),
+                (0, Input::Barycentric { kind: Barycentric::LinearCenter, index: 0 }),
+                (1, Input::Barycentric { kind: Barycentric::LinearCenter, index: 1 }),
                 (2, Input::Position(0)),
                 (3, Input::Position(1)),
             ]

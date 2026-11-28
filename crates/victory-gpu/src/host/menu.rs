@@ -113,8 +113,13 @@ const ITEMS: &[Item] = &[
     Item { var: "VICTORY_PORT_CONSTANTS", label: "CONSTANTS HEAP IN PLACE", values: UNSET_ON, live: false },
 ];
 /// The lines after the settings.
-const ACTIONS: [&str; 5] =
-    ["SAVE AND RESTART NOW", "SAVE FOR NEXT START", "PRELOAD SHADERS (RESTARTS THE GAME)", "RESET ALL TO PLAY DEFAULTS", "CLOSE"];
+const ACTIONS: [&str; 5] = [
+    "SAVE AND RESTART NOW",
+    "SAVE FOR NEXT START",
+    "PRELOAD SHADERS (RESTARTS THE GAME)",
+    "RESET ALL TO PLAY DEFAULTS",
+    "CLOSE",
+];
 
 fn get(var: &str) -> String {
     std::env::var(var).unwrap_or_default()
@@ -148,11 +153,14 @@ pub(crate) fn warmup_notice(seconds: u64) -> Vec<String> {
 /// launcher waiting on that pipe.)
 fn new_console(command_line: &str) -> std::io::Result<()> {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{CREATE_NEW_CONSOLE, CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW};
+    use windows_sys::Win32::System::Threading::{
+        CREATE_NEW_CONSOLE, CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW,
+    };
     let mut line: Vec<u16> = command_line.encode_utf16().chain(Some(0)).collect();
     // SAFETY: plain structs, zero is their empty value.
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
     startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    // SAFETY: plain structs, zero is their empty value.
     let mut process: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: `line` is a writable, terminated UTF-16 string; no handles inherited; this
     // process's environment and folder.
@@ -191,7 +199,9 @@ fn live(item: &Item) -> bool {
 /// (`VICTORY_FPS_LINE=0`: not; the menu changes it).
 fn fps_line_on() -> &'static AtomicBool {
     static ON: OnceLock<AtomicBool> = OnceLock::new();
-    ON.get_or_init(|| AtomicBool::new(std::env::var_os("VICTORY_FPS_LINE").is_none_or(|v| v != "0")))
+    ON.get_or_init(|| {
+        AtomicBool::new(std::env::var_os("VICTORY_FPS_LINE").is_none_or(|v| v != "0"))
+    })
 }
 
 /// That line: the frames rendered a second and, while frame generation shows more, those shown.
@@ -236,7 +246,8 @@ fn keys() -> &'static Mutex<Vec<u16>> {
     static KEYS: OnceLock<Mutex<Vec<u16>>> = OnceLock::new();
     KEYS.get_or_init(|| {
         let _ = std::thread::Builder::new().name("settings menu keys".into()).spawn(|| {
-            const WATCHED: [u16; 7] = [VK_F1, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_ESCAPE];
+            const WATCHED: [u16; 7] =
+                [VK_F1, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_ESCAPE];
             let mut was = [false; WATCHED.len()];
             loop {
                 std::thread::sleep(Duration::from_millis(10));
@@ -270,7 +281,9 @@ fn lit(lines: &[String], x: u32, y: u32) -> bool {
     if x % CELL.0 >= GLYPH.0 || y % CELL.1 >= GLYPH.1 || x / CELL.0 >= COLUMNS {
         return false;
     }
-    let Some(&c) = lines.get((y / CELL.1) as usize).and_then(|l| l.as_bytes().get((x / CELL.0) as usize)) else {
+    let Some(&c) =
+        lines.get((y / CELL.1) as usize).and_then(|l| l.as_bytes().get((x / CELL.0) as usize))
+    else {
         return false;
     };
     (glyph(c.to_ascii_uppercase())[(y % CELL.1) as usize] >> (GLYPH.0 - 1 - x % CELL.0)) & 1 != 0
@@ -317,7 +330,8 @@ impl Buffers {
         let (width, height) = size(scale);
         let pitch = (width * colours(format)?[0].len() as u32).next_multiple_of(256);
         let bytes = u64::from(pitch) * u64::from(height);
-        let uploads = (0..UPLOADS).map(|_| host.upload_buffer(bytes)).collect::<Option<Vec<_>>>()?;
+        let uploads =
+            (0..UPLOADS).map(|_| host.upload_buffer(bytes)).collect::<Option<Vec<_>>>()?;
         let heap = D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() };
         let desc = D3D12_RESOURCE_DESC {
             Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
@@ -333,10 +347,26 @@ impl Buffers {
         // SAFETY: plain creation of a buffer.
         unsafe {
             host.device
-                .CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, None, &mut card)
+                .CreateCommittedResource(
+                    &heap,
+                    D3D12_HEAP_FLAG_NONE,
+                    &desc,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    None,
+                    &mut card,
+                )
                 .ok()?;
         }
-        Some(Buffers { format, scale, pitch, uploads, card: card?, turn: 0, fresh: false, used: false })
+        Some(Buffers {
+            format,
+            scale,
+            pitch,
+            uploads,
+            card: card?,
+            turn: 0,
+            fresh: false,
+            used: false,
+        })
     }
 
     fn write(&mut self, lines: &[String]) {
@@ -344,7 +374,13 @@ impl Buffers {
         let picture = painted(lines, self.scale, colours, self.pitch as usize);
         self.turn = (self.turn + 1) % UPLOADS;
         // SAFETY: a mapped upload buffer of the picture's size, which the card read frames ago.
-        unsafe { std::ptr::copy_nonoverlapping(picture.as_ptr(), self.uploads[self.turn].1, picture.len()) };
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                picture.as_ptr(),
+                self.uploads[self.turn].1,
+                picture.len(),
+            )
+        };
         self.fresh = true;
     }
 }
@@ -374,7 +410,16 @@ impl Menu {
             crate::SETTINGS_MENU_OPEN.store(true, Ordering::Relaxed);
         }
         let values: Vec<String> = ITEMS.iter().map(|i| get(i.var)).collect();
-        Menu { started: values.clone(), values, at: 0, note: String::new(), changed: true, painted: None, buffers: None, failed: false }
+        Menu {
+            started: values.clone(),
+            values,
+            at: 0,
+            note: String::new(),
+            changed: true,
+            painted: None,
+            buffers: None,
+            failed: false,
+        }
     }
 
     fn open() -> bool {
@@ -394,7 +439,13 @@ impl Menu {
             let line = if let Some(item) = ITEMS.get(row) {
                 let value = &self.values[row];
                 let shown = shown_value(item, value);
-                let mark = if *value != self.started[row] { if live(item) { " *LIVE" } else { " *" } } else if live(item) { " LIVE" } else { "" };
+                let mark = if *value != self.started[row] {
+                    if live(item) { " *LIVE" } else { " *" }
+                } else if live(item) {
+                    " LIVE"
+                } else {
+                    ""
+                };
                 format!("{cursor} {:<27} < {shown} >{mark}", item.label)
             } else {
                 format!("{cursor} {}", ACTIONS[row - ITEMS.len()])
@@ -413,7 +464,11 @@ impl Menu {
             [""; 3]
         };
         out.extend(about.iter().map(|l| (*l).to_owned()));
-        out.push(if self.note.is_empty() { "* = CHANGED: APPLIES AT THE NEXT START UNLESS LIVE".to_owned() } else { self.note.clone() });
+        out.push(if self.note.is_empty() {
+            "* = CHANGED: APPLIES AT THE NEXT START UNLESS LIVE".to_owned()
+        } else {
+            self.note.clone()
+        });
         out.push(REPO.to_owned());
         out
     }
@@ -423,7 +478,8 @@ impl Menu {
         let item = &ITEMS[i];
         let n = item.values.len() as isize;
         let now = index_of(item, &self.values[i]).map_or(-1, |x| x as isize);
-        let next = if now < 0 { if step > 0 { 0 } else { n - 1 } } else { (now + step).rem_euclid(n) };
+        let next =
+            if now < 0 { if step > 0 { 0 } else { n - 1 } } else { (now + step).rem_euclid(n) };
         self.values[i] = item.values[next as usize].0.to_owned();
         if live(item) {
             self.apply_live(i);
@@ -462,7 +518,9 @@ impl Menu {
         let mut kept: Vec<(String, String)> = std::fs::read_to_string(&path)
             .unwrap_or_default()
             .lines()
-            .filter_map(|l| l.split_once('=').map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned())))
+            .filter_map(|l| {
+                l.split_once('=').map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+            })
             .filter(|(k, _)| k.starts_with("VICTORY_"))
             .collect();
         for (i, item) in ITEMS.iter().enumerate() {
@@ -472,7 +530,9 @@ impl Menu {
             kept.retain(|(k, _)| k != item.var);
             kept.push((item.var.to_owned(), self.values[i].clone()));
         }
-        let mut text = String::from("# Saved by the F1 menu; applied over the play settings at every start (an empty value: unset).\r\n");
+        let mut text = String::from(
+            "# Saved by the F1 menu; applied over the play settings at every start (an empty value: unset).\r\n",
+        );
         for (k, v) in &kept {
             text.push_str(&format!("{k}={v}\r\n"));
         }
@@ -508,14 +568,19 @@ impl Menu {
             "Start-Sleep 3; {}& '{play}' {args}; if ($LASTEXITCODE) {{ Read-Host 'The start failed (see above). Press Enter to close this window' }}",
             if preload { "$env:VICTORY_PRELOAD='1'; " } else { "" }
         );
-        match new_console(&format!("powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"{}\"", command.replace('"', "\\\""))) {
+        match new_console(&format!(
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"{}\"",
+            command.replace('"', "\\\"")
+        )) {
             Ok(()) => {
                 tracing::info!(command, preload, "settings menu: restarting");
                 // Ended at once: std::process::exit runs the DLLs' unloading, which with
                 // Streamline loaded did not come back (a windowless leftover process).
                 // SAFETY: this process, with nothing of its own left to save.
                 unsafe {
-                    use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
+                    use windows_sys::Win32::System::Threading::{
+                        GetCurrentProcess, TerminateProcess,
+                    };
                     TerminateProcess(GetCurrentProcess(), 0);
                 }
                 std::process::exit(0);
@@ -545,7 +610,10 @@ impl Menu {
             if let Some(dir) = mark.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            let _ = std::fs::write(&mark, "this victory.exe was warmed up (its first start, then a restart)\r\n");
+            let _ = std::fs::write(
+                &mark,
+                "this victory.exe was warmed up (its first start, then a restart)\r\n",
+            );
         }
         tracing::info!(seconds, mark = %mark.display(), "first start of this victory.exe: warmed up; the game starts again");
         self.restart(false);
@@ -614,7 +682,14 @@ impl Menu {
     }
 
     /// Records the copy of the box onto `back` (in the copy-destination state).
-    pub(super) fn draw(&mut self, host: &Host, list: &HostList, back: &ID3D12Resource, (width, height): (u32, u32), format: DXGI_FORMAT) {
+    pub(super) fn draw(
+        &mut self,
+        host: &Host,
+        list: &HostList,
+        back: &ID3D12Resource,
+        (width, height): (u32, u32),
+        format: DXGI_FORMAT,
+    ) {
         if self.failed {
             return;
         }
@@ -629,7 +704,7 @@ impl Menu {
         let _ours = crate::replay::record::unrecorded();
         let scale = (height / 540).max(1);
         if self.buffers.as_ref().is_none_or(|b| (b.format, b.scale) != (format, scale)) {
-            std::mem::forget(self.buffers.take());
+            let _ = std::mem::ManuallyDrop::new(self.buffers.take());
             self.buffers = Buffers::new(host, format, scale);
             self.failed = self.buffers.is_none();
             self.changed = true;
@@ -638,7 +713,11 @@ impl Menu {
             self.painted = line.clone();
             self.changed = true;
         }
-        let lines = if self.changed { Some(line.as_ref().map_or_else(|| self.lines(), |l| vec![l.clone()])) } else { None };
+        let lines = if self.changed {
+            Some(line.as_ref().map_or_else(|| self.lines(), |l| vec![l.clone()]))
+        } else {
+            None
+        };
         let Some(buffers) = &mut self.buffers else { return };
         if let Some(lines) = lines {
             self.changed = false;
@@ -656,10 +735,18 @@ impl Menu {
         unsafe {
             if std::mem::take(&mut buffers.fresh) {
                 if std::mem::replace(&mut buffers.used, true) {
-                    list.ResourceBarrier(&[transition(&buffers.card, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COPY_DEST)]);
+                    list.ResourceBarrier(&[transition(
+                        &buffers.card,
+                        D3D12_RESOURCE_STATE_COPY_SOURCE,
+                        D3D12_RESOURCE_STATE_COPY_DEST,
+                    )]);
                 }
                 list.CopyResource(&buffers.card, &buffers.uploads[buffers.turn].0);
-                list.ResourceBarrier(&[transition(&buffers.card, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE)]);
+                list.ResourceBarrier(&[transition(
+                    &buffers.card,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_COPY_SOURCE,
+                )]);
             }
             let from = D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(&buffers.card),
@@ -667,7 +754,13 @@ impl Menu {
                 Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
                     PlacedFootprint: D3D12_PLACED_SUBRESOURCE_FOOTPRINT {
                         Offset: 0,
-                        Footprint: D3D12_SUBRESOURCE_FOOTPRINT { Format: format, Width: size(scale).0, Height: size(scale).1, Depth: 1, RowPitch: buffers.pitch },
+                        Footprint: D3D12_SUBRESOURCE_FOOTPRINT {
+                            Format: format,
+                            Width: size(scale).0,
+                            Height: size(scale).1,
+                            Depth: 1,
+                            RowPitch: buffers.pitch,
+                        },
                     },
                 },
             };
@@ -688,7 +781,16 @@ mod tests {
 
     #[test]
     fn every_line_fits_and_every_character_has_a_picture() {
-        let mut menu = Menu { values: ITEMS.iter().map(|_| String::new()).collect(), started: Vec::new(), at: 0, note: String::new(), changed: false, painted: None, buffers: None, failed: false };
+        let mut menu = Menu {
+            values: ITEMS.iter().map(|_| String::new()).collect(),
+            started: Vec::new(),
+            at: 0,
+            note: String::new(),
+            changed: false,
+            painted: None,
+            buffers: None,
+            failed: false,
+        };
         menu.started = menu.values.clone();
         for at in 0..ITEMS.len() + ACTIONS.len() {
             menu.at = at;
@@ -703,16 +805,33 @@ mod tests {
 
     #[test]
     fn the_link_is_always_right_under_the_note() {
-        let mut menu = Menu { values: ITEMS.iter().map(|_| String::new()).collect(), started: Vec::new(), at: 0, note: String::new(), changed: false, painted: None, buffers: None, failed: false };
+        let mut menu = Menu {
+            values: ITEMS.iter().map(|_| String::new()).collect(),
+            started: Vec::new(),
+            at: 0,
+            note: String::new(),
+            changed: false,
+            painted: None,
+            buffers: None,
+            failed: false,
+        };
         menu.started = menu.values.clone();
         for note in ["", "SAVED"] {
             menu.note = note.to_owned();
+            #[allow(
+                clippy::needless_range_loop,
+                reason = "the position is set on the menu and compared, not only an index"
+            )]
             for at in 0..ITEMS.len() + ACTIONS.len() {
                 menu.at = at;
                 let lines = menu.lines();
                 assert_eq!(lines.len(), LINES as usize);
                 let n = lines.len();
-                assert!(lines[n - 2].starts_with("* = CHANGED") || lines[n - 2] == note, "{}", lines[n - 2]);
+                assert!(
+                    lines[n - 2].starts_with("* = CHANGED") || lines[n - 2] == note,
+                    "{}",
+                    lines[n - 2]
+                );
                 assert_eq!(lines[n - 1], REPO);
                 // What a preload costs, and what MFG Unlocker is, is said while it is picked, and only then.
                 let about = &lines[n - 5..n - 2];
@@ -733,7 +852,16 @@ mod tests {
 
     #[test]
     fn values_cycle_both_ways() {
-        let mut menu = Menu { values: ITEMS.iter().map(|i| i.values[0].0.to_owned()).collect(), started: Vec::new(), at: 0, note: String::new(), changed: false, painted: None, buffers: None, failed: false };
+        let mut menu = Menu {
+            values: ITEMS.iter().map(|i| i.values[0].0.to_owned()).collect(),
+            started: Vec::new(),
+            at: 0,
+            note: String::new(),
+            changed: false,
+            painted: None,
+            buffers: None,
+            failed: false,
+        };
         menu.started = menu.values.clone();
         let n = ITEMS[0].values.len();
         for _ in 0..n {

@@ -69,20 +69,38 @@ pub fn run(
     let fsr_path = std::env::var_os("VICTORY_FSR_PATH").is_some_and(|v| v == "1");
     // (FSR 3 frame generation reads the upscaling's inputs as DLSS Frame
     // Generation does: the title renders through its FidelityFX path too.)
-    let upscaler = (available.dlss || available.framegen || available.fsr_framegen || fsr_path).then_some(asked.mode);
+    let upscaler = (available.dlss || available.framegen || available.fsr_framegen || fsr_path)
+        .then_some(asked.mode);
     // What this card does for frame generation (also on the picture for the first seconds).
     for (i, line) in victory_hle::streamline::notice_at_start().iter().enumerate() {
         println!("{}{line}", if i == 0 { "frame gen      " } else { "               " });
     }
     if fsr_path && !asked.any() {
-        println!("upscaling      the title's own FidelityFX at the {} scale (VICTORY_FSR_PATH=1)", asked.mode.name());
+        println!(
+            "upscaling      the title's own FidelityFX at the {} scale (VICTORY_FSR_PATH=1)",
+            asked.mode.name()
+        );
     }
     if asked.any() {
         println!(
             "upscaling      DLSS {}, frame generation {}{}",
-            if available.dlss { "on" } else if asked.dlss { "asked, not available" } else { "off" },
-            if available.framegen { "on" } else if asked.framegen { "asked, not available" } else { "off" },
-            upscaler.map(|m| format!(", scene at the {} scale ({})", m.name(), m.scale())).unwrap_or_default()
+            if available.dlss {
+                "on"
+            } else if asked.dlss {
+                "asked, not available"
+            } else {
+                "off"
+            },
+            if available.framegen {
+                "on"
+            } else if asked.framegen {
+                "asked, not available"
+            } else {
+                "off"
+            },
+            upscaler
+                .map(|m| format!(", scene at the {} scale ({})", m.name(), m.scale()))
+                .unwrap_or_default()
         );
     }
     let original = std::fs::read(exe).with_context(|| format!("reading {}", exe.display()))?;
@@ -98,15 +116,23 @@ pub fn run(
     let render_1080p = std::env::var("VICTORY_RENDER_1080P").as_deref() == Ok("1");
     let native_1440p = render_1080p || std::env::var("VICTORY_NATIVE_1440P").as_deref() == Ok("1");
     let images = if native_1440p {
-        anyhow::ensure!(matches!(console, Console::SeriesX), "1440p output needs the Series X profile");
+        anyhow::ensure!(
+            matches!(console, Console::SeriesX),
+            "1440p output needs the Series X profile"
+        );
         if upscaler.is_some() && render_1080p {
-            println!("display        VICTORY_RENDER_1080P is left out: VICTORY_DLSS_MODE sets the scene's size");
+            println!(
+                "display        VICTORY_RENDER_1080P is left out: VICTORY_DLSS_MODE sets the scene's size"
+            );
         }
         let (w, h) = native_1440p::prepare(&mut prepared, render_1080p && upscaler.is_none())?;
         // SAFETY: nothing else runs yet; the title and the display mode list
         // read these later.
         unsafe {
-            std::env::set_var("VICTORY_DISPLAY_MODE", format!("{}x{}", native_1440p::WIDTH, native_1440p::HEIGHT));
+            std::env::set_var(
+                "VICTORY_DISPLAY_MODE",
+                format!("{}x{}", native_1440p::WIDTH, native_1440p::HEIGHT),
+            );
             std::env::set_var("VICTORY_NATIVE_1440P", "1");
         }
         match upscaler.map(|mode| (mode, native_1440p::prepare_upscaler(&mut prepared, mode))) {
@@ -122,16 +148,30 @@ pub fn run(
             }
             other => {
                 if let Some((_, Err(e))) = other {
-                    println!("upscaling      the title's FidelityFX path was not patched in: {e:#}");
+                    println!(
+                        "upscaling      the title's FidelityFX path was not patched in: {e:#}"
+                    );
                 }
-                println!("display        {}x{} SDR, scene {w}x{h}", native_1440p::WIDTH, native_1440p::HEIGHT);
-                cfg.cache_subdir(if render_1080p { "images/1080p-to-1440p-sdr" } else { "images/native-1440p-sdr" })?
+                println!(
+                    "display        {}x{} SDR, scene {w}x{h}",
+                    native_1440p::WIDTH,
+                    native_1440p::HEIGHT
+                );
+                cfg.cache_subdir(if render_1080p {
+                    "images/1080p-to-1440p-sdr"
+                } else {
+                    "images/native-1440p-sdr"
+                })?
             }
         }
     } else if let Some(mode) = upscaler {
         match native_1440p::prepare_upscaler(&mut prepared, mode) {
             Ok(()) => {
-                println!("display        the title's output, scene at {} of it through its FidelityFX path ({})", mode.scale(), mode.name());
+                println!(
+                    "display        the title's output, scene at {} of it through its FidelityFX path ({})",
+                    mode.scale(),
+                    mode.name()
+                );
                 cfg.cache_subdir(&format!("images/upscaler-{}", mode.name()))?
             }
             Err(e) => {
@@ -153,16 +193,9 @@ pub fn run(
     drop(original);
     victory_hle::runtime::set_main_image(image.base());
     victory_hle::runtime::set_image_path(image.base(), exe);
-    println!(
-        "mapped at      {:#x} (preferred {:#x})",
-        image.base(),
-        image.info().image_base
-    );
-    let resolver = HleResolver::new(if strict {
-        HostPolicy::none()
-    } else {
-        HostPolicy::default()
-    });
+    println!("mapped at      {:#x} (preferred {:#x})", image.base(), image.info().image_base);
+    let resolver =
+        HleResolver::new(if strict { HostPolicy::none() } else { HostPolicy::default() });
     let wanted = |dll: &str| title_dll(&resolver.host, dll);
     let title_dir = exe.parent().unwrap_or(Path::new("."));
     // A missing manifest leaves id 0 and no storage quota.
@@ -191,12 +224,7 @@ pub fn run(
         println!("title dll      {name} at {:#x}", dll.base());
         victory_hle::runtime::set_image_path(dll.base(), &title_dir.join(name));
     }
-    let imported: Vec<&str> = image
-        .info()
-        .imports
-        .iter()
-        .map(|m| m.dll.as_str())
-        .collect();
+    let imported: Vec<&str> = image.info().imports.iter().map(|m| m.dll.as_str()).collect();
     let mapped: Vec<&str> = dlls.iter().map(|(name, _)| name.as_str()).collect();
     let absent = absent_title_dlls(&imported, &mapped, &wanted);
     if !absent.is_empty() {
@@ -222,10 +250,7 @@ pub fn run(
         Unimplemented::Trap => UnimplementedPolicy::Trap,
         Unimplemented::Zero => UnimplementedPolicy::ReturnZero,
     };
-    let with_dlls = WithTitleDlls {
-        inner: &resolver,
-        dlls: &dlls,
-    };
+    let with_dlls = WithTitleDlls { inner: &resolver, dlls: &dlls };
     // The title's Bink exports go through the movie skipper when
     // VICTORY_SKIP_BINK asks for it (bound as before otherwise); beneath
     // the FidelityFX interposer, which only looks at its own DLL.
@@ -275,7 +300,9 @@ pub fn run(
                     title_interval_us(rate, false)
                 );
             }
-            None => println!("frame rate: our clock {ms} ms; the title's own rate (30) left as it is"),
+            None => {
+                println!("frame rate: our clock {ms} ms; the title's own rate (30) left as it is")
+            }
         }
     }
     if !execute {
@@ -300,9 +327,7 @@ pub fn run(
     }));
     // SAFETY: imports are bound; from here on we run title code.
     let main = unsafe { Arc::new(image).spawn_main(dlls)? };
-    let code = main
-        .join()
-        .map_err(|_| anyhow::anyhow!("title main thread panicked"))??;
+    let code = main.join().map_err(|_| anyhow::anyhow!("title main thread panicked"))??;
     println!("title exited with {code}");
     Ok(())
 }
@@ -498,22 +523,13 @@ impl LateDlls {
                     &wanted,
                 )?;
                 let hle = victory_hle::HleResolver::new(self.host.clone());
-                let old = victory_loader::WithTitleDlls {
-                    inner: &hle,
-                    dlls: &mapped,
-                };
-                let resolver = victory_loader::WithTitleDlls {
-                    inner: &old,
-                    dlls: &new,
-                };
+                let old = victory_loader::WithTitleDlls { inner: &hle, dlls: &mapped };
+                let resolver = victory_loader::WithTitleDlls { inner: &old, dlls: &new };
                 // As at startup: Bink imports of DLLs loaded later too
                 // (VICTORY_SKIP_BINK; bound as before otherwise).
                 let resolver = victory_hle::modules::bink::SkipMovies { inner: &resolver };
                 for (name, dll) in &new {
-                    println!(
-                        "title dll      {name} at {:#x} (loaded by the title)",
-                        dll.base()
-                    );
+                    println!("title dll      {name} at {:#x} (loaded by the title)", dll.base());
                     show(name, dll.bind_imports(&resolver, self.policy)?);
                     set_image_path(dll.base(), &self.title_dir.join(name));
                 }
@@ -524,9 +540,7 @@ impl LateDlls {
             let failed = new.iter().enumerate().find_map(|(i, (name, dll))| {
                 // SAFETY: bound above, dependencies attached first.
                 let attached = unsafe { dll.attach() };
-                attached
-                    .err()
-                    .map(|e| (i, e.context(format!("attaching {name}"))))
+                attached.err().map(|e| (i, e.context(format!("attaching {name}"))))
             });
             let Some((i, error)) = failed else {
                 return Ok(new.last().map(|(_, dll)| dll.base()));
@@ -593,9 +607,7 @@ mod absent_tests {
         // The host provides kernel32, our runtime d3d12_xs; the rest are the
         // title's own (#930: the four DLLs beside the executable missing).
         let wanted = |dll: &str| {
-            !["KERNEL32.dll", "d3d12_xs.dll"]
-                .iter()
-                .any(|h| h.eq_ignore_ascii_case(dll))
+            !["KERNEL32.dll", "d3d12_xs.dll"].iter().any(|h| h.eq_ignore_ascii_case(dll))
         };
         let imported = [
             "KERNEL32.dll",
@@ -620,7 +632,8 @@ mod absent_tests {
     }
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use std::sync::{Arc, Mutex};
 

@@ -198,11 +198,7 @@ fn bench_indirect_draw_barriers() {
                     f.EnumAdapterByLuid::<windows::Win32::Graphics::Dxgi::IDXGIAdapter1>(luid)
                 })
                 .and_then(|a| a.GetDesc1())
-                .map(|d| {
-                    String::from_utf16_lossy(&d.Description)
-                        .trim_end_matches('\0')
-                        .to_owned()
-                })
+                .map(|d| String::from_utf16_lossy(&d.Description).trim_end_matches('\0').to_owned())
                 .unwrap_or_else(|_| "an unnamed adapter".to_owned())
         };
         let queue: ID3D12CommandQueue = device
@@ -211,12 +207,10 @@ fn bench_indirect_draw_barriers() {
                 ..Default::default()
             })
             .unwrap();
-        let allocator: ID3D12CommandAllocator = device
-            .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-            .unwrap();
-        let list: ID3D12GraphicsCommandList = device
-            .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None)
-            .unwrap();
+        let allocator: ID3D12CommandAllocator =
+            device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
+        let list: ID3D12GraphicsCommandList =
+            device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None).unwrap();
         list.Close().unwrap();
         let fence: ID3D12Fence = device.CreateFence(0, D3D12_FENCE_FLAG_NONE).unwrap();
         let event = CreateEventW(None, false, false, None).unwrap();
@@ -244,10 +238,7 @@ fn bench_indirect_draw_barriers() {
             },
             PrimitiveTopologyType: D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
             NumRenderTargets: 1,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             ..Default::default()
         };
         desc.BlendState.RenderTarget[0].RenderTargetWriteMask =
@@ -261,20 +252,14 @@ fn bench_indirect_draw_barriers() {
             DepthOrArraySize: 1,
             MipLevels: 1,
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
             ..Default::default()
         };
         let mut target: Option<ID3D12Resource> = None;
         device
             .CreateCommittedResource(
-                &D3D12_HEAP_PROPERTIES {
-                    Type: D3D12_HEAP_TYPE_DEFAULT,
-                    ..Default::default()
-                },
+                &D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() },
                 D3D12_HEAP_FLAG_NONE,
                 &target_desc,
                 D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -309,9 +294,7 @@ fn bench_indirect_draw_barriers() {
         // runs below charge far less than the budget).
         let card_budget = host.uav_buffer(256).unwrap();
         let card_budget_gpu = card_budget.GetGPUVirtualAddress();
-        let scratch = host
-            .uav_buffer(u64::from(WINDOW * STEP).max(64 << 10))
-            .unwrap();
+        let scratch = host.uav_buffer(u64::from(WINDOW * STEP).max(64 << 10)).unwrap();
         let signature = {
             let arg = D3D12_INDIRECT_ARGUMENT_DESC {
                 Type: D3D12_INDIRECT_ARGUMENT_TYPE_DRAW,
@@ -324,9 +307,7 @@ fn bench_indirect_draw_barriers() {
                 NodeMask: 0,
             };
             let mut sig: Option<ID3D12CommandSignature> = None;
-            device
-                .CreateCommandSignature(&desc, None::<&ID3D12RootSignature>, &mut sig)
-                .unwrap();
+            device.CreateCommandSignature(&desc, None::<&ID3D12RootSignature>, &mut sig).unwrap();
             sig.unwrap()
         };
         let stamps: ID3D12QueryHeap = {
@@ -346,10 +327,7 @@ fn bench_indirect_draw_barriers() {
         let mut back: Option<ID3D12Resource> = None;
         device
             .CreateCommittedResource(
-                &D3D12_HEAP_PROPERTIES {
-                    Type: D3D12_HEAP_TYPE_READBACK,
-                    ..Default::default()
-                },
+                &D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_READBACK, ..Default::default() },
                 D3D12_HEAP_FLAG_NONE,
                 &D3D12_RESOURCE_DESC {
                     Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
@@ -357,10 +335,7 @@ fn bench_indirect_draw_barriers() {
                     Height: 1,
                     DepthOrArraySize: 1,
                     MipLevels: 1,
-                    SampleDesc: DXGI_SAMPLE_DESC {
-                        Count: 1,
-                        Quality: 0,
-                    },
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                     Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
                     ..Default::default()
                 },
@@ -386,12 +361,7 @@ fn bench_indirect_draw_barriers() {
                 MaxDepth: 1.0,
                 ..Default::default()
             }]);
-            list.RSSetScissorRects(&[RECT {
-                left: 0,
-                top: 0,
-                right: 256,
-                bottom: 256,
-            }]);
+            list.RSSetScissorRects(&[RECT { left: 0, top: 0, right: 256, bottom: 256 }]);
             list.IASetPrimitiveTopology(
                 windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
             );

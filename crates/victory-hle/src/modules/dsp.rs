@@ -14,8 +14,14 @@
 //! is not known. Outputs are silence, so reverb returns are dry.
 // shortcut: no convolution or block transform; outputs are zeros. Needs the
 // coprocessor's impulse response and spectrum layouts to do better.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (XDspConnectWithMaximumStreamLimit) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::c_void;
 use std::sync::Mutex;
@@ -92,17 +98,8 @@ pub extern "system" fn XDspConnectWithMaximumStreamLimit(
     if out.is_null() {
         return E_POINTER;
     }
-    tracing::info!(
-        base_length,
-        ir_seconds,
-        max_streams,
-        max_channels,
-        "audio DSP connected"
-    );
-    let dsp = Box::new(Dsp {
-        max_streams,
-        active: Mutex::new(0),
-    });
+    tracing::info!(base_length, ir_seconds, max_streams, max_channels, "audio DSP connected");
+    let dsp = Box::new(Dsp { max_streams, active: Mutex::new(0) });
     // SAFETY: checked non-null.
     unsafe { out.write(Box::into_raw(dsp)) };
     S_OK
@@ -148,13 +145,7 @@ pub extern "system" fn XDspActivate(
         return E_INVALIDARG;
     }
     let (kind, options, frames, channels) = (desc.kind, desc.options, desc.frames, desc.channels);
-    tracing::debug!(
-        kind,
-        options,
-        frames,
-        channels,
-        "audio DSP stream activated"
-    );
+    tracing::debug!(kind, options, frames, channels, "audio DSP stream activated");
     {
         // SAFETY: a connection from `XDspConnectWithMaximumStreamLimit`.
         let dsp = unsafe { &*dsp };
@@ -168,12 +159,7 @@ pub extern "system" fn XDspActivate(
         dsp,
         frames: desc.frames,
         channels: desc.channels,
-        status: Box::new(Status {
-            submitted: 0,
-            completed: 0,
-            reserved: 0,
-            result: S_OK,
-        }),
+        status: Box::new(Status { submitted: 0, completed: 0, reserved: 0, result: S_OK }),
     });
     // SAFETY: checked non-null.
     unsafe {
@@ -288,14 +274,8 @@ mod tests {
         assert_eq!(XDspDeactivate(stream), S_OK);
 
         // Mono streams refuse stereo options; transforms are mono only.
-        let bad = StreamDesc {
-            channels: 1,
-            ..desc
-        };
-        assert_eq!(
-            XDspActivate(dsp, &bad, &mut status, &mut stream),
-            E_INVALIDARG
-        );
+        let bad = StreamDesc { channels: 1, ..desc };
+        assert_eq!(XDspActivate(dsp, &bad, &mut status, &mut stream), E_INVALIDARG);
         let transform = StreamDesc {
             kind: 2,
             options: 0,
@@ -304,10 +284,7 @@ mod tests {
             ir: std::ptr::null(),
             ..desc
         };
-        assert_eq!(
-            XDspActivate(dsp, &transform, &mut status, &mut stream),
-            S_OK
-        );
+        assert_eq!(XDspActivate(dsp, &transform, &mut status, &mut stream), S_OK);
         assert_eq!(XDspDeactivate(stream), S_OK);
         assert_eq!(XDspDisconnect(dsp), S_OK);
     }

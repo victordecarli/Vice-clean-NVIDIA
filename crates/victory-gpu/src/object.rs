@@ -1,7 +1,10 @@
 //! What every console graphics object starts with: a function table
 //! pointer, bookkeeping bits and a reference count. Tables begin with
 //! IUnknown's three slots. Our objects are static and never destroyed.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -25,10 +28,7 @@ pub type Iid = [u8; 16];
 /// An interface id from its text form's fields, in memory order.
 pub const fn guid(a: u32, b: u16, c: u16, d: [u8; 8]) -> Iid {
     let (a, b, c) = (a.to_le_bytes(), b.to_le_bytes(), c.to_le_bytes());
-    [
-        a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6],
-        d[7],
-    ]
+    [a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]]
 }
 
 pub fn guid_text(g: &Iid) -> String {
@@ -51,11 +51,7 @@ unsafe impl Sync for Object {}
 
 impl Object {
     pub(crate) const fn new<const N: usize>(table: &'static Table<N>) -> Self {
-        Object {
-            functions: table.0.as_ptr(),
-            bits: 0,
-            refs: AtomicU32::new(0),
-        }
+        Object { functions: table.0.as_ptr(), bits: 0, refs: AtomicU32::new(0) }
     }
 }
 
@@ -239,12 +235,7 @@ pub(crate) extern "system" fn set_name(this: This, name: *const u16) -> HRESULT 
 /// the interfaces the device itself answers to.
 pub(crate) extern "system" fn parent_device(_: This, iid: *const Iid, out: *mut This) -> HRESULT {
     let device = crate::device::device();
-    answer(
-        DEVICE,
-        iid,
-        crate::device::is_device(iid).then_some(device),
-        out,
-    )
+    answer(DEVICE, iid, crate::device::is_device(iid).then_some(device), out)
 }
 
 pub(crate) const DEVICE: usize = 0;
@@ -396,16 +387,7 @@ mod tests {
             Table(functions)
         };
         let mut this = std::ptr::null();
-        assert_eq!(
-            hand_out(
-                DEVICE,
-                Box::new(Object::new(&TABLE)),
-                &TAG,
-                &[TAG],
-                &mut this
-            ),
-            S_OK
-        );
+        assert_eq!(hand_out(DEVICE, Box::new(Object::new(&TABLE)), &TAG, &[TAG], &mut this), S_OK);
         this
     }
 
@@ -484,10 +466,7 @@ mod tests {
                 }
             }
             samples.sort_by(f64::total_cmp);
-            println!(
-                "{count:4} live entries: {:8.1} ns/object (median)",
-                samples[2]
-            );
+            println!("{count:4} live entries: {:8.1} ns/object (median)", samples[2]);
             for object in live {
                 assert_eq!(release(object), 0);
             }
@@ -520,12 +499,7 @@ mod tests {
 
     #[test]
     fn guids_round_trip_through_text() {
-        let g = guid(
-            0x189819f1,
-            0x1db6,
-            0x4b57,
-            [0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7],
-        );
+        let g = guid(0x189819f1, 0x1db6, 0x4b57, [0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7]);
         assert_eq!(g[..4], [0xf1, 0x19, 0x98, 0x18]);
         assert_eq!(guid_text(&g), "189819f1-1db6-4b57-be54-1821339b85f7");
     }
@@ -543,10 +517,7 @@ mod tests {
         let device = crate::device::device();
         let mut fence = std::ptr::null();
         let fence_iid = &crate::fence::FENCE_IIDS[0];
-        assert_eq!(
-            crate::fence::create(std::ptr::null(), 0, 0, fence_iid, &mut fence),
-            S_OK
-        );
+        assert_eq!(crate::fence::create(std::ptr::null(), 0, 0, fence_iid, &mut fence), S_OK);
         assert_eq!(unknown(device), (S_OK, device));
         assert_eq!(unknown(fence), (S_OK, fence));
         // The DXGI device is the same object as the device it answers for.
@@ -554,10 +525,7 @@ mod tests {
         // An id nobody has is still nobody's.
         let mut found = fence;
         let nobodys = guid(0x189819f1, 0x1db6, 0x4b57, [0xbe; 8]);
-        assert_eq!(
-            slot::<Query>(fence, 0)(fence, &nobodys, &mut found),
-            E_NOINTERFACE
-        );
+        assert_eq!(slot::<Query>(fence, 0)(fence, &nobodys, &mut found), E_NOINTERFACE);
         assert!(found.is_null());
         slot::<extern "system" fn(This) -> u32>(fence, 0x10)(fence);
     }

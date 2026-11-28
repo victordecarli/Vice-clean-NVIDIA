@@ -43,7 +43,9 @@ const JOB: usize = 256 << 10;
 pub(crate) fn on() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        std::env::var_os("VICTORY_LAND").is_none_or(|v| v != "0") && crate::safecopy::on() && crate::shadow::exact_back()
+        std::env::var_os("VICTORY_LAND").is_none_or(|v| v != "0")
+            && crate::safecopy::on()
+            && crate::shadow::exact_back()
     })
 }
 
@@ -52,7 +54,11 @@ fn threads() -> usize {
     static THREADS: OnceLock<usize> = OnceLock::new();
     *THREADS.get_or_init(|| {
         let asked = std::env::var("VICTORY_LAND_THREADS").ok().and_then(|v| v.trim().parse().ok());
-        asked.unwrap_or_else(|| std::thread::available_parallelism().map_or(2, |n| n.get() / 4).clamp(1, 4)).clamp(1, 16)
+        asked
+            .unwrap_or_else(|| {
+                std::thread::available_parallelism().map_or(2, |n| n.get() / 4).clamp(1, 4)
+            })
+            .clamp(1, 16)
     })
 }
 
@@ -262,7 +268,8 @@ impl Pool {
             drop(state);
             let working = crate::timeline::span("a landing's job");
             // SAFETY: counted in `running`, so `each` has not returned.
-            let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { (*work.0)(i) }));
+            let ran =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { (*work.0)(i) }));
             working.end();
             priority.keep();
             state = self.state();
@@ -285,7 +292,12 @@ impl Pool {
         let _turn = self.turn.lock().unwrap_or_else(|e| e.into_inner());
         // SAFETY: the lifetime is left out only until this call returns, and
         // it does not before no helper is inside `f` and none can enter.
-        let work = Work(unsafe { std::mem::transmute::<*const (dyn Fn(usize) + Sync + '_), *const (dyn Fn(usize) + Sync + 'static)>(f) });
+        let work = Work(unsafe {
+            std::mem::transmute::<
+                *const (dyn Fn(usize) + Sync + '_),
+                *const (dyn Fn(usize) + Sync + 'static),
+            >(f)
+        });
         let mut state = self.state();
         (state.work, state.next, state.count, state.panicked) = (Some(work), 0, count, false);
         drop(state);
@@ -336,7 +348,10 @@ pub(crate) fn each(count: usize, f: &(dyn Fn(usize) + Sync)) {
 pub(crate) fn each_under(count: usize, f: &(dyn Fn(usize) + Sync)) {
     static POOL: OnceLock<&'static Pool> = OnceLock::new();
     POOL.get_or_init(|| {
-        let threads = std::env::var("VICTORY_UNDER_THREADS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(6usize);
+        let threads = std::env::var("VICTORY_UNDER_THREADS")
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(6usize);
         Pool::new("victory-under", threads.clamp(1, 16))
     })
     .each(count, f);
@@ -351,8 +366,14 @@ pub(crate) fn each_view(records: bool, count: usize, f: &(dyn Fn(usize) + Sync))
     static POOLS: [OnceLock<&'static Pool>; 2] = [const { OnceLock::new() }; 2];
     POOLS[usize::from(records)]
         .get_or_init(|| {
-            let threads = std::env::var("VICTORY_VIEW_THREADS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(if records { 6usize } else { 4 });
-            Pool::new(if records { "victory-records" } else { "victory-views" }, threads.clamp(1, 16))
+            let threads = std::env::var("VICTORY_VIEW_THREADS")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(if records { 6usize } else { 4 });
+            Pool::new(
+                if records { "victory-records" } else { "victory-views" },
+                threads.clamp(1, 16),
+            )
         })
         .each(count, f);
 }
@@ -426,6 +447,7 @@ pub(crate) fn jobs(pieces: &[(usize, usize)]) -> Vec<std::ops::Range<usize>> {
 /// (Bytes left out of that merge, the title's that went up behind the
 /// fetch, went up behind that flight too, and stand over what it wrote.)
 #[derive(Default)]
+#[allow(clippy::type_complexity, reason = "the one field is the whole of what it keeps")]
 pub(crate) struct Had(Vec<(u64, std::collections::HashMap<(u64, usize), (usize, usize)>)>);
 
 impl Had {
@@ -453,7 +475,8 @@ impl Had {
     /// piece.
     pub(crate) fn holds(&self, fence: u64, (copy, at, len): Piece) -> bool {
         self.0.iter().any(|(behind, all)| {
-            *behind >= fence && all.get(&(copy, at / BLOCK)).is_some_and(|had| had.0 <= at && at + len <= had.1)
+            *behind >= fence
+                && all.get(&(copy, at / BLOCK)).is_some_and(|had| had.0 <= at && at + len <= had.1)
         })
     }
 }
@@ -536,7 +559,8 @@ impl Notes {
                 if !copy.is_null() && through.all(|other| other == copy) {
                     // SAFETY: the job holds its copies until this is done.
                     let copy = unsafe { &*copy };
-                    TAKEN[1].fetch_add(u64::from(copy.landed(block, before, now)), Ordering::Relaxed);
+                    TAKEN[1]
+                        .fetch_add(u64::from(copy.landed(block, before, now)), Ordering::Relaxed);
                 }
             }
         }
@@ -572,6 +596,7 @@ pub(crate) unsafe fn piece(
 ///
 /// # Safety
 /// [`piece`]'s.
+#[allow(clippy::too_many_arguments, reason = "the arguments of `piece`, plus the view flag")]
 unsafe fn piece_at(
     title: usize,
     now: *const u8,
@@ -590,7 +615,11 @@ unsafe fn piece_at(
     // a change is under way, what the record of the views says now does
     // ([`anytime`]), or the title's own address.
     let reading = beside.then(crate::watch::title_memory_reading_now).flatten();
-    let beside = if reading.is_some() || beside && anytime() { crate::inplace::beside(title, end) } else { None };
+    let beside = if reading.is_some() || beside && anytime() {
+        crate::inplace::beside(title, end)
+    } else {
+        None
+    };
     count(stat::PIECES, 1);
     count(if beside.is_some() { stat::BESIDE } else { stat::DIRECT }, 1);
     // The pages that differ, before any is written: none, and the guard
@@ -611,7 +640,8 @@ unsafe fn piece_at(
             return 0;
         };
         let last = differing.iter().rposition(|&d| d).unwrap_or(first);
-        let (from, to) = (((base + first) * PAGE).max(title), ((base + last + 1) * PAGE).min(title + end));
+        let (from, to) =
+            (((base + first) * PAGE).max(title), ((base + last + 1) * PAGE).min(title + end));
         let opening = std::time::Instant::now();
         crate::watch::landing(from, to - from);
         spent(stat::NOTES, opening);
@@ -627,7 +657,15 @@ unsafe fn piece_at(
         }
         // SAFETY: the caller's; title memory, by an address that shows it
         // (`beside`) or the title's own.
-        let merge = |take| unsafe { crate::safecopy::merge(into.wrapping_add(from) as *mut u8, now.add(from), held.add(from), n, take) };
+        let merge = |take| unsafe {
+            crate::safecopy::merge(
+                into.wrapping_add(from) as *mut u8,
+                now.add(from),
+                held.add(from),
+                n,
+                take,
+            )
+        };
         let mut done = merge(take && beside.is_some());
         if !done.there && beside.is_none() {
             // Away only while the runtime changes a mapping beside it: the

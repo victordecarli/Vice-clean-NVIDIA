@@ -220,10 +220,7 @@ mod host {
             });
         });
         LazyLock::force(&STARTED);
-        lock()
-            .iter()
-            .filter_map(|pad| Some((pad.id, pad.state?)))
-            .collect()
+        lock().iter().filter_map(|pad| Some((pad.id, pad.state?))).collect()
     }
 
     /// Windows sizes each report buffer for its top-level HID collection.
@@ -243,6 +240,7 @@ mod host {
             let mut caps = HIDP_CAPS::default();
             // SAFETY: `data` was obtained above and is released after its last use.
             let status = unsafe { HidP_GetCaps(data, &mut caps) };
+            // SAFETY: `data` was obtained above and is released after its last use.
             unsafe { HidD_FreePreparsedData(data) };
             if status != HIDP_STATUS_SUCCESS
                 || caps.InputReportByteLength == 0
@@ -281,12 +279,9 @@ mod host {
             let pads = lock();
             // A twin whose pad went away is opened again: over USB, say,
             // after the Bluetooth link dropped with the cable still in.
-            TWINS
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .retain(|(path, mac)| {
-                    paths.contains(path) && pads.iter().any(|pad| pad.mac == Some(*mac))
-                });
+            TWINS.lock().unwrap_or_else(PoisonError::into_inner).retain(|(path, mac)| {
+                paths.contains(path) && pads.iter().any(|pad| pad.mac == Some(*mac))
+            });
         }
         for path in paths {
             // Cheap filter before opening anything: Sony's vendor id is in
@@ -327,22 +322,14 @@ mod host {
                 let twin = mac.is_some() && pads.iter().any(|pad| pad.mac == mac);
                 (!twin).then(|| {
                     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-                    pads.push(Pad {
-                        id,
-                        path: path.clone(),
-                        mac,
-                        state: None,
-                    });
+                    pads.push(Pad { id, path: path.clone(), mac, state: None });
                     id
                 })
             };
             let Some(id) = id else {
                 tracing::info!(path = %lower, bluetooth, "DualSense already open over the other transport");
                 if let Some(mac) = mac {
-                    TWINS
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .push((path, mac));
+                    TWINS.lock().unwrap_or_else(PoisonError::into_inner).push((path, mac));
                 }
                 // SAFETY: just opened, nothing else has it.
                 unsafe { CloseHandle(handle) };
@@ -456,10 +443,8 @@ mod host {
         if handle == INVALID_HANDLE_VALUE {
             return None;
         }
-        let mut attributes = HIDD_ATTRIBUTES {
-            Size: size_of::<HIDD_ATTRIBUTES>() as u32,
-            ..Default::default()
-        };
+        let mut attributes =
+            HIDD_ATTRIBUTES { Size: size_of::<HIDD_ATTRIBUTES>() as u32, ..Default::default() };
         // SAFETY: an open device and room for its attributes.
         let ours = unsafe { HidD_GetAttributes(handle, &mut attributes) }
             && attributes.VendorID == SONY
@@ -513,9 +498,7 @@ mod host {
                 }
                 // u64s keep the detail's alignment.
                 let mut buffer = vec![0u64; (size as usize).div_ceil(8)];
-                let detail = buffer
-                    .as_mut_ptr()
-                    .cast::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>();
+                let detail = buffer.as_mut_ptr().cast::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>();
                 (*detail).cbSize = size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
                 if SetupDiGetDeviceInterfaceDetailW(
                     set,
@@ -548,14 +531,8 @@ mod tests {
 
     #[test]
     fn automatic_input_prefers_the_remapper_in_any_slot_and_falls_back_to_hid() {
-        let physical = PadState {
-            buttons: A,
-            ..PadState::default()
-        };
-        let remapped = PadState {
-            buttons: Y,
-            ..PadState::default()
-        };
+        let physical = PadState { buttons: A, ..PadState::default() };
+        let remapped = PadState { buttons: Y, ..PadState::default() };
         let mut assigned = [None; super::super::PADS];
         let none = [None; super::super::PADS];
         let xinput = [None, None, Some(remapped), None];
@@ -564,16 +541,8 @@ mod tests {
             slots(Mode::Auto, none, &mut assigned, || vec![(1, physical)])[0],
             Some(physical)
         );
-        assert_eq!(
-            slots(Mode::Auto, xinput, &mut assigned, || panic!(
-                "HID not needed"
-            )),
-            xinput
-        );
-        assert_eq!(
-            slots(Mode::Off, none, &mut assigned, || panic!("HID disabled")),
-            none
-        );
+        assert_eq!(slots(Mode::Auto, xinput, &mut assigned, || panic!("HID not needed")), xinput);
+        assert_eq!(slots(Mode::Off, none, &mut assigned, || panic!("HID disabled")), none);
         assert_eq!(
             slots(Mode::Auto, none, &mut assigned, || vec![(2, physical)])[0],
             Some(physical)
@@ -582,18 +551,9 @@ mod tests {
 
     #[test]
     fn a_surviving_hid_pad_keeps_its_slot_through_disconnect_and_reconnect() {
-        let a = PadState {
-            buttons: A,
-            ..PadState::default()
-        };
-        let b = PadState {
-            buttons: B,
-            ..PadState::default()
-        };
-        let x = PadState {
-            buttons: X,
-            ..PadState::default()
-        };
+        let a = PadState { buttons: A, ..PadState::default() };
+        let b = PadState { buttons: B, ..PadState::default() };
+        let x = PadState { buttons: X, ..PadState::default() };
         let xinput = [None, Some(x), None, None];
         let mut assigned = [None; super::super::PADS];
         assert_eq!(
@@ -631,10 +591,7 @@ mod tests {
         report[9] = 0x20 | 0x01; // options, L1
         let pad = parse(&report, false).unwrap();
         assert_eq!(pad.buttons, A | RIGHT | MENU | LEFT_SHOULDER);
-        assert_eq!(
-            (pad.left_x, pad.left_y, pad.left_trigger),
-            (-1.0, -1.0, 1.0)
-        );
+        assert_eq!((pad.left_x, pad.left_y, pad.left_trigger), (-1.0, -1.0, 1.0));
         assert!(pad.right_x.abs() < 0.01 && pad.right_y.abs() < 0.01);
     }
 
@@ -647,10 +604,7 @@ mod tests {
         report[9] = 0x80 | 8; // triangle, D-pad centred
         let pad = parse(&report, true).unwrap();
         assert_eq!(pad.buttons, Y);
-        assert_eq!(
-            (pad.left_y, pad.right_x, pad.right_trigger),
-            (1.0, 1.0, 1.0)
-        );
+        assert_eq!((pad.left_y, pad.right_x, pad.right_trigger), (1.0, 1.0, 1.0));
         // the same bytes over USB are not a pad report
         assert_eq!(parse(&report, false), None);
     }

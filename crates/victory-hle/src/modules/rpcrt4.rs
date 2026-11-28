@@ -4,8 +4,14 @@
 //! give a title a network path outside `modules::net`): the handful of calls
 //! titles use are implemented here, and everything else stays refused as
 //! before.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (UuidCreate) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 
@@ -231,16 +237,7 @@ fn assemble(digits: &[u8; 32]) -> Guid {
         data1: u32::from_be_bytes([byte(0), byte(1), byte(2), byte(3)]),
         data2: u16::from_be_bytes([byte(4), byte(5)]),
         data3: u16::from_be_bytes([byte(6), byte(7)]),
-        data4: [
-            byte(8),
-            byte(9),
-            byte(10),
-            byte(11),
-            byte(12),
-            byte(13),
-            byte(14),
-            byte(15),
-        ],
+        data4: [byte(8), byte(9), byte(10), byte(11), byte(12), byte(13), byte(14), byte(15)],
     }
 }
 
@@ -250,7 +247,9 @@ fn assemble(digits: &[u8; 32]) -> Guid {
 /// pointer back through either free (A or W) releases the whole thing.
 fn allocate(bytes: &[u8]) -> *mut u8 {
     let len = 8 + bytes.len();
-    let layout = std::alloc::Layout::from_size_align(len, 8).expect("a small allocation");
+    let Ok(layout) = std::alloc::Layout::from_size_align(len, 8) else {
+        return std::ptr::null_mut();
+    };
     // SAFETY: a fresh allocation of `len` bytes.
     unsafe {
         let base = std::alloc::alloc(layout);
@@ -276,7 +275,9 @@ fn free(pointer: *mut *mut c_void) {
         }
         let base = at.cast::<u8>().sub(8);
         let len = base.cast::<u64>().read_unaligned() as usize;
-        let layout = std::alloc::Layout::from_size_align(8 + len, 8).expect("a small allocation");
+        let Ok(layout) = std::alloc::Layout::from_size_align(8 + len, 8) else {
+            return;
+        };
         std::alloc::dealloc(base, layout);
         pointer.write(std::ptr::null_mut());
     }
@@ -312,10 +313,7 @@ mod tests {
             [0x80, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde],
         );
         let text = format(&g);
-        assert_eq!(
-            std::str::from_utf8(&text).unwrap(),
-            "1234abcd-00ef-4a5b-8012-3456789abcde"
-        );
+        assert_eq!(std::str::from_utf8(&text).unwrap(), "1234abcd-00ef-4a5b-8012-3456789abcde");
         assert_eq!(parse(text.iter().copied()), Some(g));
         // Upper case and braces are what `UuidFromString` also takes.
         let upper: Vec<u8> = std::iter::once(b'{')
@@ -328,14 +326,8 @@ mod tests {
     #[test]
     fn garbage_is_refused() {
         assert_eq!(parse(b"1234".iter().copied()), None);
-        assert_eq!(
-            parse(b"1234abcd-00ef-4a5b-8012-3456789abcde-".iter().copied()),
-            None
-        );
-        assert_eq!(
-            parse(b"1234abcd-00ef-4a5b-8012-3456789abcdeZ".iter().copied()),
-            None
-        );
+        assert_eq!(parse(b"1234abcd-00ef-4a5b-8012-3456789abcde-".iter().copied()), None);
+        assert_eq!(parse(b"1234abcd-00ef-4a5b-8012-3456789abcdeZ".iter().copied()), None);
     }
 
     #[test]
@@ -398,16 +390,11 @@ mod tests {
             )
         );
         // The wide call takes the same text.
-        let wide: Vec<u16> = "1234abcd-00ef-4a5b-8012-3456789abcde\0"
-            .chars()
-            .map(|c| c as u16)
-            .collect();
+        let wide: Vec<u16> =
+            "1234abcd-00ef-4a5b-8012-3456789abcde\0".chars().map(|c| c as u16).collect();
         let mut w = Guid::new(0, 0, 0, [0; 8]);
         assert_eq!(UuidFromStringW(wide.as_ptr(), &mut w), OK);
         assert_eq!(w, g);
-        assert_eq!(
-            UuidFromStringA(c"nope".as_ptr().cast(), &mut w),
-            INVALID_STRING_UUID
-        );
+        assert_eq!(UuidFromStringA(c"nope".as_ptr().cast(), &mut w), INVALID_STRING_UUID);
     }
 }

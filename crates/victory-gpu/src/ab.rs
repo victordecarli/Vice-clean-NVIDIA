@@ -97,7 +97,13 @@ pub(crate) fn presented(change: impl Fn(&str, bool, bool)) {
     let bits = |number: u64| (number % (1 << asked.switches.len())) as u32;
     let (was, will) = (bits(p.number), bits(number));
     let (mean, median, most) = summary(&mut p.frames);
-    let on: Vec<&str> = asked.switches.iter().enumerate().filter(|(n, _)| was >> n & 1 != 0).map(|(_, s)| s.as_str()).collect();
+    let on: Vec<&str> = asked
+        .switches
+        .iter()
+        .enumerate()
+        .filter(|(n, _)| was >> n & 1 != 0)
+        .map(|(_, s)| s.as_str())
+        .collect();
     tracing::info!(
         "A/B phase {} bits {was} on [{}]: {} frames, mean {mean:.1} ms, median {median:.1}, p90 {most:.1}, {:.0} draws a frame",
         p.number,
@@ -120,7 +126,10 @@ mod tests {
     #[test]
     fn switches_and_seconds_are_read_and_frames_summed_up() {
         let a = parse("10, VICTORY_A,VICTORY_B").unwrap();
-        assert_eq!((a.seconds, a.switches), (10.0, vec!["VICTORY_A".to_string(), "VICTORY_B".to_string()]));
+        assert_eq!(
+            (a.seconds, a.switches),
+            (10.0, vec!["VICTORY_A".to_string(), "VICTORY_B".to_string()])
+        );
         assert!(parse("10").is_none());
         assert!(parse("x,VICTORY_A").is_none());
         assert!(parse("0,VICTORY_A").is_none());

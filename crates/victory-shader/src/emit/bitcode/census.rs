@@ -52,9 +52,9 @@ thread_local! {
 }
 
 fn fnv(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
+    bytes
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 /// Whether modules are counted (`VICTORY_SHADER_CENSUS` set).
@@ -85,37 +85,61 @@ pub(crate) fn note(m: &Module, bitcode: &[u8]) {
     WRITTEN.with(|l| l.borrow_mut().push((bitcode.len(), fnv(bitcode), c)));
 }
 
+/// The index of `name` in [`KINDS`]; a name not there fails the build.
+const fn kind_at(name: &str) -> usize {
+    let mut i = 0;
+    while i < KINDS.len() {
+        if KINDS[i].len() == name.len() {
+            let (a, b) = (KINDS[i].as_bytes(), name.as_bytes());
+            let mut j = 0;
+            while j < a.len() && a[j] == b[j] {
+                j += 1;
+            }
+            if j == a.len() {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    panic!("not a census kind")
+}
+
+/// [`kind_at`], worked out while building.
+macro_rules! k {
+    ($name:literal) => {
+        const { kind_at($name) }
+    };
+}
+
 fn kind(name: &str) -> usize {
     let n = name.strip_prefix("dx.op.").unwrap_or(name);
     let n = n.split('.').next().unwrap_or(n);
-    let k = |s: &str| KINDS.iter().position(|k| *k == s).expect("kind");
     match n {
         "unary" | "binary" | "tertiary" | "unaryBits" | "legacyF16ToF32" | "legacyF32ToF16"
-        | "isSpecialFloat" | "dot2" | "dot3" | "dot4" | "quaternary" => k("math_call"),
-        "bufferLoad" | "rawBufferLoad" => k("buffer_load"),
-        "cbufferLoadLegacy" | "cbufferLoad" => k("cbuffer_load"),
-        "bufferStore" | "rawBufferStore" | "textureStore" => k("buffer_store"),
-        "atomicBinOp" | "atomicCompareExchange" => k("atomic"),
-        "createHandle" | "createHandleFromBinding" | "createHandleFromHeap" => k("handle"),
-        "annotateHandle" => k("annotate"),
-        "getDimensions" => k("dimensions"),
-        "barrier" => k("barrier"),
-        _ if n.starts_with("wave") || n.starts_with("quad") => k("wave_op"),
+        | "isSpecialFloat" | "dot2" | "dot3" | "dot4" | "quaternary" => k!("math_call"),
+        "bufferLoad" | "rawBufferLoad" => k!("buffer_load"),
+        "cbufferLoadLegacy" | "cbufferLoad" => k!("cbuffer_load"),
+        "bufferStore" | "rawBufferStore" | "textureStore" => k!("buffer_store"),
+        "atomicBinOp" | "atomicCompareExchange" => k!("atomic"),
+        "createHandle" | "createHandleFromBinding" | "createHandleFromHeap" => k!("handle"),
+        "annotateHandle" => k!("annotate"),
+        "getDimensions" => k!("dimensions"),
+        "barrier" => k!("barrier"),
+        _ if n.starts_with("wave") || n.starts_with("quad") => k!("wave_op"),
         _ if n.starts_with("textureLoad")
             || n.starts_with("sample")
             || n.starts_with("textureGather")
             || n.starts_with("calculateLOD") =>
         {
-            k("texture_read")
+            k!("texture_read")
         }
-        _ => k("io_other"),
+        _ => k!("io_other"),
     }
 }
 
 impl Module {
     /// The instructions [`Module::write`] writes, by kind.
     pub(crate) fn census(&self) -> Census {
-        let k = |s: &str| KINDS.iter().position(|k| *k == s).expect("kind");
         let call_kind: Vec<usize> = self.funcs.iter().map(|f| kind(&f.name)).collect();
         let live = self.live();
         // The blocks `write` lays out: those reached from the entry.
@@ -137,33 +161,28 @@ impl Module {
             if !seen[b] {
                 continue;
             }
-            c.counts[k("blocks")] += 1;
+            c.counts[k!("blocks")] += 1;
             let _: Option<Term> = blk.term;
-            for &i in blk
-                .phis
-                .iter()
-                .filter(|&&i| live[i as usize])
-                .chain(&blk.body)
-            {
+            for &i in blk.phis.iter().filter(|&&i| live[i as usize]).chain(&blk.body) {
                 c.counts[0] += 1;
                 let at = match &self.insts[i as usize].op {
-                    Op::Bin(..) | Op::Cmp(..) => k("arith"),
-                    Op::Cast(Cast::Bitcast, _) => k("bitcast"),
-                    Op::Cast(..) => k("cast"),
-                    Op::Select(..) => k("select"),
-                    Op::Extract(..) => k("extract"),
-                    Op::Phi(_) => k("phi"),
-                    Op::Gep(..) => k("gep"),
-                    Op::Load(_) => k("lds_load"),
-                    Op::Store(..) => k("lds_store"),
-                    Op::AtomicRmw(..) | Op::CmpXchg(..) => k("atomic"),
+                    Op::Bin(..) | Op::Cmp(..) => k!("arith"),
+                    Op::Cast(Cast::Bitcast, _) => k!("bitcast"),
+                    Op::Cast(..) => k!("cast"),
+                    Op::Select(..) => k!("select"),
+                    Op::Extract(..) => k!("extract"),
+                    Op::Phi(_) => k!("phi"),
+                    Op::Gep(..) => k!("gep"),
+                    Op::Load(_) => k!("lds_load"),
+                    Op::Store(..) => k!("lds_store"),
+                    Op::AtomicRmw(..) | Op::CmpXchg(..) => k!("atomic"),
                     Op::Call(f, _) => call_kind[*f as usize],
                 };
                 c.counts[at] += 1;
                 match self.tags.get(&i) {
-                    Some(Tag::Guard) => c.counts[k("guard_select")] += 1,
-                    Some(Tag::Clamp) => c.counts[k("clamp")] += 1,
-                    Some(Tag::Counter) => c.counts[k("loop_counter")] += 1,
+                    Some(Tag::Guard) => c.counts[k!("guard_select")] += 1,
+                    Some(Tag::Clamp) => c.counts[k!("clamp")] += 1,
+                    Some(Tag::Counter) => c.counts[k!("loop_counter")] += 1,
                     None => {}
                 }
                 let _ = V::Inst(i);

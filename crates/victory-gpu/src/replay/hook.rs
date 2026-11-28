@@ -65,11 +65,7 @@ fn readable(at: usize, most: usize) -> usize {
         let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
         // SAFETY: as above.
         let n = unsafe {
-            VirtualQuery(
-                end as *const c_void,
-                &mut info,
-                size_of::<MEMORY_BASIC_INFORMATION>(),
-            )
+            VirtualQuery(end as *const c_void, &mut info, size_of::<MEMORY_BASIC_INFORMATION>())
         };
         const READ: u32 = PAGE_READONLY
             | PAGE_READWRITE
@@ -107,12 +103,8 @@ pub(super) unsafe fn install(
     if made.contains(&at) {
         return false;
     }
-    let mut new = Box::new(Shim {
-        state,
-        orig: at as *const usize,
-        pre: [0; PRE],
-        table: [0; SLOTS],
-    });
+    let mut new =
+        Box::new(Shim { state, orig: at as *const usize, pre: [0; PRE], table: [0; SLOTS] });
     let have = readable(at, SLOTS * 8) / 8;
     // SAFETY: `have` entries are readable; the object's table is at least
     // as long as its interface, and what lies behind it is only copied.
@@ -167,9 +159,7 @@ pub(super) unsafe fn again(
         if now == before {
             return;
         }
-        let shim = (before as *const u8)
-            .sub(std::mem::offset_of!(Shim, table))
-            .cast::<Shim>();
+        let shim = (before as *const u8).sub(std::mem::offset_of!(Shim, table)).cast::<Shim>();
         if (*shim).orig as usize == now {
             this.cast::<usize>().write(before);
         } else {
@@ -201,7 +191,10 @@ pub(super) const DEVICE: usize = 1;
 pub(super) const QUEUE: usize = 2;
 const CLASSES: usize = 3;
 
-#[allow(clippy::declare_interior_mutable_const)]
+#[allow(
+    clippy::declare_interior_mutable_const,
+    reason = "the array initialiser repeats the constant, a fresh atomic each"
+)]
 const ZERO: AtomicU64 = AtomicU64::new(0);
 static COUNTS: [AtomicU64; CLASSES * SLOTS] = [ZERO; CLASSES * SLOTS];
 
@@ -295,17 +288,9 @@ mod tests {
     #[test]
     fn one_object_is_changed_and_changed_back() {
         static STATE: u64 = 1000;
-        let vtbl = Vtbl {
-            methods: [add as *const () as usize; 8],
-        };
-        let mut a = Object {
-            vtbl: &vtbl,
-            value: 100,
-        };
-        let mut b = Object {
-            vtbl: &vtbl,
-            value: 200,
-        };
+        let vtbl = Vtbl { methods: [add as *const () as usize; 8] };
+        let mut a = Object { vtbl: &vtbl, value: 100 };
+        let mut b = Object { vtbl: &vtbl, value: 200 };
         // SAFETY: the test's objects; entries of `Add`'s type.
         unsafe {
             let this: *mut c_void = (&raw mut a).cast();
@@ -314,10 +299,7 @@ mod tests {
                 t[2] = noted_entry::<{ QUEUE * SLOTS + 2 }>();
             };
             assert!(install(this, (&raw const STATE).cast(), patch));
-            assert!(
-                !install(this, (&raw const STATE).cast(), patch),
-                "only once"
-            );
+            assert!(!install(this, (&raw const STATE).cast(), patch), "only once");
             assert_eq!(call(&mut a, 0), 230 + 1000);
             assert_eq!(call(&mut a, 1), 115);
             assert_eq!(call(&mut b, 0), 215, "other objects are untouched");
@@ -334,9 +316,7 @@ mod tests {
             again(this, shim, patch);
             assert_eq!(table(this), shim);
             // Or to another table.
-            let other = Vtbl {
-                methods: [add as *const () as usize; 8],
-            };
+            let other = Vtbl { methods: [add as *const () as usize; 8] };
             a.vtbl = &other;
             again(this, shim, patch);
             assert!(ours(this) && table(this) != shim);

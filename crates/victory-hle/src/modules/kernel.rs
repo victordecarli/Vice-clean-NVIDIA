@@ -2,10 +2,16 @@
 //!
 //! Only the differences live here; everything else passes through to the
 //! host (see `HostPolicy`).
-#![allow(non_snake_case)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (GetModuleHandleW) that title imports are bound by"
+)]
 // Title code calls these through its import table, passing pointers the real
 // API would trust.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{CStr, c_char, c_void};
 
@@ -31,9 +37,7 @@ pub extern "system" fn GetModuleHandleA(name: *const u8) -> *mut c_void {
 /// A NUL-terminated string from the title.
 fn narrow(text: *const u8) -> String {
     // SAFETY: the title passes a NUL-terminated string.
-    unsafe { CStr::from_ptr(text.cast()) }
-        .to_string_lossy()
-        .into_owned()
+    unsafe { CStr::from_ptr(text.cast()) }.to_string_lossy().into_owned()
 }
 
 /// See [`narrow`].
@@ -75,11 +79,7 @@ fn title_buffer<'a, T>(out: *mut T, size: u32) -> &'a mut [T] {
 }
 
 fn title_path(module: *mut c_void) -> Option<String> {
-    let base = if module.is_null() {
-        runtime::main_image()?
-    } else {
-        module as usize
-    };
+    let base = if module.is_null() { runtime::main_image()? } else { module as usize };
     Some(runtime::image_path(base)?.to_string_lossy().into_owned())
 }
 
@@ -152,21 +152,14 @@ pub extern "system" fn LoadLibraryW(name: *const u16) -> *mut c_void {
 /// the host.
 pub extern "system" fn GetProcAddress(module: *mut c_void, name: *const u8) -> *mut c_void {
     // `NULL` is the process's exe, which for the title is its own image.
-    let module = if module.is_null() {
-        runtime::main_image().unwrap_or(0) as *mut c_void
-    } else {
-        module
-    };
+    let module =
+        if module.is_null() { runtime::main_image().unwrap_or(0) as *mut c_void } else { module };
     let Some(m) = registry().iter().find(|m| handle(m) == module) else {
         return host_override(module, name).unwrap_or_else(|| host::get_proc_address(module, name));
     };
     // Values below 0x10000 are ordinals; we export by name only.
     if (name as usize) < 0x1_0000 {
-        tracing::warn!(
-            module = m.name,
-            ordinal = name as usize,
-            "GetProcAddress by ordinal"
-        );
+        tracing::warn!(module = m.name, ordinal = name as usize, "GetProcAddress by ordinal");
         return std::ptr::null_mut();
     }
     // SAFETY: not an ordinal, so the title passes a NUL-terminated name.
@@ -187,11 +180,8 @@ fn host_override(module: *mut c_void, name: *const u8) -> Option<*mut c_void> {
     if module.is_null() || runtime::image_path(module as usize).is_some() {
         return None;
     }
-    let symbol = if (name as usize) < 0x1_0000 {
-        format!("#{}", name as usize)
-    } else {
-        narrow(name)
-    };
+    let symbol =
+        if (name as usize) < 0x1_0000 { format!("#{}", name as usize) } else { narrow(name) };
     let mut path = [0u16; 260];
     let len = host::get_module_file_name_w(module, path.as_mut_ptr(), path.len() as u32) as usize;
     let path = String::from_utf16_lossy(&path[..len.min(path.len())]);
@@ -302,11 +292,7 @@ fn handle(m: &HleModule) -> *mut c_void {
 fn find_module(path: &str, load: bool) -> Option<*mut c_void> {
     let file = path.rsplit(['\\', '/']).next().unwrap_or(path);
     // As the Windows loader does, a name without extension means a DLL.
-    let file = if file.contains('.') {
-        file.to_owned()
-    } else {
-        format!("{file}.dll")
-    };
+    let file = if file.contains('.') { file.to_owned() } else { format!("{file}.dll") };
     // Loads go through the title DLL loader first: it waits for a DLL that
     // another thread is still initialising, as the Windows loader lock does.
     if load {
@@ -379,10 +365,7 @@ fn title_argv(program: &str, args: &[String]) -> TitleArgv {
     let count = list.len() as i32;
     // `argv[argc]` is null.
     let list: Box<[*mut c_char]> = list.into_iter().chain(Some(std::ptr::null_mut())).collect();
-    TitleArgv {
-        count: count.into(),
-        list: Box::leak(list).as_mut_ptr().into(),
-    }
+    TitleArgv { count: count.into(), list: Box::leak(list).as_mut_ptr().into() }
 }
 
 fn argv() -> &'static TitleArgv {
@@ -428,7 +411,8 @@ fn title_priority(asked: i32) -> i32 {
 /// [`title_priority`].
 pub extern "system" fn SetThreadPriority(thread: *mut c_void, priority: i32) -> i32 {
     static AS_SET: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let as_set = *AS_SET.get_or_init(|| std::env::var_os("VICTORY_TITLE_PRIORITIES").is_some_and(|v| v == "0"));
+    let as_set = *AS_SET
+        .get_or_init(|| std::env::var_os("VICTORY_TITLE_PRIORITIES").is_some_and(|v| v == "0"));
     let priority = if as_set { priority } else { title_priority(priority) };
     // SAFETY: the title passes a thread handle.
     unsafe { windows_sys::Win32::System::Threading::SetThreadPriority(thread, priority) }
@@ -606,10 +590,8 @@ mod host {
                 std::ptr::null_mut(),
             )
         };
-        let names: Vec<_> = frames[..usize::from(n)]
-            .iter()
-            .map(|&f| victory_loader::locate(f as usize))
-            .collect();
+        let names: Vec<_> =
+            frames[..usize::from(n)].iter().map(|&f| victory_loader::locate(f as usize)).collect();
         names.join(" < ")
     }
 }
@@ -708,10 +690,7 @@ mod tests {
         let module = base as *mut c_void;
         let mut buf = [0xFFFFu16; 32];
         let n = GetModuleFileNameW(module, buf.as_mut_ptr(), buf.len() as u32);
-        assert_eq!(
-            String::from_utf16_lossy(&buf[..n as usize]),
-            r"C:\title\game.exe"
-        );
+        assert_eq!(String::from_utf16_lossy(&buf[..n as usize]), r"C:\title\game.exe");
         assert_eq!(buf[n as usize], 0);
 
         // Too small: truncated, NUL-terminated, the buffer size returned.
@@ -753,17 +732,11 @@ mod tests {
         let kernel32 = GetModuleHandleW(w("kernel32.dll").as_ptr());
         assert!(!kernel32.is_null());
         let ours = crate::registry::lookup("kernel32.dll", "CreateFileW").unwrap();
-        assert_eq!(
-            GetProcAddress(kernel32, c"CreateFileW".as_ptr().cast()) as usize,
-            ours
-        );
+        assert_eq!(GetProcAddress(kernel32, c"CreateFileW".as_ptr().cast()) as usize, ours);
         // A plain name stays the host's.
         let host = host::get_proc_address(kernel32, c"GetTickCount".as_ptr().cast());
         assert!(!host.is_null());
-        assert_eq!(
-            GetProcAddress(kernel32, c"GetTickCount".as_ptr().cast()),
-            host
-        );
+        assert_eq!(GetProcAddress(kernel32, c"GetTickCount".as_ptr().cast()), host);
         // Host DLLs outside the host policy do not exist for the title.
         assert!(LoadLibraryW(w("wininet.dll").as_ptr()).is_null());
         assert!(LoadLibraryA(c"C:\\Windows\\System32\\urlmon".as_ptr().cast()).is_null());
@@ -799,10 +772,7 @@ mod tests {
 
         // Not mapped yet: `LoadLibrary` maps it, `GetModuleHandle` does not.
         assert!(GetModuleHandleW(w("late.dll").as_ptr()).is_null());
-        assert_eq!(
-            LoadLibraryA(c"late".as_ptr().cast()) as usize,
-            0x7200_0000_0000
-        );
+        assert_eq!(LoadLibraryA(c"late".as_ptr().cast()) as usize, 0x7200_0000_0000);
         assert!(LoadLibraryA(c"broken.dll".as_ptr().cast()).is_null());
         // As data it runs no code, so the host loads it (and finds nothing).
         let data = LoadLibraryExW(w("late.dll").as_ptr(), std::ptr::null_mut(), 0x2);

@@ -1,4 +1,10 @@
 //! Time structurisation only; the synthetic programs need no title files or GPU.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "a tool run by hand: what it prints is its output, and a failure stops it"
+)]
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -15,20 +21,13 @@ fn program(masks: u32, run: usize) -> ir::Program {
         words.extend(std::iter::repeat_n(0x4A00_0081, run)); // v_add_nc_u32 v0, 1, v0
     }
     words.push(0xBF81_0000); // s_endpgm
-    let code = words
-        .into_iter()
-        .flat_map(u32::to_le_bytes)
-        .collect::<Vec<_>>();
+    let code = words.into_iter().flat_map(u32::to_le_bytes).collect::<Vec<_>>();
     ir::build(&code, true, 256).unwrap()
 }
 
 fn main() {
     const BATCH: u32 = 64;
-    for (label, masks, run) in [
-        ("unmasked", 0, 512),
-        ("short runs", 8, 1),
-        ("long runs", 8, 64),
-    ] {
+    for (label, masks, run) in [("unmasked", 0, 512), ("short runs", 8, 1), ("long runs", 8, 64)] {
         let p = program(masks, run);
         black_box(structure(&p).unwrap());
         let mut samples = [std::time::Duration::ZERO; 9];
@@ -40,9 +39,6 @@ fn main() {
             *sample = start.elapsed() / BATCH;
         }
         samples.sort_unstable();
-        println!(
-            "{label}: {:?} per program (median)",
-            samples[samples.len() / 2]
-        );
+        println!("{label}: {:?} per program (median)", samples[samples.len() / 2]);
     }
 }

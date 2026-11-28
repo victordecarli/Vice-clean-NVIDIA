@@ -104,13 +104,18 @@ pub(crate) fn frame() {
         let file = format!("{file}.{}.bin", MADE.fetch_add(1, Relaxed));
         std::thread::spawn(move || {
             // SAFETY: plain data, every byte of it written.
-            let bytes = unsafe { std::slice::from_raw_parts(records.as_ptr().cast::<u8>(), size_of_val(&records[..])) };
+            let bytes = unsafe {
+                std::slice::from_raw_parts(records.as_ptr().cast::<u8>(), size_of_val(&records[..]))
+            };
             match std::fs::write(&file, bytes) {
                 Ok(()) => tracing::info!(file, records = records.len(), "book of faults written"),
                 Err(e) => tracing::warn!(file, %e, "book of faults not written"),
             }
         });
-    } else if times.get(MADE.load(Relaxed) as usize).is_some_and(|&t| began.elapsed().as_secs() >= t) {
+    } else if times
+        .get(MADE.load(Relaxed) as usize)
+        .is_some_and(|&t| began.elapsed().as_secs() >= t)
+    {
         LEFT.store(FRAMES, Relaxed);
         ON.store(true, Relaxed);
     }

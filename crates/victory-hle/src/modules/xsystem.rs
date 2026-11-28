@@ -1,35 +1,26 @@
 //! XSystem: the console's identity and sandbox, and how analytics describe
 //! the device. Fixed values: one offline retail console, the model the user
 //! chose ([`victory_gpu::console`]).
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use super::xgameruntime::{
     Guid, HRESULT, Interface, Methods, Object, add_ref, missing, put_string,
 };
 
-pub const PROVIDER: Guid = Guid::new(
-    0xe349_bd1a,
-    0xfc20,
-    0x4e40,
-    [0xb9, 0x9c, 0x41, 0x78, 0xcc, 0x6b, 0x40, 0x9f],
-);
+pub const PROVIDER: Guid =
+    Guid::new(0xe349_bd1a, 0xfc20, 0x4e40, [0xb9, 0x9c, 0x41, 0x78, 0xcc, 0x6b, 0x40, 0x9f]);
 
 /// The interface as Minecraft (2022) asks for it; an older table
 /// ended before the device id.
-pub const IID: Guid = Guid::new(
-    0x6fd7_1f09,
-    0x7513,
-    0x49f0,
-    [0x89, 0xbc, 0xbf, 0xaf, 0x5d, 0xf6, 0xf8, 0x52],
-);
+pub const IID: Guid =
+    Guid::new(0x6fd7_1f09, 0x7513, 0x49f0, [0x89, 0xbc, 0xbf, 0xaf, 0x5d, 0xf6, 0xf8, 0x52]);
 
 /// Analytics information; its interface id is the provider's.
-pub const ANALYTICS: Guid = Guid::new(
-    0xb884_675d,
-    0xb738,
-    0x4a9c,
-    [0x81, 0x5d, 0x9a, 0x9a, 0x1e, 0x0c, 0x6c, 0x9b],
-);
+pub const ANALYTICS: Guid =
+    Guid::new(0xb884_675d, 0xb738, 0x4a9c, [0x81, 0x5d, 0x9a, 0x9a, 0x1e, 0x0c, 0x6c, 0x9b]);
 
 /// 38 characters (39 bytes with the NUL).
 const CONSOLE_ID: &str = "00000000000000000000000000000000000001";
@@ -43,12 +34,8 @@ pub static ANALYTICS_OBJECT: Object = Object::new("analytics", &ANALYTICS_VTABLE
 
 /// The interface as the title (2026) asks for it; it calls the
 /// same three slots (0x18, 0x20, 0x28) with the same arguments.
-pub const IID_2026: Guid = Guid::new(
-    0x1861_cf2e,
-    0xe18b,
-    0x4834,
-    [0xa9, 0xf5, 0xb4, 0xa4, 0xe6, 0xef, 0xb4, 0xcf],
-);
+pub const IID_2026: Guid =
+    Guid::new(0x1861_cf2e, 0xe18b, 0x4834, [0xa9, 0xf5, 0xb4, 0xa4, 0xe6, 0xef, 0xb4, 0xcf]);
 
 pub const INTERFACES: &[Interface] = &[
     (PROVIDER, IID, &OBJECT),
@@ -87,12 +74,7 @@ pub struct AnalyticsInfo {
     pub form: [u8; 64],
 }
 
-const OS: Version = Version {
-    major: 10,
-    minor: 0,
-    build: 22000,
-    revision: 0,
-};
+const OS: Version = Version { major: 10, minor: 0, build: 22000, revision: 0 };
 
 fn text(s: &str) -> [u8; 64] {
     let mut out = [0; 64];
@@ -135,7 +117,10 @@ static ANALYTICS_VTABLE: Methods<4> = Methods([
 /// takes a missing value for a PC.
 #[cfg(windows)]
 mod device_type {
-    #![allow(non_snake_case)]
+    #![allow(
+        non_snake_case,
+        reason = "exports carry the exact API names (RegOpenKeyW) that title imports are bound by"
+    )]
 
     use std::ffi::c_void;
 
@@ -253,8 +238,7 @@ mod device_type {
             if room < 4 {
                 return MORE_DATA;
             }
-            data.cast::<u32>()
-                .write_unaligned(console_mode(console::current()));
+            data.cast::<u32>().write_unaligned(console_mode(console::current()));
         }
         tracing::debug!(console = console::current().name(), "device type read");
         SUCCESS
@@ -298,14 +282,7 @@ mod device_type {
             let (mut kind, mut value, mut size) = (0, 0u32, 4);
             let name = w(VALUE);
             let query = |data: *mut u32, size: *mut u32, kind: *mut u32| {
-                RegQueryValueExW(
-                    key,
-                    name.as_ptr(),
-                    std::ptr::null_mut(),
-                    kind,
-                    data.cast(),
-                    size,
-                )
+                RegQueryValueExW(key, name.as_ptr(), std::ptr::null_mut(), kind, data.cast(), size)
             };
             assert_eq!(query(&mut value, &mut size, &mut kind), SUCCESS);
             assert_eq!((kind, size), (DWORD, 4));
@@ -326,16 +303,10 @@ mod device_type {
                 FILE_NOT_FOUND
             );
             let mut sub = std::ptr::null_mut();
-            assert_eq!(
-                RegOpenKeyExW(key, other.as_ptr(), 0, 1, &mut sub),
-                FILE_NOT_FOUND
-            );
+            assert_eq!(RegOpenKeyExW(key, other.as_ptr(), 0, 1, &mut sub), FILE_NOT_FOUND);
             assert_eq!(RegCloseKey(key), SUCCESS);
             let mut again = std::ptr::null_mut();
-            assert_eq!(
-                RegOpenKeyExW(LOCAL_MACHINE, path.as_ptr(), 0, 1, &mut again),
-                SUCCESS
-            );
+            assert_eq!(RegOpenKeyExW(LOCAL_MACHINE, path.as_ptr(), 0, 1, &mut again), SUCCESS);
             assert_eq!(again, oem());
         }
 

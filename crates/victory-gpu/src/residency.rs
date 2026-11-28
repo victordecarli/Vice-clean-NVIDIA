@@ -1,4 +1,4 @@
-﻿//! Host-memory admission for speculative texture work and reusable upload storage.
+//! Host-memory admission for speculative texture work and reusable upload storage.
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
@@ -12,6 +12,7 @@ fn memory_status() -> Option<MEMORYSTATUSEX> {
     // SAFETY: the API initializes the fields of a correctly sized structure.
     let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
     status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    // SAFETY: the API initializes the fields of a correctly sized structure.
     (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status)
 }
 
@@ -121,11 +122,16 @@ pub(crate) fn refresh() {
                 buffer_mirror_span_mib = crate::shadow::live_span_bytes() >> 20,
                 texture_staging_mib = crate::texture::live_staging_bytes() >> 20,
                 spare_scratch_mib = crate::host::ALIVE[4].load(Ordering::Relaxed) >> 20,
-                game_filled_gpu_texture_mib = crate::resource::KINDS[1].load(Ordering::Relaxed) >> 20,
+                game_filled_gpu_texture_mib =
+                    crate::resource::KINDS[1].load(Ordering::Relaxed) >> 20,
                 "host memory pressure: limiting texture prefetch and idle upload storage"
             );
         } else {
-            tracing::info!(physical_free_mib = physical >> 20, available_commit_mib = commit >> 20, "host memory pressure cleared");
+            tracing::info!(
+                physical_free_mib = physical >> 20,
+                available_commit_mib = commit >> 20,
+                "host memory pressure cleared"
+            );
         }
     }
 }
@@ -148,7 +154,13 @@ pub(crate) fn critical_commit() -> bool {
 
 /// A soft per-frame admission limit. A single texture can cross it. The
 /// queue retains unserved slots so they can be retried on later frames.
-pub(crate) fn prefetch_limit(bytes: u64, pressure: bool, critical: bool, limited: bool, staging: u64) -> u64 {
+pub(crate) fn prefetch_limit(
+    bytes: u64,
+    pressure: bool,
+    critical: bool,
+    limited: bool,
+    staging: u64,
+) -> u64 {
     if critical {
         bytes.min(16 << 20)
     } else if pressure || (limited && staging >= GIB) {

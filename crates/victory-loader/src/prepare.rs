@@ -50,19 +50,11 @@ pub fn prepare(original: &[u8]) -> Result<PreparedImage, PrepareError> {
         layout::optional_header_offset(&bytes).ok_or(PrepareError::Patch("no optional header"))?;
 
     let characteristics = info.characteristics | file_flags::DLL;
-    write_u16(
-        &mut bytes,
-        fh + layout::FILE_HEADER_CHARACTERISTICS,
-        characteristics,
-    )?;
+    write_u16(&mut bytes, fh + layout::FILE_HEADER_CHARACTERISTICS, characteristics)?;
     write_u32(&mut bytes, opt + layout::OPT_ADDRESS_OF_ENTRY_POINT, 0)?;
     write_u32(&mut bytes, opt + layout::OPT_CHECKSUM, 0)?;
     let dll_characteristics = info.dll_characteristics & !dll_flags::FORCE_INTEGRITY;
-    write_u16(
-        &mut bytes,
-        opt + layout::OPT_DLL_CHARACTERISTICS,
-        dll_characteristics,
-    )?;
+    write_u16(&mut bytes, opt + layout::OPT_DLL_CHARACTERISTICS, dll_characteristics)?;
 
     // Windows 10 assigns static TLS to the prepared DLL when its empty
     // import table is present. The parser has already walked one descriptor
@@ -89,11 +81,7 @@ pub fn prepare(original: &[u8]) -> Result<PreparedImage, PrepareError> {
         let at = info
             .rva_to_file_offset(tls.directory_rva)
             .ok_or(PrepareError::Patch("TLS directory is not file-backed"))?;
-        write_u64(
-            &mut bytes,
-            at as usize + layout::TLS64_ADDRESS_OF_CALLBACKS,
-            0,
-        )?;
+        write_u64(&mut bytes, at as usize + layout::TLS64_ADDRESS_OF_CALLBACKS, 0)?;
         // The field's base relocation would turn the 0 into `delta` whenever
         // the loader maps the copy away from its preferred base (Wine always
         // does for DYNAMIC_BASE images), and the loader then reads callbacks
@@ -106,11 +94,7 @@ pub fn prepare(original: &[u8]) -> Result<PreparedImage, PrepareError> {
         }
     }
 
-    Ok(PreparedImage {
-        info,
-        bytes,
-        original_hash: blake3::hash(original),
-    })
+    Ok(PreparedImage { info, bytes, original_hash: blake3::hash(original) })
 }
 
 /// Size of an IMAGE_IMPORT_DESCRIPTOR in the PE file.
@@ -173,7 +157,10 @@ fn write(bytes: &mut [u8], at: usize, v: &[u8]) -> Result<(), PrepareError> {
     Ok(())
 }
 
+// Every test here reads the test binary as a PE image, which it is on
+// Windows only.
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 
@@ -214,19 +201,10 @@ mod tests {
         write_u32(&mut original, directory + 4, descriptor_bytes).unwrap();
         let prepared = prepare(&original).unwrap();
         let empty = layout::read_u32(&prepared.bytes, directory).unwrap();
-        assert_eq!(
-            empty,
-            layout::read_u32(&original, directory).unwrap() + descriptor_bytes
-        );
-        assert_eq!(
-            layout::read_u32(&prepared.bytes, directory + 4),
-            Some(IMPORT_DESCRIPTOR_SIZE)
-        );
+        assert_eq!(empty, layout::read_u32(&original, directory).unwrap() + descriptor_bytes);
+        assert_eq!(layout::read_u32(&prepared.bytes, directory + 4), Some(IMPORT_DESCRIPTOR_SIZE));
         let at = info.rva_to_file_offset(empty).unwrap() as usize;
-        assert_eq!(
-            &prepared.bytes[at..at + IMPORT_DESCRIPTOR_SIZE as usize],
-            &[0; 20]
-        );
+        assert_eq!(&prepared.bytes[at..at + IMPORT_DESCRIPTOR_SIZE as usize], &[0; 20]);
         let iat = layout::data_directory_offset(&original, dir::IAT).unwrap();
         assert_eq!(
             &prepared.bytes[iat..iat + layout::DATA_DIRECTORY_SIZE],
@@ -267,10 +245,7 @@ mod tests {
             unsafe { ((image.base() + index_rva as usize) as *const u32).read_unaligned() };
         // SAFETY: the prepared DLL has never been attached or given to a caller.
         unsafe { image.unload() };
-        assert_ne!(
-            assigned, 0,
-            "the process executable already owns TLS slot zero"
-        );
+        assert_ne!(assigned, 0, "the process executable already owns TLS slot zero");
     }
 
     #[test]

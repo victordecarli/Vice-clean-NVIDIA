@@ -149,14 +149,20 @@ fn lone(before: &[[i16; 3]], now: &[[i16; 3]], after: &[[i16; 3]]) -> Vec<usize>
     {
         return Vec::new();
     }
-    (0..one.len()).filter(|&n| one[n] > CHANGED && two[n] > CHANGED && both[n] < CHANGED / 2.0).collect()
+    (0..one.len())
+        .filter(|&n| one[n] > CHANGED && two[n] > CHANGED && both[n] < CHANGED / 2.0)
+        .collect()
 }
 
 /// Frames on their way.
 static WAITING: AtomicU64 = AtomicU64::new(0);
 
 /// Records the read-back of `texture` (in the copy-source state).
-pub(crate) fn take(device: &ID3D12Device, list: &ID3D12GraphicsCommandList, texture: &ID3D12Resource) -> Option<Taken> {
+pub(crate) fn take(
+    device: &ID3D12Device,
+    list: &ID3D12GraphicsCommandList,
+    texture: &ID3D12Resource,
+) -> Option<Taken> {
     if !on() || WAITING.load(Relaxed) > 8 {
         return None;
     }
@@ -188,7 +194,11 @@ pub(crate) fn sent(taken: Taken, flown: u64, frame: u64) {
     static THREAD: OnceLock<Option<mpsc::Sender<Job>>> = OnceLock::new();
     let Some(to) = THREAD.get_or_init(|| {
         let (to, from) = mpsc::channel::<Job>();
-        std::thread::Builder::new().name("pop watch".into()).spawn(move || watch(&from)).ok().map(|_| to)
+        std::thread::Builder::new()
+            .name("pop watch".into())
+            .spawn(move || watch(&from))
+            .ok()
+            .map(|_| to)
     }) else {
         return;
     };
@@ -240,9 +250,13 @@ fn differ(a: &[u8], b: &[u8]) -> Vec<f32> {
             let at = (y * WIDE + bx) * 3;
             let (ra, rb) = (&a[at..at + BLOCK * 3], &b[at..at + BLOCK * 3]);
             total += ra
-                .chunks_exact(3)
-                .zip(rb.chunks_exact(3))
-                .map(|(p, q)| p.iter().zip(q).map(|(x, y)| u32::from(x.abs_diff(*y))).max().unwrap_or(0))
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .zip(rb.as_chunks::<3>().0.iter())
+                .map(|(p, q)| {
+                    p.iter().zip(q).map(|(x, y)| u32::from(x.abs_diff(*y))).max().unwrap_or(0)
+                })
                 .sum::<u32>();
         }
         *sum = total as f32 / (BLOCK * BLOCK) as f32;
@@ -256,11 +270,17 @@ fn differ(a: &[u8], b: &[u8]) -> Vec<f32> {
 fn judge(before: &[u8], now: &[u8], after: &[u8], quiet: &[f32]) -> (usize, Option<usize>) {
     let (one, two, across) = (differ(before, now), differ(now, after), differ(before, after));
     let blips = (0..one.len())
-        .filter(|&n| one[n] > CHANGED && two[n] > CHANGED && across[n] < STAYED && across[n] * 3.0 < one[n])
+        .filter(|&n| {
+            one[n] > CHANGED && two[n] > CHANGED && across[n] < STAYED && across[n] * 3.0 < one[n]
+        })
         .count();
     let still = one.iter().filter(|&&d| d < 3.0).count() * 10 >= one.len() * 7;
     let steps = still.then(|| {
-        (0..one.len()).filter(|&n| one[n] > CHANGED && two[n] < STAYED && quiet.get(n).is_some_and(|&d| d < STAYED)).count()
+        (0..one.len())
+            .filter(|&n| {
+                one[n] > CHANGED && two[n] < STAYED && quiet.get(n).is_some_and(|&d| d < STAYED)
+            })
+            .count()
     });
     (blips, steps)
 }
@@ -329,7 +349,10 @@ fn watch(from: &mpsc::Receiver<Job>) {
                 WAITING.fetch_sub(1, Relaxed);
                 continue;
             }
-            let rows = std::slice::from_raw_parts(data.cast::<u8>(), f.RowPitch as usize * f.Height as usize);
+            let rows = std::slice::from_raw_parts(
+                data.cast::<u8>(),
+                f.RowPitch as usize * f.Height as usize,
+            );
             let rgb = small(rows, f.Width as usize, f.Height as usize, f.RowPitch as usize, bgra);
             job.taken.buffer.Unmap(0, None);
             rgb
@@ -362,7 +385,12 @@ fn watch(from: &mpsc::Receiver<Job>) {
             side.lone += lone.len() as u64;
             side.lone_frames += u64::from(!lone.is_empty());
             if blips > 0 || lone.len() > 1 || steps.is_some_and(|s| s > 0) {
-                let since: Vec<u64> = now.causes.iter().zip(&first.causes).map(|(a, b)| a.saturating_sub(*b)).collect();
+                let since: Vec<u64> = now
+                    .causes
+                    .iter()
+                    .zip(&first.causes)
+                    .map(|(a, b)| a.saturating_sub(*b))
+                    .collect();
                 tracing::info!(
                     "pop watch: frame {} at {:.2} s: {blips} blips, {steps:?} steps, lone blocks {lone:?}; in the two frames before it [made null for another texture, kept, neutral, stale] {since:?}",
                     now.frame,

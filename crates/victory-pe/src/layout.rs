@@ -83,8 +83,7 @@ pub fn data_directory_offset(data: &[u8], index: usize) -> Option<usize> {
     if index >= count {
         return None;
     }
-    opt.checked_add(OPT_DATA_DIRECTORY)?
-        .checked_add(index.checked_mul(DATA_DIRECTORY_SIZE)?)
+    opt.checked_add(OPT_DATA_DIRECTORY)?.checked_add(index.checked_mul(DATA_DIRECTORY_SIZE)?)
 }
 
 pub fn read_u32(data: &[u8], at: usize) -> Option<u32> {
@@ -177,14 +176,8 @@ mod tests {
         data[DOS_E_LFANEW..].copy_from_slice(&0x10_0000u32.to_le_bytes());
         assert_eq!(file_header_offset(&data), Some(0x10_0004));
         assert_eq!(optional_header_offset(&data), Some(0x10_0018));
-        assert_eq!(
-            optional_header_offset(&data).and_then(|at| read_u32(&data, at)),
-            None
-        );
-        assert_eq!(
-            file_header_offset(&data).and_then(|at| read_u32(&data, at)),
-            None
-        );
+        assert_eq!(optional_header_offset(&data).and_then(|at| read_u32(&data, at)), None);
+        assert_eq!(file_header_offset(&data).and_then(|at| read_u32(&data, at)), None);
         assert_eq!(data_directory_offset(&data, dir::IMPORT), None);
     }
 
@@ -192,10 +185,7 @@ mod tests {
     fn data_directory_offsets_are_indexed_from_the_optional_header() {
         let data = image();
         let opt = optional_header_offset(&data).unwrap();
-        assert_eq!(
-            data_directory_offset(&data, 0),
-            Some(opt + OPT_DATA_DIRECTORY)
-        );
+        assert_eq!(data_directory_offset(&data, 0), Some(opt + OPT_DATA_DIRECTORY));
         assert_eq!(
             data_directory_offset(&data, dir::IMPORT),
             Some(opt + OPT_DATA_DIRECTORY + DATA_DIRECTORY_SIZE)

@@ -79,7 +79,14 @@ fn address(code: &[u8], modrm: u8, b: bool) -> Option<usize> {
 
 /// The end of a stub that has nothing in rcx if the write is left out, and the title's rcx on the
 /// stack: the write (`code[..len]`, at `at`) or not, and back. `wide`: all of rcx counts.
-fn write_or_not(out: &mut Vec<u8>, stub: usize, code: &[u8], at: usize, len: usize, wide: bool) -> Option<()> {
+fn write_or_not(
+    out: &mut Vec<u8>,
+    stub: usize,
+    code: &[u8],
+    at: usize,
+    len: usize,
+    wide: bool,
+) -> Option<()> {
     if !wide {
         out.push(0x67);
     }
@@ -183,7 +190,9 @@ fn move_stub(code: &[u8], at: usize, stub: usize) -> Option<(usize, Vec<u8>)> {
 
 /// The code at `stub` for the instruction at `at` (`code` from there).
 fn stub(code: &[u8], at: usize, stub: usize) -> Option<(usize, Vec<u8>)> {
-    vector_stub(code, at, stub).or_else(|| move_stub(code, at, stub)).or_else(|| or_stub(code, at, stub))
+    vector_stub(code, at, stub)
+        .or_else(|| move_stub(code, at, stub))
+        .or_else(|| or_stub(code, at, stub))
 }
 
 /// [`stub`] for the `or` of a byte with a constant.
@@ -252,7 +261,11 @@ pub unsafe fn apply(name: &str, base: usize, size: usize, list: &str) -> usize {
         let code: [u8; 16] = unsafe { std::ptr::read_unaligned(at as *const _) };
         let to = *place + *used;
         let Some((len, body)) = stub(&code, at, to) else {
-            tracing::warn!(image, offset = format_args!("{offset:#x}"), "not a write of the kind that can be looked at first");
+            tracing::warn!(
+                image,
+                offset = format_args!("{offset:#x}"),
+                "not a write of the kind that can be looked at first"
+            );
             continue;
         };
         let Some(jump) = crate::console_insn::jump(at, to) else {
@@ -293,7 +306,11 @@ pub unsafe fn apply_asked(name: &str, base: usize, size: usize) {
     };
     // SAFETY: by the caller.
     let places = unsafe { apply(name, base, size, &list) };
-    tracing::info!(image = name, places, "writes of the title's that look first (VICTORY_WRITE_SITES)");
+    tracing::info!(
+        image = name,
+        places,
+        "writes of the title's that look first (VICTORY_WRITE_SITES)"
+    );
 }
 
 #[cfg(test)]
@@ -303,7 +320,8 @@ mod tests {
     #[test]
     fn what_can_be_looked_at_first() {
         // or byte [r9+9eh], 1
-        let (len, rex, modrm, rest, constant) = or_byte(&[0x41, 0x80, 0x89, 0x9e, 0, 0, 0, 1, 0, 0]).unwrap();
+        let (len, rex, modrm, rest, constant) =
+            or_byte(&[0x41, 0x80, 0x89, 0x9e, 0, 0, 0, 1, 0, 0]).unwrap();
         assert_eq!((len, rex, modrm, rest, constant), (8, 0x41, 0x89, &[0x9e, 0, 0, 0][..], 1));
         // or byte [r9+31h], 80h; [rax+rcx*8+5]; [r12+5] (a base of its own)
         assert_eq!(or_byte(&[0x41, 0x80, 0x49, 0x31, 0x80]).unwrap().0, 5);
@@ -320,12 +338,20 @@ mod tests {
     /// are what it makes of them unchanged.
     #[test]
     fn a_changed_write_does_what_it_did() {
-        use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, VirtualAlloc, VirtualProtect};
+        use windows_sys::Win32::System::Memory::{
+            MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, VirtualAlloc,
+            VirtualProtect,
+        };
         type F = unsafe extern "system" fn(*mut u8, *mut [u64; 3]);
-        for (constant, with) in [(0x80u8, 0x49u8), (1, 0x49), (0x7f, 0x49), (0xff, 0x48), (0x10, 0x49)] {
+        for (constant, with) in
+            [(0x80u8, 0x49u8), (1, 0x49), (0x7f, 0x49), (0xff, 0x48), (0x10, 0x49)]
+        {
             // mov rax, rcx ; mov r9, rcx ; mov rcx, 1234h ; xor r10, r10 ; or byte [r9+31h | rax+31h], constant ;
             // pushfq ; pop r10 ; mov [rdx], r10 ; mov [rdx+8], rax ; mov [rdx+16], rcx ; ret
-            let mut code = vec![0x48, 0x89, 0xc8, 0x49, 0x89, 0xc9, 0x48, 0xc7, 0xc1, 0x34, 0x12, 0, 0, 0x4d, 0x31, 0xd2];
+            let mut code = vec![
+                0x48, 0x89, 0xc8, 0x49, 0x89, 0xc9, 0x48, 0xc7, 0xc1, 0x34, 0x12, 0, 0, 0x4d, 0x31,
+                0xd2,
+            ];
             let at = code.len();
             if with == 0x49 {
                 code.extend([0x41, 0x80, 0x49, 0x31, constant]);
@@ -333,20 +359,32 @@ mod tests {
                 // (With a long address, for the five bytes.)
                 code.extend([0x80, 0x88, 0x31, 0, 0, 0, constant]);
             }
-            code.extend([0x9c, 0x41, 0x5a, 0x4c, 0x89, 0x12, 0x48, 0x89, 0x42, 0x08, 0x48, 0x89, 0x4a, 0x10, 0xc3]);
+            code.extend([
+                0x9c, 0x41, 0x5a, 0x4c, 0x89, 0x12, 0x48, 0x89, 0x42, 0x08, 0x48, 0x89, 0x4a, 0x10,
+                0xc3,
+            ]);
             // SAFETY: fresh memory for code, twice, one of them changed before it runs.
             unsafe {
-                let place = VirtualAlloc(std::ptr::null(), 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) as usize;
+                let place = VirtualAlloc(
+                    std::ptr::null(),
+                    0x10000,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_EXECUTE_READWRITE,
+                ) as usize;
                 assert_ne!(place, 0);
                 std::ptr::copy_nonoverlapping(code.as_ptr(), place as *mut u8, code.len());
                 let second = place + 0x1000;
                 std::ptr::copy_nonoverlapping(code.as_ptr(), second as *mut u8, code.len());
                 let mut old = 0;
                 VirtualProtect(second as *const _, 0x1000, PAGE_EXECUTE_READ, &mut old);
-                let list = format!("other.dll {:x}\nT.dll 0x{at:x}\nt.dll {at:x}\nt.dll 5\nt.dll\n", at);
+                let list =
+                    format!("other.dll {:x}\nT.dll 0x{at:x}\nt.dll {at:x}\nt.dll 5\nt.dll\n", at);
                 assert_eq!(apply("t.dll", second, 0x1000, &list), 1);
                 assert_eq!(std::ptr::read((second + at) as *const u8), 0xe9);
-                let (plain, changed): (F, F) = (std::mem::transmute(place), std::mem::transmute(second));
+                let (plain, changed): (F, F) = (
+                    std::mem::transmute::<usize, F>(place),
+                    std::mem::transmute::<usize, F>(second),
+                );
                 for was in 0..=255u8 {
                     let mut bytes = [[0u8; 0x40]; 2];
                     bytes[0][0x31] = was;
@@ -376,23 +414,24 @@ mod tests {
     #[test]
     fn changed_moves_and_vector_stores_do_what_they_did() {
         use windows_sys::Win32::System::Memory::{
-            MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READONLY, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
+            MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READONLY, PAGE_READWRITE,
+            VirtualAlloc, VirtualProtect,
         };
         // Each stores at r9+40h (r10 is 0): rdx, r13 or a vector register 0, 1, 9.
         let stores: &[(&[u8], usize)] = &[
-            (&[0x49, 0x89, 0x51, 0x40], 0),                         // (four bytes: left alone)
-            (&[0x4b, 0x89, 0x54, 0xd1, 0x40], 8),                   // mov [r9+r10*8+40h], rdx
-            (&[0x43, 0x89, 0x54, 0xd1, 0x40], 4),                   // mov [r9+r10*8+40h], edx
-            (&[0x4d, 0x89, 0xa9, 0x40, 0, 0, 0], 8),                // mov [r9+40h], r13
-            (&[0x45, 0x89, 0xa9, 0x40, 0, 0, 0], 4),                // mov [r9+40h], r13d
+            (&[0x49, 0x89, 0x51, 0x40], 0),          // (four bytes: left alone)
+            (&[0x4b, 0x89, 0x54, 0xd1, 0x40], 8),    // mov [r9+r10*8+40h], rdx
+            (&[0x43, 0x89, 0x54, 0xd1, 0x40], 4),    // mov [r9+r10*8+40h], edx
+            (&[0x4d, 0x89, 0xa9, 0x40, 0, 0, 0], 8), // mov [r9+40h], r13
+            (&[0x45, 0x89, 0xa9, 0x40, 0, 0, 0], 4), // mov [r9+40h], r13d
             (&[0x41, 0xc7, 0x41, 0x40, 0x78, 0x56, 0x34, 0x92], 4), // mov dword [r9+40h], 92345678h
             (&[0x49, 0xc7, 0x41, 0x40, 0x78, 0x56, 0x34, 0x92], 8), // mov qword [r9+40h], the same
-            (&[0xc4, 0xc1, 0x7a, 0x7f, 0x41, 0x40], 16),            // vmovdqu [r9+40h], xmm0
-            (&[0xc4, 0xc1, 0x7a, 0x7f, 0x49, 0x40], 16),            // vmovdqu [r9+40h], xmm1
-            (&[0xc4, 0x41, 0x78, 0x29, 0x49, 0x40], 16),            // vmovaps [r9+40h], xmm9
-            (&[0xc4, 0x81, 0x78, 0x11, 0x44, 0xd1, 0x40], 16),      // vmovups [r9+r10*8+40h], xmm0
-            (&[0xc4, 0xc1, 0x7c, 0x11, 0x41, 0x40], 32),            // vmovups [r9+40h], ymm0
-            (&[0xc4, 0xc1, 0x7e, 0x7f, 0x49, 0x40], 32),            // vmovdqu [r9+40h], ymm1
+            (&[0xc4, 0xc1, 0x7a, 0x7f, 0x41, 0x40], 16), // vmovdqu [r9+40h], xmm0
+            (&[0xc4, 0xc1, 0x7a, 0x7f, 0x49, 0x40], 16), // vmovdqu [r9+40h], xmm1
+            (&[0xc4, 0x41, 0x78, 0x29, 0x49, 0x40], 16), // vmovaps [r9+40h], xmm9
+            (&[0xc4, 0x81, 0x78, 0x11, 0x44, 0xd1, 0x40], 16), // vmovups [r9+r10*8+40h], xmm0
+            (&[0xc4, 0xc1, 0x7c, 0x11, 0x41, 0x40], 32), // vmovups [r9+40h], ymm0
+            (&[0xc4, 0xc1, 0x7e, 0x7f, 0x49, 0x40], 32), // vmovdqu [r9+40h], ymm1
         ];
         type F = unsafe extern "system" fn(*mut u8, u64, *mut u8);
         for &(store, size) in stores {
@@ -410,20 +449,37 @@ mod tests {
             code.extend([0x48, 0x8b, 0x44, 0x24, 0x18, 0x48, 0x03, 0x44, 0x24, 0x28]); // rax = two of its parts
             code.extend([0xc5, 0x7a, 0x6f, 0x0c, 0x24, 0x48, 0x83, 0xc4, 0x40, 0x41, 0x5d]); // xmm9 back ; rsp ; pop r13
             // Flags, rcx and rax behind the source ; vzeroupper ; ret
-            code.extend([0x4d, 0x89, 0x58, 0x40, 0x49, 0x89, 0x48, 0x48, 0x49, 0x89, 0x40, 0x50, 0xc5, 0xf8, 0x77, 0xc3]);
+            code.extend([
+                0x4d, 0x89, 0x58, 0x40, 0x49, 0x89, 0x48, 0x48, 0x49, 0x89, 0x40, 0x50, 0xc5, 0xf8,
+                0x77, 0xc3,
+            ]);
             // SAFETY: fresh memory for code, twice, one of them changed before it runs; data of ours.
             unsafe {
-                let place = VirtualAlloc(std::ptr::null(), 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) as usize;
+                let place = VirtualAlloc(
+                    std::ptr::null(),
+                    0x10000,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_EXECUTE_READWRITE,
+                ) as usize;
                 assert_ne!(place, 0);
                 let second = place + 0x2000;
                 std::ptr::copy_nonoverlapping(code.as_ptr(), place as *mut u8, code.len());
                 std::ptr::copy_nonoverlapping(code.as_ptr(), second as *mut u8, code.len());
-                assert_eq!(apply("t.dll", second, 0x2000, &format!("t.dll {at:x}")), usize::from(size != 0), "{store:x?}");
+                assert_eq!(
+                    apply("t.dll", second, 0x2000, &format!("t.dll {at:x}")),
+                    usize::from(size != 0),
+                    "{store:x?}"
+                );
                 if size == 0 {
                     continue;
                 }
-                let (plain, changed): (F, F) = (std::mem::transmute(place), std::mem::transmute(second));
-                let data = VirtualAlloc(std::ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) as *mut u8;
+                let (plain, changed): (F, F) = (
+                    std::mem::transmute::<usize, F>(place),
+                    std::mem::transmute::<usize, F>(second),
+                );
+                let data =
+                    VirtualAlloc(std::ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+                        as *mut u8;
                 for seed in 0..200u64 {
                     let value = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15);
                     let mut source = [[0u8; 0x60]; 2];
@@ -436,7 +492,10 @@ mod tests {
                     plain(memory[0].0.as_mut_ptr(), value, source[0].as_mut_ptr());
                     changed(memory[1].0.as_mut_ptr(), value, source[1].as_mut_ptr());
                     assert!(memory[0].0 == memory[1].0, "{store:x?}");
-                    assert!(memory[0].0[..0x40] == was.0[..0x40] && memory[0].0[0x40 + size..] == was.0[0x40 + size..]);
+                    assert!(
+                        memory[0].0[..0x40] == was.0[..0x40]
+                            && memory[0].0[0x40 + size..] == was.0[0x40 + size..]
+                    );
                     assert_eq!(source[0], source[1], "{store:x?}: registers and flags");
                     // One bit different; and nothing different, in read-only memory.
                     let mut off = memory[0];
@@ -447,7 +506,10 @@ mod tests {
                     let mut old = 0;
                     VirtualProtect(data.cast(), 4096, PAGE_READONLY, &mut old);
                     changed(data, value, source[1].as_mut_ptr());
-                    assert_eq!(source[0], source[1], "{store:x?}: registers and flags, nothing written");
+                    assert_eq!(
+                        source[0], source[1],
+                        "{store:x?}: registers and flags, nothing written"
+                    );
                     VirtualProtect(data.cast(), 4096, PAGE_READWRITE, &mut old);
                 }
             }
@@ -457,15 +519,28 @@ mod tests {
     /// A byte that would not change is not written.
     #[test]
     fn a_byte_that_stays_is_not_written() {
-        use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READONLY, VirtualAlloc, VirtualProtect};
+        use windows_sys::Win32::System::Memory::{
+            MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READONLY, VirtualAlloc,
+            VirtualProtect,
+        };
         // mov r9, rcx ; or byte [r9+31h], 80h ; ret
         let code = [0x49, 0x89, 0xc9, 0x41, 0x80, 0x49, 0x31, 0x80, 0xc3];
         // SAFETY: fresh memory for code and for a byte, which is read-only when the code runs.
         unsafe {
-            let place = VirtualAlloc(std::ptr::null(), 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) as usize;
+            let place = VirtualAlloc(
+                std::ptr::null(),
+                0x10000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            ) as usize;
             std::ptr::copy_nonoverlapping(code.as_ptr(), place as *mut u8, code.len());
             assert_eq!(apply("t.dll", place, 0x10000, "t.dll 3"), 1);
-            let data = VirtualAlloc(std::ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) as *mut u8;
+            let data = VirtualAlloc(
+                std::ptr::null(),
+                4096,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            ) as *mut u8;
             data.add(0x31).write(0x83);
             let mut old = 0;
             VirtualProtect(data.cast(), 4096, PAGE_READONLY, &mut old);

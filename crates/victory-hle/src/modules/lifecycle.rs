@@ -4,9 +4,15 @@
 //! run, and it has a second to save) and then ends the process. Closing the
 //! title's window does the same here; a new launch then starts `victory`
 //! again, which waits for this process to be gone.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(clippy::too_many_arguments)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (RegisterAppStateChangeNotification) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
+#![allow(clippy::too_many_arguments, reason = "the signature is fixed by the API title code calls")]
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -110,14 +116,36 @@ fn fullscreen(hwnd: HWND) {
     // SAFETY: this thread owns the newly created top-level window.
     unsafe {
         let (width, height) = std::env::var("VICTORY_FULLSCREEN_RES")
-            .ok().as_deref().and_then(parse_window_limit)
-            .unwrap_or_else(|| (wm::GetSystemMetrics(wm::SM_CXSCREEN), wm::GetSystemMetrics(wm::SM_CYSCREEN)));
+            .ok()
+            .as_deref()
+            .and_then(parse_window_limit)
+            .unwrap_or_else(|| {
+                (wm::GetSystemMetrics(wm::SM_CXSCREEN), wm::GetSystemMetrics(wm::SM_CYSCREEN))
+            });
         let style = wm::GetWindowLongW(hwnd, wm::GWL_STYLE) as u32;
         let ex = wm::GetWindowLongW(hwnd, wm::GWL_EXSTYLE) as u32;
-        wm::SetWindowLongW(hwnd, wm::GWL_STYLE, ((style & !wm::WS_OVERLAPPEDWINDOW) | wm::WS_POPUP) as i32);
-        wm::SetWindowLongW(hwnd, wm::GWL_EXSTYLE, (ex & !(wm::WS_EX_CLIENTEDGE | wm::WS_EX_WINDOWEDGE | wm::WS_EX_DLGMODALFRAME | wm::WS_EX_STATICEDGE)) as i32);
-        wm::SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, width, height,
-            wm::SWP_FRAMECHANGED | wm::SWP_NOZORDER | wm::SWP_NOACTIVATE);
+        wm::SetWindowLongW(
+            hwnd,
+            wm::GWL_STYLE,
+            ((style & !wm::WS_OVERLAPPEDWINDOW) | wm::WS_POPUP) as i32,
+        );
+        wm::SetWindowLongW(
+            hwnd,
+            wm::GWL_EXSTYLE,
+            (ex & !(wm::WS_EX_CLIENTEDGE
+                | wm::WS_EX_WINDOWEDGE
+                | wm::WS_EX_DLGMODALFRAME
+                | wm::WS_EX_STATICEDGE)) as i32,
+        );
+        wm::SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            width,
+            height,
+            wm::SWP_FRAMECHANGED | wm::SWP_NOZORDER | wm::SWP_NOACTIVATE,
+        );
     }
 }
 
@@ -130,13 +158,26 @@ fn english_input() {
     unsafe {
         static ENGLISH: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
         let layout = *ENGLISH.get_or_init(|| {
-            let mut layouts = vec![std::ptr::null_mut(); kb::GetKeyboardLayoutList(0, std::ptr::null_mut()).max(0) as usize];
-            let count = kb::GetKeyboardLayoutList(layouts.len() as i32, layouts.as_mut_ptr()).max(0) as usize;
-            let found = layouts.iter().take(count).find(|&&h| h as usize & 0xffff_ffff == 0x0409_0409).copied();
-            if found.is_none() { tracing::warn!("en-US keyboard layout unavailable; keeping current input language"); }
+            let mut layouts = vec![
+                std::ptr::null_mut();
+                kb::GetKeyboardLayoutList(0, std::ptr::null_mut()).max(0)
+                    as usize
+            ];
+            let count = kb::GetKeyboardLayoutList(layouts.len() as i32, layouts.as_mut_ptr()).max(0)
+                as usize;
+            let found = layouts
+                .iter()
+                .take(count)
+                .find(|&&h| h as usize & 0xffff_ffff == 0x0409_0409)
+                .copied();
+            if found.is_none() {
+                tracing::warn!("en-US keyboard layout unavailable; keeping current input language");
+            }
             found.unwrap_or(std::ptr::null_mut()) as usize
         });
-        if layout != 0 { kb::ActivateKeyboardLayout(layout as kb::HKL, 0); }
+        if layout != 0 {
+            kb::ActivateKeyboardLayout(layout as kb::HKL, 0);
+        }
     }
 }
 
@@ -151,57 +192,90 @@ static MOUSE_CAPTURE: std::sync::LazyLock<Mutex<MouseCapture>> =
     std::sync::LazyLock::new(|| Mutex::new(MouseCapture::default()));
 
 fn capture_mouse(hwnd: HWND, active: bool) {
-    if !enabled("VICTORY_MOUSE_CAPTURE") { return; }
+    if !enabled("VICTORY_MOUSE_CAPTURE") {
+        return;
+    }
     let mut state = MOUSE_CAPTURE.lock().unwrap_or_else(|e| e.into_inner());
     // SAFETY: runs on the window thread; local geometry, balanced cursor count.
     unsafe {
-        if active && !wm::GetParent(hwnd).is_null() { return; }
+        if active && !wm::GetParent(hwnd).is_null() {
+            return;
+        }
         let active = active && wm::GetForegroundWindow() == hwnd && wm::IsIconic(hwnd) == 0;
         if !active {
             if state.window == hwnd as usize {
                 wm::ClipCursor(std::ptr::null());
-                for _ in 0..state.hidden { wm::ShowCursor(1); }
+                for _ in 0..state.hidden {
+                    wm::ShowCursor(1);
+                }
                 *state = MouseCapture::default();
             }
             return;
         }
-        if state.window != 0 && state.window != hwnd as usize { return; }
+        if state.window != 0 && state.window != hwnd as usize {
+            return;
+        }
         let (mut area, mut origin) = (RECT::default(), POINT::default());
-        if wm::GetClientRect(hwnd, &mut area) == 0 || ClientToScreen(hwnd, &mut origin) == 0
-            || area.right <= 0 || area.bottom <= 0 { return; }
+        if wm::GetClientRect(hwnd, &mut area) == 0
+            || ClientToScreen(hwnd, &mut origin) == 0
+            || area.right <= 0
+            || area.bottom <= 0
+        {
+            return;
+        }
         let center = (origin.x + area.right / 2, origin.y + area.bottom / 2);
-        area.left += origin.x; area.right += origin.x;
-        area.top += origin.y; area.bottom += origin.y;
-        if wm::ClipCursor(&area) == 0 { return; }
+        area.left += origin.x;
+        area.right += origin.x;
+        area.top += origin.y;
+        area.bottom += origin.y;
+        if wm::ClipCursor(&area) == 0 {
+            return;
+        }
         if state.window == 0 {
             state.hidden = 1 + (wm::ShowCursor(0) + 1).max(0);
-            for _ in 1..state.hidden { wm::ShowCursor(0); }
+            for _ in 1..state.hidden {
+                wm::ShowCursor(0);
+            }
         }
-        if state.center != center { state.reference = None; }
+        if state.center != center {
+            state.reference = None;
+        }
         state.window = hwnd as usize;
         state.center = center;
     }
 }
 
 pub(super) fn captured_mouse_delta() -> Option<(i64, i64)> {
-    if !enabled("VICTORY_MOUSE_CAPTURE") { return None; }
+    if !enabled("VICTORY_MOUSE_CAPTURE") {
+        return None;
+    }
     let mut state = MOUSE_CAPTURE.lock().unwrap_or_else(|e| e.into_inner());
     // SAFETY: sampling and warping serialize with capture/focus messages.
     unsafe {
-        if state.window == 0 || wm::GetForegroundWindow() as usize != state.window { return None; }
+        if state.window == 0 || wm::GetForegroundWindow() as usize != state.window {
+            return None;
+        }
         let mut point = POINT::default();
-        if wm::GetCursorPos(&mut point) == 0 { state.reference = None; return None; }
+        if wm::GetCursorPos(&mut point) == 0 {
+            state.reference = None;
+            return None;
+        }
         let point = (point.x, point.y);
         let warp = std::env::var_os("VICTORY_MOUSE_WARP").is_some_and(|v| v == "1");
-        let warped = (warp && wm::SetCursorPos(state.center.0, state.center.1) != 0)
-            .then_some(state.center);
+        let warped =
+            (warp && wm::SetCursorPos(state.center.0, state.center.1) != 0).then_some(state.center);
         Some(mouse_motion(&mut state.reference, point, warped))
     }
 }
 
-fn mouse_motion(reference: &mut Option<(i32, i32)>, point: (i32, i32), warped: Option<(i32, i32)>) -> (i64, i64) {
-    let delta = reference.map_or((0, 0), |(x, y)|
-        (i64::from(point.0) - i64::from(x), i64::from(point.1) - i64::from(y)));
+fn mouse_motion(
+    reference: &mut Option<(i32, i32)>,
+    point: (i32, i32),
+    warped: Option<(i32, i32)>,
+) -> (i64, i64) {
+    let delta = reference.map_or((0, 0), |(x, y)| {
+        (i64::from(point.0) - i64::from(x), i64::from(point.1) - i64::from(y))
+    });
     *reference = Some(warped.unwrap_or(point));
     delta
 }
@@ -301,12 +375,7 @@ fn window_limit() -> Option<(i32, i32)> {
     })
 }
 
-fn fit_with_limit(
-    area: &RECT,
-    width: i32,
-    height: i32,
-    limit: Option<(i32, i32)>,
-) -> (i32, i32) {
+fn fit_with_limit(area: &RECT, width: i32, height: i32, limit: Option<(i32, i32)>) -> (i32, i32) {
     let Some((max_width, max_height)) = limit else {
         return fit_into(area, width, height);
     };
@@ -326,14 +395,8 @@ fn fit_into(area: &RECT, width: i32, height: i32) -> (i32, i32) {
     if width <= 0 || height <= 0 || aw <= 0 || ah <= 0 || (width <= aw && height <= ah) {
         return (width, height);
     }
-    let scale = f64::min(
-        f64::from(aw) / f64::from(width),
-        f64::from(ah) / f64::from(height),
-    );
-    (
-        (f64::from(width) * scale) as i32,
-        (f64::from(height) * scale) as i32,
-    )
+    let scale = f64::min(f64::from(aw) / f64::from(width), f64::from(ah) / f64::from(height));
+    ((f64::from(width) * scale) as i32, (f64::from(height) * scale) as i32)
 }
 
 /// Puts our procedure in front of the title's.
@@ -484,9 +547,7 @@ pub(crate) fn relaunch(args: Vec<std::ffi::OsString>) {
 pub fn wait_for_previous() {
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::Threading::WaitForSingleObject;
-    let Some(handle) = std::env::var(RELAUNCHED_FROM)
-        .ok()
-        .and_then(|h| h.parse::<usize>().ok())
+    let Some(handle) = std::env::var(RELAUNCHED_FROM).ok().and_then(|h| h.parse::<usize>().ok())
     else {
         return;
     };
@@ -511,10 +572,7 @@ fn end() {
 pub(crate) fn module() -> HleModule {
     HleModule {
         name: "lifecycle",
-        dlls: &[
-            "api-ms-win-core-psm-appnotify-*",
-            "ext-ms-win-rtcore-ntuser-window-*",
-        ],
+        dlls: &["api-ms-win-core-psm-appnotify-*", "ext-ms-win-rtcore-ntuser-window-*"],
         exports: vec![
             hle_export!(RegisterAppStateChangeNotification),
             hle_export!(UnregisterAppStateChangeNotification),
@@ -532,7 +590,9 @@ mod tests {
 
     #[test]
     fn mouse_reference_handles_focus_reset_and_warp() {
-        if !enabled("VICTORY_MOUSE_CAPTURE") { assert_eq!(captured_mouse_delta(), None); }
+        if !enabled("VICTORY_MOUSE_CAPTURE") {
+            assert_eq!(captured_mouse_delta(), None);
+        }
         let mut reference = None;
         assert_eq!(mouse_motion(&mut reference, (480, 390), None), (0, 0));
         assert_eq!(mouse_motion(&mut reference, (500, 400), None), (20, 10));
@@ -548,14 +608,8 @@ mod tests {
     #[test]
     fn registrations_come_and_go() {
         let (mut a, mut b) = (0, 0);
-        assert_eq!(
-            RegisterAppStateChangeNotification(Some(noop), std::ptr::null_mut(), &mut a),
-            0
-        );
-        assert_eq!(
-            RegisterAppStateChangeNotification(Some(noop), std::ptr::null_mut(), &mut b),
-            0
-        );
+        assert_eq!(RegisterAppStateChangeNotification(Some(noop), std::ptr::null_mut(), &mut a), 0);
+        assert_eq!(RegisterAppStateChangeNotification(Some(noop), std::ptr::null_mut(), &mut b), 0);
         UnregisterAppStateChangeNotification(a);
         let left: Vec<_> = routines().iter().map(|r| r.0).collect();
         assert_eq!(left, [b]);
@@ -597,28 +651,15 @@ mod tests {
 
     #[test]
     fn oversized_windows_shrink_to_the_screen() {
-        let area = RECT {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1040,
-        };
+        let area = RECT { left: 0, top: 0, right: 1920, bottom: 1040 };
         assert_eq!(fit_into(&area, 3840, 2160), (1848, 1040));
         assert_eq!(fit_into(&area, 1280, 720), (1280, 720));
-        assert_eq!(
-            fit_into(&area, wm::CW_USEDEFAULT, 0),
-            (wm::CW_USEDEFAULT, 0)
-        );
+        assert_eq!(fit_into(&area, wm::CW_USEDEFAULT, 0), (wm::CW_USEDEFAULT, 0));
     }
 
     #[test]
     fn configured_window_limit_fits_4k_into_1080p() {
-        let area = RECT {
-            left: 100,
-            top: 50,
-            right: 2660,
-            bottom: 1490,
-        };
+        let area = RECT { left: 100, top: 50, right: 2660, bottom: 1490 };
         assert_eq!(fit_with_limit(&area, 3840, 2160, Some((1920, 1080))), (1920, 1080));
         assert_eq!(fit_with_limit(&area, 640, 480, Some((1920, 1080))), (640, 480));
         assert_eq!(fit_with_limit(&area, 3840, 2160, None), (2560, 1440));
@@ -626,12 +667,7 @@ mod tests {
 
     #[test]
     fn configured_window_limit_still_respects_the_work_area() {
-        let area = RECT {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1040,
-        };
+        let area = RECT { left: 0, top: 0, right: 1920, bottom: 1040 };
         assert_eq!(fit_with_limit(&area, 3840, 2160, Some((2560, 1440))), (1848, 1040));
         assert_eq!(
             fit_with_limit(&area, wm::CW_USEDEFAULT, 0, Some((1920, 1080))),
@@ -641,12 +677,7 @@ mod tests {
 
     #[test]
     fn configured_window_limit_preserves_non_widescreen_proportions() {
-        let area = RECT {
-            left: 0,
-            top: 0,
-            right: 2560,
-            bottom: 1440,
-        };
+        let area = RECT { left: 0, top: 0, right: 2560, bottom: 1440 };
         assert_eq!(fit_with_limit(&area, 1600, 1200, Some((1920, 1080))), (1440, 1080));
     }
 
@@ -654,16 +685,9 @@ mod tests {
     fn window_limit_requires_two_positive_dimensions() {
         assert_eq!(parse_window_limit("1920x1080"), Some((1920, 1080)));
         assert_eq!(parse_window_limit(" 1920 X 1080 "), Some((1920, 1080)));
-        for bad in [
-            "",
-            "1920",
-            "0x1080",
-            "1920x0",
-            "-1x1080",
-            "1920x-1",
-            "1920x1080x2",
-            "2147483648x1080",
-        ] {
+        for bad in
+            ["", "1920", "0x1080", "1920x0", "-1x1080", "1920x-1", "1920x1080x2", "2147483648x1080"]
+        {
             assert_eq!(parse_window_limit(bad), None, "{bad}");
         }
     }
@@ -689,7 +713,10 @@ mod tests {
         let mut text = [0u16; 16];
         // SAFETY: our window; the buffer holds 16 characters.
         unsafe {
-            assert_eq!(wm::GetWindowLongW(hwnd, wm::GWL_STYLE) as u32 & wm::WS_POPUP != 0, enabled("VICTORY_FULLSCREEN"));
+            assert_eq!(
+                wm::GetWindowLongW(hwnd, wm::GWL_STYLE) as u32 & wm::WS_POPUP != 0,
+                enabled("VICTORY_FULLSCREEN")
+            );
             wm::SetWindowTextW(hwnd, w!("after"));
             let n = wm::GetWindowTextW(hwnd, text.as_mut_ptr(), 16);
             assert_eq!(String::from_utf16_lossy(&text[..n as usize]), "after");

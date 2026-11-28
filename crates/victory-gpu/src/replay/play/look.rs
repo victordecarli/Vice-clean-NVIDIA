@@ -80,8 +80,10 @@ pub fn flow(
     line: &mut dyn FnMut(&str),
 ) -> Result<()> {
     let frame = Frame::read(&find(folder)?.join("frame.bin"))?;
-    let pipelines: HashMap<u32, &wire::Pipeline> = frame.pipelines.iter().map(|p| (p.id, p)).collect();
-    let resources: HashMap<u32, &wire::Resource> = frame.resources.iter().map(|r| (r.id, r)).collect();
+    let pipelines: HashMap<u32, &wire::Pipeline> =
+        frame.pipelines.iter().map(|p| (p.id, p)).collect();
+    let resources: HashMap<u32, &wire::Resource> =
+        frame.resources.iter().map(|r| (r.id, r)).collect();
     let called = |id: u32| match resources.get(&id) {
         None => format!("#{id} (not there)"),
         Some(r) if r.desc.dimension == D3D12_RESOURCE_DIMENSION_BUFFER.0 => {
@@ -138,9 +140,12 @@ pub fn flow(
                     Cmd::RootSignature { graphics, .. } => binds.retain(|k, _| k.0 != *graphics),
                     Cmd::Heaps { heaps } => heap = heaps.first().copied().unwrap_or(NONE),
                     Cmd::RootView { graphics, kind, param, va } => {
-                        let kind = ["?", "cbv", "srv", "uav"].get(*kind as usize).copied().unwrap_or("?");
+                        let kind =
+                            ["?", "cbv", "srv", "uav"].get(*kind as usize).copied().unwrap_or("?");
                         let text = match va {
-                            Va::At { res, offset } => format!("{kind} {} +{offset:#x}", called(*res)),
+                            Va::At { res, offset } => {
+                                format!("{kind} {} +{offset:#x}", called(*res))
+                            }
                             Va::Null {} => format!("{kind} null"),
                             Va::Unknown { address } => format!("{kind} unknown {address:#x}"),
                         };
@@ -201,7 +206,10 @@ pub fn flow(
                                     let s = slot_at(heap, (v >> 5) + m);
                                     if s.kind != slot::EMPTY {
                                         let text = slot_text(&s, &called);
-                                        line(&format!("    [{k}]+{m} slot {}: {text}", (v >> 5) + m));
+                                        line(&format!(
+                                            "    [{k}]+{m} slot {}: {text}",
+                                            (v >> 5) + m
+                                        ));
                                     }
                                 }
                             }
@@ -283,7 +291,12 @@ fn texel(format: i32, b: &[u8]) -> [f32; 4] {
         42 | 43 | 67 => {
             let v = u32_at(0);
             let scale = 2f32.powi((v >> 27) as i32 - 24);
-            [(v & 511) as f32 * scale, (v >> 9 & 511) as f32 * scale, (v >> 18 & 511) as f32 * scale, 1.0]
+            [
+                (v & 511) as f32 * scale,
+                (v >> 9 & 511) as f32 * scale,
+                (v >> 18 & 511) as f32 * scale,
+                1.0,
+            ]
         }
         44..=47 => [(u32_at(0) & 0xff_ffff) as f32 / 16_777_215.0; 4],
         48 | 49 => [u8_at(0) / 255.0, u8_at(1) / 255.0, 0.0, 1.0],
@@ -314,13 +327,20 @@ pub struct Images {
 impl Player {
     /// Runs the frame once as the options say (`until` ends it early) and
     /// saves what textures hold, with their least, mean and greatest values.
-    pub fn images(&mut self, o: &Options, images: &Images, say: &mut dyn FnMut(String)) -> Result<()> {
+    pub fn images(
+        &mut self,
+        o: &Options,
+        images: &Images,
+        say: &mut dyn FnMut(String),
+    ) -> Result<()> {
         let mut made = self.prepare(o)?;
         self.once(o, &mut made)?;
         drop(made);
         let mut which = images.which.clone();
         if which.is_empty() {
-            let texels = |r: &wire::Resource| r.desc.width * u64::from(r.desc.height) * u64::from(r.desc.depth);
+            let texels = |r: &wire::Resource| {
+                r.desc.width * u64::from(r.desc.height) * u64::from(r.desc.depth)
+            };
             which = self
                 .frame
                 .resources
@@ -365,7 +385,8 @@ impl Player {
             let Some(all) = self.contents_of(id, sub)? else {
                 continue;
             };
-            let (mut least, mut most, mut sum) = ([f32::INFINITY; 4], [f32::NEG_INFINITY; 4], [0f64; 4]);
+            let (mut least, mut most, mut sum) =
+                ([f32::INFINITY; 4], [f32::NEG_INFINITY; 4], [0f64; 4]);
             let (mut zero, mut bad, mut n) = (0u64, 0u64, 0u64);
             let slice = f.RowPitch as usize * f.Height as usize;
             let mut raw = Vec::new();
@@ -398,14 +419,14 @@ impl Player {
                 f.Depth,
                 zero as f64 * 100.0 / n.max(1) as f64,
             ));
-            let stem: String = name
-                .chars()
-                .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .take(40)
-                .collect();
+            let stem: String =
+                name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_').take(40).collect();
             let file = |end: String| images.folder.join(format!("{id:05}.{sub}_{stem}{end}"));
             if images.raw {
-                std::fs::write(file(format!("_f{format}_{}x{}x{}.bin", f.Width, f.Height, f.Depth)), &raw)?;
+                std::fs::write(
+                    file(format!("_f{format}_{}x{}x{}.bin", f.Width, f.Height, f.Depth)),
+                    &raw,
+                )?;
             }
             // Values from 0 to 1 as they are, others bent so that the mean
             // is a middle grey. Slices of a 3D texture beside each other.
@@ -419,7 +440,9 @@ impl Player {
                 for s in 0..slices as usize {
                     let z = s * f.Depth as usize / slices as usize;
                     for x in 0..w as usize {
-                        let from = z * slice + y * step as usize * f.RowPitch as usize + x * step as usize * bytes;
+                        let from = z * slice
+                            + y * step as usize * f.RowPitch as usize
+                            + x * step as usize * bytes;
                         let v = texel(format, &all[from..from + bytes]);
                         for c in &v[..3] {
                             let c = match c.max(0.0) {
@@ -445,7 +468,10 @@ mod tests {
     #[test]
     fn texels() {
         assert_eq!(texel(10, &[0, 0x3c, 0, 0xc0, 0, 0, 0, 0x38]), [1.0, -2.0, 0.0, 0.5]);
-        assert_eq!(texel(26, &(15u32 << 6 | 16 << 17 | 14 << 27).to_le_bytes()), [1.0, 2.0, 0.5, 1.0]);
+        assert_eq!(
+            texel(26, &(15u32 << 6 | 16 << 17 | 14 << 27).to_le_bytes()),
+            [1.0, 2.0, 0.5, 1.0]
+        );
         assert_eq!(texel(67, &(16u32 << 27 | 256).to_le_bytes()), [1.0, 0.0, 0.0, 1.0]);
         assert_eq!(texel(24, &(1023u32 << 10).to_le_bytes()), [0.0, 1.0, 0.0, 0.0]);
         assert!(texel(54, &[1, 0x7c])[0].is_nan());

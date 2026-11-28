@@ -7,8 +7,14 @@
 //! submitting thread. A null queue handle means the process queue. An
 //! async block's system area holds its status and result size, so both
 //! stay readable after our state for the call is gone.
-#![allow(non_snake_case)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    non_snake_case,
+    reason = "exports carry the exact API names (XTaskQueueCreate) that title imports are bound by"
+)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::c_void;
@@ -53,14 +59,9 @@ enum Mode {
 
 impl Mode {
     fn from_raw(mode: u32) -> Option<Mode> {
-        [
-            Mode::Manual,
-            Mode::ThreadPool,
-            Mode::Serialized,
-            Mode::Immediate,
-        ]
-        .get(mode as usize)
-        .copied()
+        [Mode::Manual, Mode::ThreadPool, Mode::Serialized, Mode::Immediate]
+            .get(mode as usize)
+            .copied()
     }
 }
 
@@ -73,10 +74,7 @@ struct Task {
 
 impl Task {
     fn new(context: *mut c_void, callback: Callback) -> Task {
-        Task {
-            context: context as usize,
-            callback: callback as usize,
-        }
+        Task { context: context as usize, callback: callback as usize }
     }
 
     fn run(self, canceled: bool) {
@@ -94,11 +92,7 @@ struct Port {
 
 impl Port {
     fn new(mode: Mode) -> Arc<Port> {
-        let port = Arc::new(Port {
-            mode,
-            tasks: Mutex::default(),
-            ready: Condvar::new(),
-        });
+        let port = Arc::new(Port { mode, tasks: Mutex::default(), ready: Condvar::new() });
         if mode == Mode::Serialized {
             // The worker ends once it holds the last reference (every queue
             // using the port is closed) and nothing is left to run.
@@ -133,9 +127,7 @@ impl Port {
         let waiting = |t: &mut VecDeque<Task>| t.is_empty() && !ended();
         let tasks = lock(&self.tasks);
         let mut tasks = if timeout_ms == INFINITE {
-            self.ready
-                .wait_while(tasks, waiting)
-                .unwrap_or_else(|e| e.into_inner())
+            self.ready.wait_while(tasks, waiting).unwrap_or_else(|e| e.into_inner())
         } else {
             let timeout = Duration::from_millis(timeout_ms.into());
             self.ready
@@ -156,10 +148,7 @@ struct Pool {
     ready: Condvar,
 }
 
-static POOL: Pool = Pool {
-    state: Mutex::new((VecDeque::new(), 0)),
-    ready: Condvar::new(),
-};
+static POOL: Pool = Pool { state: Mutex::new((VecDeque::new(), 0)), ready: Condvar::new() };
 
 impl Pool {
     fn submit(&'static self, task: Task) {
@@ -268,10 +257,7 @@ static PROCESS_QUEUE: Mutex<Option<Option<Arc<Queue>>>> = Mutex::new(None);
 fn process_queue() -> Option<Arc<Queue>> {
     lock(&PROCESS_QUEUE)
         .get_or_insert_with(|| {
-            Some(Queue::new([
-                Port::new(Mode::ThreadPool),
-                Port::new(Mode::ThreadPool),
-            ]))
+            Some(Queue::new([Port::new(Mode::ThreadPool), Port::new(Mode::ThreadPool)]))
         })
         .clone()
 }
@@ -458,11 +444,7 @@ pub fn XTaskQueueGetCurrentProcessTaskQueue(out: *mut *const Queue) -> bool {
 }
 
 pub fn XTaskQueueSetCurrentProcessTaskQueue(handle: *const Queue) {
-    let new = if handle.is_null() {
-        None
-    } else {
-        queue(handle)
-    };
+    let new = if handle.is_null() { None } else { queue(handle) };
     *lock(&PROCESS_QUEUE) = Some(new);
 }
 
@@ -507,12 +489,8 @@ impl Call {
         size: usize,
         buffer: *mut c_void,
     ) -> HRESULT {
-        let data = ProviderData {
-            block,
-            buffer_size: size,
-            buffer,
-            context: self.context as *mut c_void,
-        };
+        let data =
+            ProviderData { block, buffer_size: size, buffer, context: self.context as *mut c_void };
         (self.provider)(op, &data)
     }
 }
@@ -527,9 +505,7 @@ fn call(block: *mut AsyncBlock) -> Option<Arc<Call>> {
 /// Whether `call` is still the call in flight on `block`: once it is over,
 /// the title may begin another call on the same block.
 fn is_current(call: &Arc<Call>, block: *mut AsyncBlock) -> bool {
-    lock(&CALLS)
-        .get(&(block as usize))
-        .is_some_and(|current| Arc::ptr_eq(current, call))
+    lock(&CALLS).get(&(block as usize)).is_some_and(|current| Arc::ptr_eq(current, call))
 }
 
 /// The block's status and result-size words.
@@ -774,11 +750,7 @@ pub fn XAsyncGetResult(
 /// Starts a call on `block` that is already over: it completes with `hr`
 /// and no result data, through the block's completion port as usual.
 pub fn finished(block: *mut AsyncBlock, identity: *const c_void, hr: HRESULT) -> HRESULT {
-    finished_with(
-        block,
-        identity,
-        if hr < 0 { Err(hr) } else { Ok(Vec::new()) },
-    )
+    finished_with(block, identity, if hr < 0 { Err(hr) } else { Ok(Vec::new()) })
 }
 
 /// Like [`finished`], with the bytes `XAsyncGetResult` hands out for
@@ -808,9 +780,7 @@ pub fn finished_with(
             // SAFETY: as above; the runtime checked the buffer's size.
             OP_GET_RESULT => unsafe {
                 if let Ok(bytes) = &*result {
-                    data.buffer
-                        .cast::<u8>()
-                        .copy_from(bytes.as_ptr(), bytes.len());
+                    data.buffer.cast::<u8>().copy_from(bytes.as_ptr(), bytes.len());
                 }
             },
             _ => {}
@@ -818,13 +788,7 @@ pub fn finished_with(
         S_OK
     }
     let context = Box::into_raw(Box::new(result));
-    let hr = XAsyncBegin(
-        block,
-        context.cast(),
-        identity,
-        std::ptr::null(),
-        Some(provider),
-    );
+    let hr = XAsyncBegin(block, context.cast(), identity, std::ptr::null(), Some(provider));
     if hr < 0 {
         // Refused before the call existed, so no cleanup will come.
         // SAFETY: still ours.
@@ -870,9 +834,7 @@ pub fn pending_with(
             // SAFETY: as above; the runtime checked the buffer's size.
             OP_GET_RESULT => unsafe {
                 let state = (*state).lock().unwrap_or_else(|e| e.into_inner());
-                data.buffer
-                    .cast::<u8>()
-                    .copy_from(state.1.as_ptr(), state.1.len());
+                data.buffer.cast::<u8>().copy_from(state.1.as_ptr(), state.1.len());
             },
             _ => {}
         }
@@ -891,13 +853,7 @@ pub fn pending_with(
 /// The result of a call begun with [`finished_with`] for `identity`, as a
 /// `T` written through `out`.
 pub fn result<T>(block: *mut AsyncBlock, identity: *const c_void, out: *mut T) -> HRESULT {
-    XAsyncGetResult(
-        block,
-        identity,
-        size_of::<T>(),
-        out.cast(),
-        std::ptr::null_mut(),
-    )
+    XAsyncGetResult(block, identity, size_of::<T>(), out.cast(), std::ptr::null_mut())
 }
 
 /// The bytes of a value, for [`finished_with`].
@@ -928,13 +884,7 @@ pub fn XAsyncRun(block: *mut AsyncBlock, work: Option<Work>) -> HRESULT {
         return E_INVALIDARG;
     };
     let identity = XAsyncRun as *const c_void;
-    XAsyncBegin(
-        block,
-        work as *mut c_void,
-        identity,
-        std::ptr::null(),
-        Some(provider),
-    )
+    XAsyncBegin(block, work as *mut c_void, identity, std::ptr::null(), Some(provider))
 }
 
 // The object `QueryApiImpl` returns. Each method takes the object first,
@@ -1112,10 +1062,7 @@ mod tests {
 
     static RAN: AtomicU32 = AtomicU32::new(0);
     extern "system" fn count(context: *mut c_void, canceled: bool) {
-        RAN.fetch_add(
-            if canceled { 100 } else { context as u32 },
-            Ordering::SeqCst,
-        );
+        RAN.fetch_add(if canceled { 100 } else { context as u32 }, Ordering::SeqCst);
     }
 
     #[test]
@@ -1127,15 +1074,9 @@ mod tests {
         let this: This = &OBJECT;
         let mut q = std::ptr::null();
         assert_eq!(slot::<Create>(0x60)(this, 0, 0, &mut q), S_OK);
-        assert_eq!(
-            slot::<Submit>(0x90)(this, q, COMPLETION, 5 as *mut c_void, count),
-            S_OK
-        );
+        assert_eq!(slot::<Submit>(0x90)(this, q, COMPLETION, 5 as *mut c_void, count), S_OK);
         assert_eq!(RAN.load(Ordering::SeqCst), 0, "manual: nothing runs yet");
-        assert!(
-            !slot::<Dispatch>(0x80)(this, q, WORK, 0),
-            "work port is empty"
-        );
+        assert!(!slot::<Dispatch>(0x80)(this, q, WORK, 0), "work port is empty");
         assert!(slot::<Dispatch>(0x80)(this, q, COMPLETION, 0));
         assert_eq!(RAN.load(Ordering::SeqCst), 5);
         assert!(!slot::<Dispatch>(0x80)(this, q, COMPLETION, 0));
@@ -1235,13 +1176,7 @@ mod tests {
         };
         let identity = 0x1d as *const c_void;
         assert_eq!(
-            XAsyncBegin(
-                &mut block,
-                42 as *mut c_void,
-                identity,
-                std::ptr::null(),
-                Some(provider)
-            ),
+            XAsyncBegin(&mut block, 42 as *mut c_void, identity, std::ptr::null(), Some(provider)),
             S_OK
         );
         assert_eq!(XAsyncGetStatus(&mut block, true), S_OK);
@@ -1261,10 +1196,7 @@ mod tests {
         );
         let out = (&mut value as *mut u64).cast();
         let mut used = 0;
-        assert_eq!(
-            XAsyncGetResult(&mut block, identity, 8, out, &mut used),
-            S_OK
-        );
+        assert_eq!(XAsyncGetResult(&mut block, identity, 8, out, &mut used), S_OK);
         assert_eq!((value, used), (42, 8));
         assert!(call(&mut block).is_none(), "the call ends with its result");
         XTaskQueueCloseHandle(q);
@@ -1407,7 +1339,13 @@ mod tests {
         };
         let identity = 0x77 as *const c_void;
         assert_eq!(
-            XAsyncBegin(&mut block, std::ptr::null_mut(), identity, std::ptr::null(), Some(provider)),
+            XAsyncBegin(
+                &mut block,
+                std::ptr::null_mut(),
+                identity,
+                std::ptr::null(),
+                Some(provider)
+            ),
             S_OK
         );
         assert!(XTaskQueueDispatch(q, WORK, 0));
@@ -1475,13 +1413,7 @@ mod tests {
         let mut byte = 0u8;
         let mut used = 0;
         assert_eq!(
-            XAsyncGetResult(
-                &mut block,
-                identity,
-                1,
-                (&mut byte as *mut u8).cast(),
-                &mut used,
-            ),
+            XAsyncGetResult(&mut block, identity, 1, (&mut byte as *mut u8).cast(), &mut used,),
             S_OK
         );
         assert_eq!((byte, used), (0x5a, 1));
@@ -1527,14 +1459,8 @@ mod tests {
         let mut q = std::ptr::null();
         assert_eq!(XTaskQueueCreate(1, 1, &mut q), S_OK);
         let none = std::ptr::null_mut();
-        assert_eq!(
-            XTaskQueueSubmitDelayedCallback(q, WORK, 0, none, Some(waits)),
-            S_OK
-        );
-        assert_eq!(
-            XTaskQueueSubmitDelayedCallback(q, WORK, 0, none, Some(releases)),
-            S_OK
-        );
+        assert_eq!(XTaskQueueSubmitDelayedCallback(q, WORK, 0, none, Some(waits)), S_OK);
+        assert_eq!(XTaskQueueSubmitDelayedCallback(q, WORK, 0, none, Some(releases)), S_OK);
         let start = std::time::Instant::now();
         while !FIRST.load(Ordering::SeqCst) && start.elapsed().as_secs() < 10 {
             std::thread::sleep(Duration::from_millis(1));
@@ -1565,10 +1491,7 @@ mod tests {
         }
         let run_one = |queue, total| {
             let none = std::ptr::null_mut();
-            assert_eq!(
-                XTaskQueueSubmitDelayedCallback(queue, WORK, 0, none, Some(ran)),
-                S_OK
-            );
+            assert_eq!(XTaskQueueSubmitDelayedCallback(queue, WORK, 0, none, Some(ran)), S_OK);
             for _ in 0..500 {
                 if RAN.load(Ordering::SeqCst) == total {
                     return;
@@ -1593,17 +1516,11 @@ mod tests {
         // The other queue's end is not this one's: the wait goes on and
         // still runs what comes in.
         assert_eq!(XTaskQueueTerminate(b, false, none, None), S_OK);
-        assert!(
-            ended.recv_timeout(short).is_err(),
-            "ended with another queue"
-        );
+        assert!(ended.recv_timeout(short).is_err(), "ended with another queue");
         run_one(a, 2);
         // Its own queue's end is.
         assert_eq!(XTaskQueueTerminate(a, false, none, None), S_OK);
-        assert!(
-            ended.recv_timeout(long).is_ok(),
-            "still waiting on a terminated queue"
-        );
+        assert!(ended.recv_timeout(long).is_ok(), "still waiting on a terminated queue");
         // And a dispatch that starts after the end returns at once.
         assert!(!XTaskQueueDispatch(a, WORK, INFINITE));
         XTaskQueueCloseHandle(a);
@@ -1624,19 +1541,10 @@ mod tests {
         assert_eq!(XTaskQueueCreate(0, 0, &mut q), S_OK);
         let mut canceled = false;
         let flag = (&mut canceled as *mut bool).cast();
-        assert_eq!(
-            XTaskQueueSubmitDelayedCallback(q, WORK, 0, flag, Some(note)),
-            S_OK
-        );
-        assert_eq!(
-            XTaskQueueTerminate(q, true, std::ptr::null_mut(), Some(terminated)),
-            S_OK
-        );
+        assert_eq!(XTaskQueueSubmitDelayedCallback(q, WORK, 0, flag, Some(note)), S_OK);
+        assert_eq!(XTaskQueueTerminate(q, true, std::ptr::null_mut(), Some(terminated)), S_OK);
         assert!(canceled && TERMINATED.load(Ordering::SeqCst));
-        assert_eq!(
-            XTaskQueueSubmitDelayedCallback(q, WORK, 0, flag, Some(note)),
-            E_ABORT
-        );
+        assert_eq!(XTaskQueueSubmitDelayedCallback(q, WORK, 0, flag, Some(note)), E_ABORT);
         XTaskQueueCloseHandle(q);
     }
 

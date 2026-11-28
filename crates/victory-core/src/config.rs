@@ -47,18 +47,13 @@ impl Config {
     /// Loads configuration from the environment and the config file.
     pub fn load() -> Result<Self> {
         let explicit = explicit_config_path(|k| std::env::var_os(k));
-        let path = explicit
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("victory.toml"));
+        let path = explicit.clone().unwrap_or_else(|| PathBuf::from("victory.toml"));
         let file = if path.is_file() {
             let text = std::fs::read_to_string(&path)
                 .with_context(|| format!("reading {}", path.display()))?;
             Some((path, text))
         } else if let Some(p) = explicit {
-            anyhow::bail!(
-                "VICTORY_CONFIG points at {}, which does not exist",
-                p.display()
-            );
+            anyhow::bail!("VICTORY_CONFIG points at {}, which does not exist", p.display());
         } else {
             None
         };
@@ -80,9 +75,9 @@ impl Config {
     ) -> Result<Self> {
         let env_path = |k: &str| env(k).filter(|v| !v.is_empty()).map(PathBuf::from);
         let test_titles = match env("VICTORY_TEST_TITLES") {
-            Some(v) if !v.is_empty() => std::env::split_paths(&v)
-                .filter(|p| !p.as_os_str().is_empty())
-                .collect(),
+            Some(v) if !v.is_empty() => {
+                std::env::split_paths(&v).filter(|p| !p.as_os_str().is_empty()).collect()
+            }
             _ => file.test_titles,
         };
         let cache_dir = env_path("VICTORY_CACHE_DIR")
@@ -122,9 +117,7 @@ impl Config {
 /// The config file explicitly named by the environment, if any. An empty
 /// `VICTORY_CONFIG` means unset, like the other path variables.
 fn explicit_config_path(env: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
-    env("VICTORY_CONFIG")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
+    env("VICTORY_CONFIG").filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
 fn subdir(root: &Path, sub: &str) -> Result<PathBuf> {
@@ -164,10 +157,7 @@ mod tests {
 
     #[test]
     fn empty_env_values_are_ignored() {
-        let file = FilePaths {
-            game_dir: Some("from-file".into()),
-            ..Default::default()
-        };
+        let file = FilePaths { game_dir: Some("from-file".into()), ..Default::default() };
         let env = |k: &str| (k == "VICTORY_GAME_DIR").then(OsString::new);
         let cfg = Config::resolve(file, None, env).unwrap();
         assert_eq!(cfg.game_dir.unwrap(), PathBuf::from("from-file"));
@@ -175,10 +165,7 @@ mod tests {
 
     #[test]
     fn empty_test_titles_env_is_ignored() {
-        let file = FilePaths {
-            test_titles: vec!["from-file".into()],
-            ..Default::default()
-        };
+        let file = FilePaths { test_titles: vec!["from-file".into()], ..Default::default() };
         let env = |k: &str| (k == "VICTORY_TEST_TITLES").then(OsString::new);
         let cfg = Config::resolve(file, None, env).unwrap();
         assert_eq!(cfg.test_titles, vec![PathBuf::from("from-file")]);
@@ -190,10 +177,7 @@ mod tests {
         let file = FilePaths::default();
         let env = |k: &str| (k == "VICTORY_TEST_TITLES").then(|| value.clone());
         let cfg = Config::resolve(file, None, env).unwrap();
-        assert_eq!(
-            cfg.test_titles,
-            vec![PathBuf::from("first"), PathBuf::from("second")]
-        );
+        assert_eq!(cfg.test_titles, vec![PathBuf::from("first"), PathBuf::from("second")]);
     }
 
     #[test]
@@ -201,10 +185,7 @@ mod tests {
         let empty = |k: &str| (k == "VICTORY_CONFIG").then(OsString::new);
         assert_eq!(explicit_config_path(empty), None);
         let set = |k: &str| (k == "VICTORY_CONFIG").then(|| OsString::from("custom.toml"));
-        assert_eq!(
-            explicit_config_path(set),
-            Some(PathBuf::from("custom.toml"))
-        );
+        assert_eq!(explicit_config_path(set), Some(PathBuf::from("custom.toml")));
     }
 
     #[test]
@@ -217,20 +198,14 @@ mod tests {
     #[test]
     fn cache_inside_repo_is_refused() {
         let inside = Path::new(env!("CARGO_MANIFEST_DIR")).join("cache");
-        let cfg = Config {
-            cache_dir: inside,
-            ..Default::default()
-        };
+        let cfg = Config { cache_dir: inside, ..Default::default() };
         assert!(cfg.cache_subdir("x").is_err());
     }
 
     #[test]
     fn data_inside_repo_is_refused() {
         let inside = Path::new(env!("CARGO_MANIFEST_DIR")).join("data");
-        let cfg = Config {
-            data_dir: inside,
-            ..Default::default()
-        };
+        let cfg = Config { data_dir: inside, ..Default::default() };
         assert!(cfg.data_subdir("x").is_err());
     }
 }

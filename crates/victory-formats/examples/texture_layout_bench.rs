@@ -1,4 +1,10 @@
 //! Run with `cargo run --release -p victory-formats --example texture_layout_bench`.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "a tool run by hand: what it prints is its output, and a failure stops it"
+)]
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -19,30 +25,9 @@ fn main() {
     };
     let cases = [
         ("BC7 64KB_D", base),
-        (
-            "BC1 64KB_S",
-            TextureDesc {
-                format: 71,
-                swizzle: Swizzle::SW_64KB_S,
-                ..base
-            },
-        ),
-        (
-            "RGBA8 4KB_D",
-            TextureDesc {
-                format: 28,
-                swizzle: Swizzle::SW_4KB_D,
-                ..base
-            },
-        ),
-        (
-            "R8 64KB_S",
-            TextureDesc {
-                format: 61,
-                swizzle: Swizzle::SW_64KB_S,
-                ..base
-            },
-        ),
+        ("BC1 64KB_S", TextureDesc { format: 71, swizzle: Swizzle::SW_64KB_S, ..base }),
+        ("RGBA8 4KB_D", TextureDesc { format: 28, swizzle: Swizzle::SW_4KB_D, ..base }),
+        ("R8 64KB_S", TextureDesc { format: 61, swizzle: Swizzle::SW_64KB_S, ..base }),
         (
             "RGBA8 volume 64KB_S",
             TextureDesc {
@@ -55,14 +40,7 @@ fn main() {
                 ..base
             },
         ),
-        (
-            "RGBA8 linear",
-            TextureDesc {
-                format: 28,
-                swizzle: Swizzle::LINEAR,
-                ..base
-            },
-        ),
+        ("RGBA8 linear", TextureDesc { format: 28, swizzle: Swizzle::LINEAR, ..base }),
     ];
 
     for (name, desc) in cases {
@@ -72,10 +50,7 @@ fn main() {
         for sample in &mut samples {
             let start = Instant::now();
             for i in 0..CALLS {
-                let desc = TextureDesc {
-                    width: desc.width + (i % 32) as u32,
-                    ..desc
-                };
+                let desc = TextureDesc { width: desc.width + (i % 32) as u32, ..desc };
                 let texture = black_box(Texture::new(black_box(&desc)).unwrap());
                 let layout = &texture.planes[0].layout;
                 checksum =

@@ -1,4 +1,4 @@
-//! Whole-wave sections (decision 0003): code between `s_or_saveexec -1`
+//! Whole-wave sections: code between `s_or_saveexec -1`
 //! (or `s_nand_saveexec 0`) and the restore of the saved mask runs in every lane of the console's
 //! wave, the inactive ones included, which is how the compiler expands
 //! HLSL wave reductions and prefix sums (an identity put into the inactive
@@ -167,10 +167,9 @@ pub(crate) fn sections(p: &Program, block: usize) -> HashMap<usize, Section> {
             |k| matches!(&inst.fields, Fields::Sop { src, .. } if src.first() == Some(&k)),
         );
         let saved = match &inst.fields {
-            Fields::Sop {
-                dst: Some(Operand::Scalar { code, .. }),
-                ..
-            } if start => inst.write(Reg::S(*code)),
+            Fields::Sop { dst: Some(Operand::Scalar { code, .. }), .. } if start => {
+                inst.write(Reg::S(*code))
+            }
             _ => None,
         };
         let Some(saved) = saved else {
@@ -210,10 +209,7 @@ pub(crate) fn sections(p: &Program, block: usize) -> HashMap<usize, Section> {
 
 fn saved_code(inst: &Inst) -> u8 {
     match &inst.fields {
-        Fields::Sop {
-            dst: Some(Operand::Scalar { code, .. }),
-            ..
-        } => *code,
+        Fields::Sop { dst: Some(Operand::Scalar { code, .. }), .. } => *code,
         _ => NULL,
     }
 }
@@ -223,13 +219,7 @@ fn saved_code(inst: &Inst) -> u8 {
 fn dpp_lane(d: Dpp, l: u32) -> Option<(u32, bool, bool)> {
     match d {
         Dpp::Lanes { sel, .. } => Some(((l & !7) | (sel >> (3 * (l & 7)) & 7), false, true)),
-        Dpp::Row {
-            ctrl,
-            row_mask,
-            bank_mask,
-            bound_ctrl,
-            ..
-        } => {
+        Dpp::Row { ctrl, row_mask, bank_mask, bound_ctrl, .. } => {
             let (row, pos, n) = (l & !15, l & 15, u32::from(ctrl & 15));
             let enabled = row_mask >> (l >> 4 & 3) & 1 != 0 && bank_mask >> (l >> 2 & 3) & 1 != 0;
             let (src, inside) = match ctrl {
@@ -256,20 +246,8 @@ fn combine(op: Op, a: Sym, b: Sym) -> Sym {
     match (a, b) {
         (Sym::K(k), x) | (x, Sym::K(k)) if op.identity(k) => x,
         (
-            Sym::Red {
-                op: oa,
-                src,
-                mask,
-                ident,
-                lanes: la,
-            },
-            Sym::Red {
-                op: ob,
-                src: sb,
-                mask: mb,
-                ident: ib,
-                lanes: lb,
-            },
+            Sym::Red { op: oa, src, mask, ident, lanes: la },
+            Sym::Red { op: ob, src: sb, mask: mb, ident: ib, lanes: lb },
         ) if (src, mask, ident) == (sb, mb, ib)
             && op.identity(ident)
             && oa.is_none_or(|o| o == op)
@@ -277,13 +255,7 @@ fn combine(op: Op, a: Sym, b: Sym) -> Sym {
             && (!op.counts() || la & lb == 0)
             && (op != Op::AddH || buddies(la, lb)) =>
         {
-            Sym::Red {
-                op: Some(op),
-                src,
-                mask,
-                ident,
-                lanes: la | lb,
-            }
+            Sym::Red { op: Some(op), src, mask, ident, lanes: la | lb }
         }
         _ => Sym::Unknown,
     }
@@ -302,11 +274,7 @@ fn lane_number(op: &Operand) -> Option<u32> {
 type Left = (HashMap<Value, Vec<Sym>>, HashMap<Value, Sym>);
 
 fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
-    let all = if wave == 64 {
-        u64::MAX
-    } else {
-        u64::from(u32::MAX)
-    };
+    let all = if wave == 64 { u64::MAX } else { u64::from(u32::MAX) };
     let mut exec = all;
     let mut vec: HashMap<Value, Vec<Sym>> = HashMap::new();
     let mut uni: HashMap<Value, Sym> = HashMap::new();
@@ -317,26 +285,17 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
         if inst.write(Reg::S(EXEC)).is_some() {
             // Constant lane sets (prefix sums); anything else ends what
             // the simulation can follow.
-            let lo = name
-                .starts_with("s_mov_b")
-                .then(|| constant(inst))
-                .flatten();
+            let lo = name.starts_with("s_mov_b").then(|| constant(inst)).flatten();
             let Some(k) = lo else {
                 return (vec, uni);
             };
-            exec = (if name == "s_mov_b64" {
-                k
-            } else {
-                (exec & !0xFFFF_FFFF) | (k & 0xFFFF_FFFF)
-            }) & all;
+            exec =
+                (if name == "s_mov_b64" { k } else { (exec & !0xFFFF_FFFF) | (k & 0xFFFF_FFFF) })
+                    & all;
             continue;
         }
         if inst.write(Reg::S(EXEC + 1)).is_some() {
-            let Some(k) = name
-                .starts_with("s_mov_b")
-                .then(|| constant(inst))
-                .flatten()
-            else {
+            let Some(k) = name.starts_with("s_mov_b").then(|| constant(inst)).flatten() else {
                 return (vec, uni);
             };
             exec = ((exec & 0xFFFF_FFFF) | ((k & 0xFFFF_FFFF) << 32)) & all;
@@ -407,9 +366,7 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
             let l = lane_number(lane);
             let x = lanes(src, &vec, &uni);
             if let Some(w) = inst.write(Reg::S(code)) {
-                let s = l
-                    .and_then(|l| x.get(l as usize).copied())
-                    .unwrap_or(Sym::Unknown);
+                let s = l.and_then(|l| x.get(l as usize).copied()).unwrap_or(Sym::Unknown);
                 uni.insert(w, s);
             }
             continue;
@@ -425,78 +382,26 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
                 match *op? {
                     Operand::Vector { reg, .. } => Some((
                         lanes(&Operand::Vector { reg, dwords: 1 }, &vec, &uni),
-                        lanes(
-                            &Operand::Vector {
-                                reg: reg + 1,
-                                dwords: 1,
-                            },
-                            &vec,
-                            &uni,
-                        ),
+                        lanes(&Operand::Vector { reg: reg + 1, dwords: 1 }, &vec, &uni),
                     )),
                     Operand::Scalar { code, .. } if code != NULL => Some((
                         lanes(&Operand::Scalar { code, dwords: 1 }, &vec, &uni),
-                        lanes(
-                            &Operand::Scalar {
-                                code: code + 1,
-                                dwords: 1,
-                            },
-                            &vec,
-                            &uni,
-                        ),
+                        lanes(&Operand::Scalar { code: code + 1, dwords: 1 }, &vec, &uni),
                     )),
                     _ => None,
                 }
             };
-            let old_lo = lanes(
-                &Operand::Vector {
-                    reg: dreg,
-                    dwords: 1,
-                },
-                &vec,
-                &uni,
-            );
-            let old_hi = lanes(
-                &Operand::Vector {
-                    reg: dreg + 1,
-                    dwords: 1,
-                },
-                &vec,
-                &uni,
-            );
+            let old_lo = lanes(&Operand::Vector { reg: dreg, dwords: 1 }, &vec, &uni);
+            let old_hi = lanes(&Operand::Vector { reg: dreg + 1, dwords: 1 }, &vec, &uni);
             let f64_term = |lo_s: Sym, hi_s: Sym| -> Option<(Value, Value, Value, u64)> {
                 match (lo_s, hi_s) {
                     (
-                        Sym::Red {
-                            op: None,
-                            src: lo,
-                            mask: ml,
-                            ident: 0,
-                            lanes: ll,
-                        },
-                        Sym::Red {
-                            op: None,
-                            src: hi,
-                            mask: mh,
-                            ident: 0,
-                            lanes: lh,
-                        },
+                        Sym::Red { op: None, src: lo, mask: ml, ident: 0, lanes: ll },
+                        Sym::Red { op: None, src: hi, mask: mh, ident: 0, lanes: lh },
                     ) if ml == mh && ll == lh => Some((lo, hi, ml, ll)),
                     (
-                        Sym::Red64F {
-                            lo: lo1,
-                            hi: hi1,
-                            mask: m1,
-                            lanes: l1,
-                            high: false,
-                        },
-                        Sym::Red64F {
-                            lo: lo2,
-                            hi: hi2,
-                            mask: m2,
-                            lanes: l2,
-                            high: true,
-                        },
+                        Sym::Red64F { lo: lo1, hi: hi1, mask: m1, lanes: l1, high: false },
+                        Sym::Red64F { lo: lo2, hi: hi2, mask: m2, lanes: l2, high: true },
                     ) if (lo1, hi1, m1, l1) == (lo2, hi2, m2, l2) => Some((lo1, hi1, m1, l1)),
                     _ => None,
                 }
@@ -547,14 +452,7 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
         let Some(dst) = inst.write(Reg::V(dreg)) else {
             continue;
         };
-        let old = lanes(
-            &Operand::Vector {
-                reg: dreg,
-                dwords: 1,
-            },
-            &vec,
-            &uni,
-        );
+        let old = lanes(&Operand::Vector { reg: dreg, dwords: 1 }, &vec, &uni);
         // src0 as each lane fetches it (DPP), with the lanes that write.
         let src0 = v.src.first().map(|o| lanes(o, &vec, &uni));
         let mut writes = exec;
@@ -602,13 +500,7 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
                 (0..wave as usize)
                     .map(|l| match (a[l], b.get(l).copied(), mask) {
                         (Sym::K(ident), Some(Sym::Own(x)), Some(m)) if masked.contains(&m) => {
-                            Sym::Red {
-                                op: None,
-                                src: x,
-                                mask: m,
-                                ident,
-                                lanes: 1 << l,
-                            }
+                            Sym::Red { op: None, src: x, mask: m, ident, lanes: 1 << l }
                         }
                         _ => Sym::Unknown,
                     })
@@ -642,13 +534,7 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
                 (0..wave as usize)
                     .map(|l| match (a[l], b.get(l).copied()) {
                         (
-                            Sym::Red {
-                                op: None | Some(Op::AddU),
-                                src,
-                                mask,
-                                ident: 0,
-                                lanes,
-                            },
+                            Sym::Red { op: None | Some(Op::AddU), src, mask, ident: 0, lanes },
                             Some(Sym::Red {
                                 op: None | Some(Op::AddU),
                                 src: s2,
@@ -661,13 +547,7 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
                             if rest == 0 {
                                 Sym::K(0)
                             } else {
-                                Sym::Red {
-                                    op: Some(Op::AddU),
-                                    src,
-                                    mask,
-                                    ident: 0,
-                                    lanes: rest,
-                                }
+                                Sym::Red { op: Some(Op::AddU), src, mask, ident: 0, lanes: rest }
                             }
                         }
                         _ => Sym::Unknown,
@@ -675,21 +555,15 @@ fn simulate(insts: &[Inst], wave: u32, saved: Value) -> Left {
                     .collect()
             }
             (n, Some(a)) => match (Op::of(n), src(1)) {
-                (Some(op), Some(b)) => (0..wave as usize)
-                    .map(|l| combine(op, a[l], b[l]))
-                    .collect(),
+                (Some(op), Some(b)) => {
+                    (0..wave as usize).map(|l| combine(op, a[l], b[l])).collect()
+                }
                 _ => vec![Sym::Unknown; wave as usize],
             },
             _ => vec![Sym::Unknown; wave as usize],
         };
         let merged = (0..wave as usize)
-            .map(|l| {
-                if writes >> l & 1 != 0 {
-                    result[l]
-                } else {
-                    old[l]
-                }
-            })
+            .map(|l| if writes >> l & 1 != 0 { result[l] } else { old[l] })
             .collect();
         vec.insert(dst, merged);
     }
@@ -705,11 +579,7 @@ fn constant(inst: &Inst) -> Option<u64> {
         Operand::Scalar { code: NULL, .. } => Some(0),
         Operand::Const(c @ 128..=208) => {
             let x = crate::resource::inline(c)?;
-            Some(if wide {
-                i64::from(x as i32) as u64
-            } else {
-                u64::from(x)
-            })
+            Some(if wide { i64::from(x as i32) as u64 } else { u64::from(x) })
         }
         Operand::Const(c) if !wide => crate::resource::inline(c).map(u64::from),
         Operand::Literal(x) => Some(u64::from(x)),
@@ -723,20 +593,12 @@ fn single(s: Sym, wave: u32) -> Option<Shape> {
     match s {
         Sym::K(k) => Some(Shape::K(k)),
         Sym::Own(x) | Sym::Uni(x) => Some(Shape::Value(x)),
-        Sym::Red {
-            op: Some(op),
-            src,
-            mask,
-            ident,
-            lanes,
-        } if lanes == all => Some(Shape::Active(op, src, mask, ident)),
-        Sym::Red64F {
-            lo,
-            hi,
-            mask,
-            lanes,
-            high,
-        } if lanes == all => Some(Shape::ActiveF64(lo, hi, mask, high)),
+        Sym::Red { op: Some(op), src, mask, ident, lanes } if lanes == all => {
+            Some(Shape::Active(op, src, mask, ident))
+        }
+        Sym::Red64F { lo, hi, mask, lanes, high } if lanes == all => {
+            Some(Shape::ActiveF64(lo, hi, mask, high))
+        }
         _ => None,
     }
 }
@@ -765,13 +627,9 @@ fn shapes(
 fn per_lane(lanes: &[Sym], all: u64) -> Option<Shape> {
     let first = lanes[0];
     let own = |l: usize, s: Sym| match s {
-        Sym::Red {
-            op: None,
-            src,
-            mask,
-            ident,
-            lanes,
-        } if lanes == 1 << l => Some((src, mask, ident)),
+        Sym::Red { op: None, src, mask, ident, lanes } if lanes == 1 << l => {
+            Some((src, mask, ident))
+        }
         _ => None,
     };
     if let Some(m) = own(0, first)
@@ -783,20 +641,12 @@ fn per_lane(lanes: &[Sym], all: u64) -> Option<Shape> {
         return match first {
             Sym::K(k) => Some(Shape::K(k)),
             Sym::Uni(x) | Sym::Own(x) => Some(Shape::Value(x)),
-            Sym::Red {
-                op: Some(op),
-                src,
-                mask,
-                ident,
-                lanes,
-            } if lanes == all => Some(Shape::Active(op, src, mask, ident)),
-            Sym::Red64F {
-                lo,
-                hi,
-                mask,
-                lanes,
-                high,
-            } if lanes == all => Some(Shape::ActiveF64(lo, hi, mask, high)),
+            Sym::Red { op: Some(op), src, mask, ident, lanes } if lanes == all => {
+                Some(Shape::Active(op, src, mask, ident))
+            }
+            Sym::Red64F { lo, hi, mask, lanes, high } if lanes == all => {
+                Some(Shape::ActiveF64(lo, hi, mask, high))
+            }
             _ => None,
         };
     }
@@ -806,13 +656,7 @@ fn per_lane(lanes: &[Sym], all: u64) -> Option<Shape> {
     for (l, &s) in lanes.iter().enumerate() {
         let below = (1u64 << l) - 1;
         let (op, src, mask, ident, set) = match s {
-            Sym::Red {
-                op,
-                src,
-                mask,
-                ident,
-                lanes,
-            } => (op, src, mask, ident, lanes),
+            Sym::Red { op, src, mask, ident, lanes } => (op, src, mask, ident, lanes),
             // Lane 0 of an exclusive prefix holds the identity.
             Sym::K(_) if l == 0 => continue,
             _ => return None,
@@ -926,23 +770,13 @@ mod tests {
     #[test]
     fn dpp_lanes_follow_the_isa() {
         // row_shr:1 with bound_ctrl: lane 16 reads 0, lane 17 lane 16.
-        let shr = Dpp::Row {
-            ctrl: 0x111,
-            row_mask: 0xF,
-            bank_mask: 0xF,
-            bound_ctrl: true,
-            fi: false,
-        };
+        let shr =
+            Dpp::Row { ctrl: 0x111, row_mask: 0xF, bank_mask: 0xF, bound_ctrl: true, fi: false };
         assert_eq!(dpp_lane(shr, 16), Some((16, true, true)));
         assert_eq!(dpp_lane(shr, 17), Some((16, false, true)));
         // row_mirror: lane 3 reads lane 12.
-        let mirror = Dpp::Row {
-            ctrl: 0x140,
-            row_mask: 0xF,
-            bank_mask: 0xF,
-            bound_ctrl: true,
-            fi: false,
-        };
+        let mirror =
+            Dpp::Row { ctrl: 0x140, row_mask: 0xF, bank_mask: 0xF, bound_ctrl: true, fi: false };
         assert_eq!(dpp_lane(mirror, 3), Some((12, false, true)));
         // dpp8 [1,0,3,2,5,4,7,6] swaps neighbours.
         let swap = Dpp::Lanes {
@@ -955,24 +789,12 @@ mod tests {
     #[test]
     fn prefixes_are_recognised() {
         let (x, m) = (Value(1), Value(2));
-        let red = |lanes: u64| Sym::Red {
-            op: Some(Op::AddU),
-            src: x,
-            mask: m,
-            ident: 0,
-            lanes,
-        };
+        let red = |lanes: u64| Sym::Red { op: Some(Op::AddU), src: x, mask: m, ident: 0, lanes };
         let inclusive: Vec<Sym> = (0..64).map(|l| red(u64::MAX >> (63 - l))).collect();
-        assert_eq!(
-            per_lane(&inclusive, u64::MAX),
-            Some(Shape::Prefix(Op::AddU, x, m, 0, true))
-        );
+        assert_eq!(per_lane(&inclusive, u64::MAX), Some(Shape::Prefix(Op::AddU, x, m, 0, true)));
         let mut exclusive: Vec<Sym> = (0..64).map(|l| red((1u64 << l) - 1)).collect();
         exclusive[0] = Sym::K(0);
-        assert_eq!(
-            per_lane(&exclusive, u64::MAX),
-            Some(Shape::Prefix(Op::AddU, x, m, 0, false))
-        );
+        assert_eq!(per_lane(&exclusive, u64::MAX), Some(Shape::Prefix(Op::AddU, x, m, 0, false)));
         assert_eq!(
             per_lane(&vec![red(u64::MAX); 64], u64::MAX),
             Some(Shape::Active(Op::AddU, x, m, 0))
@@ -988,33 +810,18 @@ mod tests {
             constant(&p.blocks[0].insts[0])
         };
 
-        assert_eq!(
-            check(&[sop1(EXEC, b64, 194)], true),
-            Some(0xFFFF_FFFF_FFFF_FFFE)
-        );
-        assert_eq!(
-            check(&[sop1(EXEC, b64, 196)], true),
-            Some(0xFFFF_FFFF_FFFF_FFFC)
-        );
-        assert_eq!(
-            check(&[sop1(EXEC, b64, 208)], true),
-            Some(0xFFFF_FFFF_FFFF_FFF0)
-        );
+        assert_eq!(check(&[sop1(EXEC, b64, 194)], true), Some(0xFFFF_FFFF_FFFF_FFFE));
+        assert_eq!(check(&[sop1(EXEC, b64, 196)], true), Some(0xFFFF_FFFF_FFFF_FFFC));
+        assert_eq!(check(&[sop1(EXEC, b64, 208)], true), Some(0xFFFF_FFFF_FFFF_FFF0));
         assert_eq!(check(&[sop1(EXEC, b64, 193)], true), Some(u64::MAX));
         assert_eq!(check(&[sop1(EXEC, b64, NULL)], true), Some(0));
         assert_eq!(check(&[sop1(EXEC, b64, 243)], true), None);
-        assert_eq!(
-            check(&[sop1(EXEC, b64, 255), 0x1234_5678], true),
-            Some(0x1234_5678)
-        );
+        assert_eq!(check(&[sop1(EXEC, b64, 255), 0x1234_5678], true), Some(0x1234_5678));
 
         assert_eq!(check(&[sop1(EXEC, b32, 194)], false), Some(0xFFFF_FFFE));
         assert_eq!(check(&[sop1(EXEC, b32, 243)], false), Some(0xBF80_0000));
         assert_eq!(check(&[sop1(EXEC, b32, NULL)], false), Some(0));
-        assert_eq!(
-            check(&[sop1(EXEC, b32, 255), 0x1234_5678], false),
-            Some(0x1234_5678)
-        );
+        assert_eq!(check(&[sop1(EXEC, b32, 255), 0x1234_5678], false), Some(0x1234_5678));
         assert_eq!(check(&[sop1(EXEC, b32, 0)], false), None);
     }
 
@@ -1088,11 +895,7 @@ mod tests {
             let p = build(&w, wave64);
             let insts = &p.blocks[0].insts;
             let saved = insts[0].write(Reg::S(0)).unwrap();
-            let v0_in = p
-                .inputs
-                .iter()
-                .find_map(|&(r, v)| (r == Reg::V(0)).then_some(v))
-                .unwrap();
+            let v0_in = p.inputs.iter().find_map(|&(r, v)| (r == Reg::V(0)).then_some(v)).unwrap();
             let v2_val = insts[insts.len() - 4].write(Reg::V(2)).unwrap();
             let v4_val = insts[insts.len() - 3].write(Reg::V(4)).unwrap();
             let sec = &sections(&p, 0)[&0];
@@ -1239,20 +1042,13 @@ mod tests {
                 .map(|l| red(Some(Op::AddU), v0, m0, 0, below_mask(l) | (1u64 << l)))
                 .collect();
             valid_inc[0] = red(None, v0, m0, 0, 1);
-            assert_eq!(
-                per_lane(&valid_inc, all),
-                Some(Shape::Prefix(Op::AddU, v0, m0, 0, true))
-            );
+            assert_eq!(per_lane(&valid_inc, all), Some(Shape::Prefix(Op::AddU, v0, m0, 0, true)));
 
-            let mut valid_exc: Vec<Sym> = (0..wave)
-                .map(|l| red(Some(Op::AddU), v0, m0, 0, below_mask(l)))
-                .collect();
+            let mut valid_exc: Vec<Sym> =
+                (0..wave).map(|l| red(Some(Op::AddU), v0, m0, 0, below_mask(l))).collect();
             valid_exc[0] = Sym::K(0);
             valid_exc[1] = red(None, v0, m0, 0, 1);
-            assert_eq!(
-                per_lane(&valid_exc, all),
-                Some(Shape::Prefix(Op::AddU, v0, m0, 0, false))
-            );
+            assert_eq!(per_lane(&valid_exc, all), Some(Shape::Prefix(Op::AddU, v0, m0, 0, false)));
 
             let mut mixed_other_src = valid_exc.clone();
             mixed_other_src[0] = red(None, v_other, m0, 0, 1);

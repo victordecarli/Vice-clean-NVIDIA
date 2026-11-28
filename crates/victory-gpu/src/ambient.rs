@@ -90,7 +90,9 @@ pub(crate) fn role(container: &[u8]) -> Option<Role> {
 fn is_miss(container: &[u8]) -> bool {
     const NAME: &[u8] = b"CS_RayMiss_";
     container.windows(NAME.len() + 9).any(|w| {
-        w.starts_with(NAME) && w[NAME.len()..NAME.len() + 8].iter().all(u8::is_ascii_hexdigit) && w[NAME.len() + 8] == b'_'
+        w.starts_with(NAME)
+            && w[NAME.len()..NAME.len() + 8].iter().all(u8::is_ascii_hexdigit)
+            && w[NAME.len() + 8] == b'_'
     })
 }
 
@@ -158,7 +160,9 @@ fn parse_specular(set: &str) -> Option<Specular> {
 
 fn specular() -> Option<Specular> {
     static SET: OnceLock<Option<Specular>> = OnceLock::new();
-    *SET.get_or_init(|| parse_specular(&std::env::var("VICTORY_AMBIENT_SPECULAR").unwrap_or_default()))
+    *SET.get_or_init(|| {
+        parse_specular(&std::env::var("VICTORY_AMBIENT_SPECULAR").unwrap_or_default())
+    })
 }
 
 /// `VICTORY_AMBIENT_ONCE=1`: the estimate is one bounce of the light the
@@ -515,7 +519,10 @@ unsafe impl Send for Pass {}
 // SAFETY: as above.
 unsafe impl Sync for Pass {}
 
-fn make(device: &ID3D12Device, buffer: impl Fn(u64) -> Option<ID3D12Resource>) -> windows::core::Result<Pass> {
+fn make(
+    device: &ID3D12Device,
+    buffer: impl Fn(u64) -> Option<ID3D12Resource>,
+) -> windows::core::Result<Pass> {
     let mut root: Option<ID3D12RootSignature> = None;
     let mut pipeline = |part: &str, entry| -> windows::core::Result<ID3D12PipelineState> {
         let code = crate::host::compile(&format!("#define {part}\n{SOURCE}"), entry, s!("cs_5_1"))?;
@@ -526,7 +533,10 @@ fn make(device: &ID3D12Device, buffer: impl Fn(u64) -> Option<ID3D12Resource>) -
             }
             let desc = D3D12_COMPUTE_PIPELINE_STATE_DESC {
                 pRootSignature: std::mem::transmute_copy(&root),
-                CS: D3D12_SHADER_BYTECODE { pShaderBytecode: code.as_ptr().cast(), BytecodeLength: code.len() },
+                CS: D3D12_SHADER_BYTECODE {
+                    pShaderBytecode: code.as_ptr().cast(),
+                    BytecodeLength: code.len(),
+                },
                 ..Default::default()
             };
             device.CreateComputePipelineState(&desc)
@@ -566,7 +576,8 @@ fn pass() -> Option<&'static Pass> {
 }
 
 fn uav_barrier(list: &ID3D12GraphicsCommandList) {
-    let barrier = D3D12_RESOURCE_BARRIER { Type: D3D12_RESOURCE_BARRIER_TYPE_UAV, ..Default::default() };
+    let barrier =
+        D3D12_RESOURCE_BARRIER { Type: D3D12_RESOURCE_BARRIER_TYPE_UAV, ..Default::default() };
     // SAFETY: an open list; the barrier names no resource.
     unsafe { list.ResourceBarrier(&[barrier]) };
 }
@@ -748,7 +759,12 @@ pub(crate) fn after(list: &HostList, role: Role, views: &Views) -> bool {
                 run(&pass.mean, 1, 1, 1);
                 KEPT.store(true, Ordering::Relaxed);
             }
-            Role::Air => run(&pass.air, views.size[0].div_ceil(8), views.size[1].div_ceil(8), views.slices.div_ceil(2)),
+            Role::Air => run(
+                &pass.air,
+                views.size[0].div_ceil(8),
+                views.size[1].div_ceil(8),
+                views.slices.div_ceil(2),
+            ),
             Role::Resolve => {
                 if constant == 0.0 {
                     run(&pass.place, 8, 9, 1);
@@ -795,7 +811,10 @@ mod tests {
 
     #[test]
     fn roles_by_name() {
-        assert_eq!(role(b"..CS_ScreenProbes_TemporalResolve_a911b49c_Wrapped.."), Some(Role::Resolve));
+        assert_eq!(
+            role(b"..CS_ScreenProbes_TemporalResolve_a911b49c_Wrapped.."),
+            Some(Role::Resolve)
+        );
         assert_eq!(role(b"..CS_CacheScreenSpaceRadiance_eed2fc35.."), Some(Role::Radiance));
         assert_eq!(role(b"CS_AccumulateLocalLightInscatteringVolume_7e2f5eef"), Some(Role::Air));
         assert_eq!(role(b"CS_TemporalResolve"), None);

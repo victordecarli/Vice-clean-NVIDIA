@@ -27,11 +27,7 @@ pub(crate) struct Tdr {
 
 impl Tdr {
     pub(crate) fn read() -> Self {
-        Tdr {
-            level: dword("TdrLevel"),
-            delay: dword("TdrDelay"),
-            ddi_delay: dword("TdrDdiDelay"),
-        }
+        Tdr { level: dword("TdrLevel"), delay: dword("TdrDelay"), ddi_delay: dword("TdrDdiDelay") }
     }
 
     /// What a hung GPU would do to the PC with these values, when that is
@@ -103,10 +99,7 @@ mod tests {
     use super::*;
 
     fn level(level: Option<u32>) -> Tdr {
-        Tdr {
-            level,
-            ..Tdr::default()
-        }
+        Tdr { level, ..Tdr::default() }
     }
 
     #[test]
@@ -124,11 +117,7 @@ mod tests {
 
     #[test]
     fn delay_alone_does_not_warn() {
-        let tdr = Tdr {
-            level: Some(3),
-            delay: Some(60),
-            ddi_delay: Some(60),
-        };
+        let tdr = Tdr { level: Some(3), delay: Some(60), ddi_delay: Some(60) };
         assert_eq!(tdr.warning(), None);
     }
 

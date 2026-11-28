@@ -30,6 +30,9 @@ use super::{gpu, pso, snap};
 type Ptr = *mut c_void;
 type Out = *mut *mut c_void;
 
+/// What a closed recording keeps: its bytes, if any, and its state changes.
+pub(super) type Closed = (Option<Arc<Vec<u8>>>, Arc<Vec<Change>>);
+
 /// What to record.
 #[derive(Clone, Debug)]
 pub struct Settings {
@@ -65,12 +68,7 @@ impl Settings {
             .and_then(|v| v.trim().parse().ok())
             .unwrap_or(1);
         let always = std::env::var_os("VICTORY_RECORD_ALWAYS").is_some_and(|v| v == "1");
-        Some(Settings {
-            folder,
-            at,
-            frames: std::cmp::max(frames, 1),
-            always,
-        })
+        Some(Settings { folder, at, frames: std::cmp::max(frames, 1), always })
     }
 }
 
@@ -270,7 +268,7 @@ struct ListInner {
     whole: bool,
     bytes: Vec<u8>,
     changes: Vec<Change>,
-    closed: Option<(Option<Arc<Vec<u8>>>, Arc<Vec<Change>>)>,
+    closed: Option<Closed>,
 }
 
 impl ListState {
@@ -284,7 +282,7 @@ impl ListState {
     /// The recording closed last: its commands if it was recorded whole,
     /// and the states it changes. None if it was not seen closed since its
     /// reset.
-    pub(super) fn closed(&self) -> Option<(Option<Arc<Vec<u8>>>, Arc<Vec<Change>>)> {
+    pub(super) fn closed(&self) -> Option<Closed> {
         lock(&self.inner).closed.clone()
     }
 }
@@ -472,13 +470,7 @@ impl Recorder {
     pub(super) fn problems(&self) -> Vec<String> {
         lock(&self.problems)
             .iter()
-            .map(|(what, n)| {
-                if *n == 1 {
-                    what.clone()
-                } else {
-                    format!("{what} ({n} times)")
-                }
-            })
+            .map(|(what, n)| if *n == 1 { what.clone() } else { format!("{what} ({n} times)") })
             .collect()
     }
 
@@ -513,10 +505,9 @@ impl Recorder {
             return Va::Null {};
         }
         match read(&self.addresses).range(..=address).next_back() {
-            Some((&start, &(size, res))) if address - start < size => Va::At {
-                res,
-                offset: address - start,
-            },
+            Some((&start, &(size, res))) if address - start < size => {
+                Va::At { res, offset: address - start }
+            }
             _ => Va::Unknown { address },
         }
     }
@@ -553,19 +544,15 @@ impl Recorder {
         let id = self.id();
         let seen = match &place {
             Place::Committed { props, .. } => gpu::seen(props),
-            Place::Placed { heap, .. } => lock(&self.heaps)
-                .get(heap)
-                .map_or(gpu::Seen::No, |h| gpu::seen(&h.props)),
+            Place::Placed { heap, .. } => {
+                lock(&self.heaps).get(heap).map_or(gpu::Seen::No, |h| gpu::seen(&h.props))
+            }
             Place::BackBuffer {} => gpu::Seen::No,
         };
         let subs = gpu::subresources(&desc);
         let is_buffer = desc.dimension == D3D12_RESOURCE_DIMENSION_BUFFER.0;
         // SAFETY: a live buffer.
-        let va = if is_buffer {
-            unsafe { object.GetGPUVirtualAddress() }
-        } else {
-            0
-        };
+        let va = if is_buffer { unsafe { object.GetGPUVirtualAddress() } } else { 0 };
         let placed = matches!(place, Place::Placed { .. });
         let late = self.watching.load(Ordering::SeqCst);
         {
@@ -581,30 +568,14 @@ impl Recorder {
         if va != 0 {
             write(&self.addresses).insert(va, (desc.width, id));
         }
-        let res = Arc::new(Res {
-            id,
-            ptr: p as usize,
-            place,
-            desc,
-            made_in,
-            clear,
-            subs,
-            seen,
-            late,
-        });
+        let res =
+            Arc::new(Res { id, ptr: p as usize, place, desc, made_in, clear, subs, seen, late });
         write(&self.resources).insert(id, res);
         self.ids.set(p as usize, id);
         if late {
             lock(&self.held).insert(id, ID3D12Resource::clone(&object));
         }
-        self.tell_gone(
-            &*object,
-            Gone::Resource {
-                id,
-                ptr: p as usize,
-                va,
-            },
-        );
+        self.tell_gone(&*object, Gone::Resource { id, ptr: p as usize, va });
         id
     }
 
@@ -614,7 +585,7 @@ impl Recorder {
                 // The memory goes whatever we hold: letting go of it later
                 // would be a call into what is there then.
                 if let Some(dead) = lock(&self.held).remove(&id) {
-                    std::mem::forget(dead);
+                    let _ = std::mem::ManuallyDrop::new(dead);
                     self.problem(
                         "a resource died as the frame started: its contents may be missing",
                     );
@@ -657,7 +628,7 @@ impl Recorder {
                 .and_then(|o| o.SetPrivateDataInterface(&KEY, &notice));
             if set.is_err() {
                 self.problem("an object's end cannot be followed");
-                std::mem::forget(notice);
+                let _ = std::mem::ManuallyDrop::new(notice);
             }
         }
     }
@@ -712,21 +683,14 @@ impl Recorder {
         }
         let i = codes.all.len() as u32;
         let at = codes.at;
-        let wrote = codes
-            .file
-            .as_mut()
-            .is_some_and(|f| f.write_all(bytes).is_ok());
+        let wrote = codes.file.as_mut().is_some_and(|f| f.write_all(bytes).is_ok());
         if !wrote {
             drop(codes);
             self.problem("shader code could not be written");
             return u32::MAX;
         }
         codes.at += bytes.len() as u64;
-        codes.all.push(wire::Code {
-            at,
-            len: bytes.len() as u64,
-            hash,
-        });
+        codes.all.push(wire::Code { at, len: bytes.len() as u64, hash });
         codes.index.insert(hash, i);
         i
     }
@@ -780,11 +744,8 @@ struct NoticeTable {
     add: unsafe extern "system" fn(Ptr) -> u32,
     release: unsafe extern "system" fn(Ptr) -> u32,
 }
-static NOTICE: NoticeTable = NoticeTable {
-    query: notice_query,
-    add: notice_add,
-    release: notice_release,
-};
+static NOTICE: NoticeTable =
+    NoticeTable { query: notice_query, add: notice_add, release: notice_release };
 
 unsafe extern "system" fn notice_query(this: Ptr, iid: *const GUID, out: Out) -> HRESULT {
     // SAFETY: COM's rules: a valid id and place for the answer.
@@ -801,21 +762,13 @@ unsafe extern "system" fn notice_query(this: Ptr, iid: *const GUID, out: Out) ->
 
 unsafe extern "system" fn notice_add(this: Ptr) -> u32 {
     // SAFETY: one of ours, alive while a reference is.
-    unsafe {
-        (*this.cast::<Notice>())
-            .references
-            .fetch_add(1, Ordering::Relaxed)
-            + 1
-    }
+    unsafe { (*this.cast::<Notice>()).references.fetch_add(1, Ordering::Relaxed) + 1 }
 }
 
 unsafe extern "system" fn notice_release(this: Ptr) -> u32 {
     // SAFETY: as above; the last reference frees the box it was made as.
     unsafe {
-        let left = (*this.cast::<Notice>())
-            .references
-            .fetch_sub(1, Ordering::AcqRel)
-            - 1;
+        let left = (*this.cast::<Notice>()).references.fetch_sub(1, Ordering::AcqRel) - 1;
         if left == 0 {
             let notice = Box::from_raw(this.cast::<Notice>());
             if let Some(r) = recorder() {
@@ -942,19 +895,10 @@ macro_rules! not_recorded {
 
 fn device_table(t: &mut [usize; hook::SLOTS]) {
     set!(t, ID3D12Device_Vtbl.CreateCommandQueue = create_queue);
-    set!(
-        t,
-        ID3D12Device_Vtbl.CreateGraphicsPipelineState = create_graphics
-    );
-    set!(
-        t,
-        ID3D12Device_Vtbl.CreateComputePipelineState = create_compute
-    );
+    set!(t, ID3D12Device_Vtbl.CreateGraphicsPipelineState = create_graphics);
+    set!(t, ID3D12Device_Vtbl.CreateComputePipelineState = create_compute);
     set!(t, ID3D12Device_Vtbl.CreateCommandList = create_list);
-    set!(
-        t,
-        ID3D12Device_Vtbl.CreateDescriptorHeap = create_descriptors
-    );
+    set!(t, ID3D12Device_Vtbl.CreateDescriptorHeap = create_descriptors);
     set!(t, ID3D12Device_Vtbl.CreateRootSignature = create_root);
     set!(t, ID3D12Device_Vtbl.CreateConstantBufferView = create_cbv);
     set!(t, ID3D12Device_Vtbl.CreateShaderResourceView = create_srv);
@@ -963,21 +907,12 @@ fn device_table(t: &mut [usize; hook::SLOTS]) {
     set!(t, ID3D12Device_Vtbl.CreateDepthStencilView = create_dsv);
     set!(t, ID3D12Device_Vtbl.CreateSampler = create_sampler);
     set!(t, ID3D12Device_Vtbl.CopyDescriptors = copy_descriptors);
-    set!(
-        t,
-        ID3D12Device_Vtbl.CopyDescriptorsSimple = copy_descriptors_simple
-    );
-    set!(
-        t,
-        ID3D12Device_Vtbl.CreateCommittedResource = create_committed
-    );
+    set!(t, ID3D12Device_Vtbl.CopyDescriptorsSimple = copy_descriptors_simple);
+    set!(t, ID3D12Device_Vtbl.CreateCommittedResource = create_committed);
     set!(t, ID3D12Device_Vtbl.CreateHeap = create_heap);
     set!(t, ID3D12Device_Vtbl.CreatePlacedResource = create_placed);
     set!(t, ID3D12Device_Vtbl.CreateQueryHeap = create_queries);
-    set!(
-        t,
-        ID3D12Device_Vtbl.CreateCommandSignature = create_signature
-    );
+    set!(t, ID3D12Device_Vtbl.CreateCommandSignature = create_signature);
     set!(t, ID3D12Device1_Vtbl.CreatePipelineLibrary = create_library);
     set!(t, ID3D12Device2_Vtbl.CreatePipelineState = create_stream);
     let _ = device_rest(t);
@@ -1018,14 +953,8 @@ fn queue_rest(t: &mut [usize; hook::SLOTS]) -> &'static [(usize, &'static str)] 
 }
 
 fn library_table(t: &mut [usize; hook::SLOTS]) {
-    set!(
-        t,
-        ID3D12PipelineLibrary_Vtbl.LoadGraphicsPipeline = load_graphics
-    );
-    set!(
-        t,
-        ID3D12PipelineLibrary_Vtbl.LoadComputePipeline = load_compute
-    );
+    set!(t, ID3D12PipelineLibrary_Vtbl.LoadGraphicsPipeline = load_graphics);
+    set!(t, ID3D12PipelineLibrary_Vtbl.LoadComputePipeline = load_compute);
     set!(t, ID3D12PipelineLibrary1_Vtbl.LoadPipeline = load_stream);
 }
 
@@ -1033,153 +962,48 @@ fn list_table(t: &mut [usize; hook::SLOTS]) {
     set!(t, ID3D12GraphicsCommandList_Vtbl.Close = list_close);
     set!(t, ID3D12GraphicsCommandList_Vtbl.Reset = list_reset);
     set!(t, ID3D12GraphicsCommandList_Vtbl.DrawInstanced = draw);
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.DrawIndexedInstanced = draw_indexed
-    );
+    set!(t, ID3D12GraphicsCommandList_Vtbl.DrawIndexedInstanced = draw_indexed);
     set!(t, ID3D12GraphicsCommandList_Vtbl.Dispatch = dispatch);
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.CopyBufferRegion = copy_buffer
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.CopyTextureRegion = copy_texture
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.CopyResource = copy_resource
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.ResolveSubresource = resolve
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.IASetPrimitiveTopology = topology
-    );
+    set!(t, ID3D12GraphicsCommandList_Vtbl.CopyBufferRegion = copy_buffer);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.CopyTextureRegion = copy_texture);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.CopyResource = copy_resource);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.ResolveSubresource = resolve);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.IASetPrimitiveTopology = topology);
     set!(t, ID3D12GraphicsCommandList_Vtbl.RSSetViewports = viewports);
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.RSSetScissorRects = scissors
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.OMSetBlendFactor = blend_factor
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.OMSetStencilRef = stencil_ref
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetPipelineState = set_pipeline
-    );
+    set!(t, ID3D12GraphicsCommandList_Vtbl.RSSetScissorRects = scissors);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.OMSetBlendFactor = blend_factor);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.OMSetStencilRef = stencil_ref);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetPipelineState = set_pipeline);
     set!(t, ID3D12GraphicsCommandList_Vtbl.ResourceBarrier = barrier);
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetDescriptorHeaps = set_heaps
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRootSignature = root_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootSignature = root_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRootDescriptorTable = table_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootDescriptorTable = table_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstant = constant_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstant = constant_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstants = constants_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstants = constants_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRootConstantBufferView = cbv_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootConstantBufferView = cbv_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRootShaderResourceView = srv_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootShaderResourceView = srv_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetComputeRootUnorderedAccessView = uav_compute
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootUnorderedAccessView = uav_graphics
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.IASetIndexBuffer = index_buffer
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.IASetVertexBuffers = vertex_buffers
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.OMSetRenderTargets = targets
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.ClearDepthStencilView = clear_depth
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.ClearRenderTargetView = clear_target
-    );
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetDescriptorHeaps = set_heaps);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRootSignature = root_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootSignature = root_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRootDescriptorTable = table_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootDescriptorTable = table_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstant = constant_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstant = constant_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstants = constants_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstants = constants_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRootConstantBufferView = cbv_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootConstantBufferView = cbv_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRootShaderResourceView = srv_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootShaderResourceView = srv_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetComputeRootUnorderedAccessView = uav_compute);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootUnorderedAccessView = uav_graphics);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.IASetIndexBuffer = index_buffer);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.IASetVertexBuffers = vertex_buffers);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.OMSetRenderTargets = targets);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.ClearDepthStencilView = clear_depth);
+    set!(t, ID3D12GraphicsCommandList_Vtbl.ClearRenderTargetView = clear_target);
     set!(t, ID3D12GraphicsCommandList_Vtbl.DiscardResource = discard);
     set!(t, ID3D12GraphicsCommandList_Vtbl.BeginQuery = begin_query);
     set!(t, ID3D12GraphicsCommandList_Vtbl.EndQuery = end_query);
-    set!(
-        t,
-        ID3D12GraphicsCommandList_Vtbl.ResolveQueryData = resolve_query
-    );
+    set!(t, ID3D12GraphicsCommandList_Vtbl.ResolveQueryData = resolve_query);
     set!(t, ID3D12GraphicsCommandList_Vtbl.ExecuteIndirect = indirect);
-    set!(
-        t,
-        ID3D12GraphicsCommandList1_Vtbl.ResolveSubresourceRegion = resolve_region
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList1_Vtbl.OMSetDepthBounds = depth_bounds
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList2_Vtbl.WriteBufferImmediate = write_immediate
-    );
-    set!(
-        t,
-        ID3D12GraphicsCommandList6_Vtbl.DispatchMesh = dispatch_mesh
-    );
+    set!(t, ID3D12GraphicsCommandList1_Vtbl.ResolveSubresourceRegion = resolve_region);
+    set!(t, ID3D12GraphicsCommandList1_Vtbl.OMSetDepthBounds = depth_bounds);
+    set!(t, ID3D12GraphicsCommandList2_Vtbl.WriteBufferImmediate = write_immediate);
+    set!(t, ID3D12GraphicsCommandList6_Vtbl.DispatchMesh = dispatch_mesh);
     let _ = list_rest(t);
 }
 
@@ -1289,10 +1113,7 @@ unsafe extern "system" fn create_list(
             this, nodes, kind, allocator, pso, iid, out,
         );
         if let Some((r, p)) = made(hr, out) {
-            let state = Arc::new(ListState {
-                kind: kind.0,
-                inner: Mutex::default(),
-            });
+            let state = Arc::new(ListState { kind: kind.0, inner: Mutex::default() });
             // Every interface of it we hook, and the one it is submitted as.
             static ONE: OnceLock<bool> = OnceLock::new();
             let iids = [
@@ -1303,16 +1124,11 @@ unsafe extern "system" fn create_list(
                 ID3D12GraphicsCommandList6::IID,
             ];
             let same = *ONE.get_or_init(|| {
-                iids.iter()
-                    .all(|iid| query(p, iid).is_none_or(|q| q.as_raw() == p))
+                iids.iter().all(|iid| query(p, iid).is_none_or(|q| q.as_raw() == p))
             });
             let mut all = vec![p];
             if !same {
-                all.extend(
-                    iids.iter()
-                        .filter_map(|iid| query(p, iid))
-                        .map(|q| q.as_raw()),
-                );
+                all.extend(iids.iter().filter_map(|iid| query(p, iid)).map(|q| q.as_raw()));
             }
             {
                 let mut inner = lock(&state.inner);
@@ -1324,10 +1140,7 @@ unsafe extern "system" fn create_list(
                 // The state's address is kept for good, as the table is.
                 hook::install(q, Arc::into_raw(state.clone()).cast(), list_table);
                 write(&r.lists).insert(q as usize, state.clone());
-                r.tell_gone(
-                    &*borrow::<ID3D12CommandList>(q),
-                    Gone::List { ptr: q as usize },
-                );
+                r.tell_gone(&*borrow::<ID3D12CommandList>(q), Gone::List { ptr: q as usize });
             }
         }
         hr
@@ -1339,10 +1152,7 @@ fn begin(inner: &mut ListInner, r: &Recorder, pso: Ptr) {
     inner.bytes = Vec::new();
     inner.changes.clear();
     if inner.whole && !pso.is_null() {
-        Cmd::Pipeline {
-            pso: r.object(pso, "a pipeline"),
-        }
-        .put(&mut inner.bytes);
+        Cmd::Pipeline { pso: r.object(pso, "a pipeline") }.put(&mut inner.bytes);
     }
 }
 
@@ -1483,10 +1293,7 @@ unsafe extern "system" fn create_root(
             own!(this, ID3D12Device_Vtbl.CreateRootSignature)(this, nodes, blob, size, iid, out);
         if let Some((r, p)) = made(hr, out) {
             // D3D12 may answer with an object it made before.
-            let known = r
-                .ids
-                .get(p as usize)
-                .filter(|id| lock(&r.roots).contains_key(id));
+            let known = r.ids.get(p as usize).filter(|id| lock(&r.roots).contains_key(id));
             let bytes = std::slice::from_raw_parts(blob.cast::<u8>(), size).to_vec();
             let id = known.unwrap_or_else(|| r.id());
             lock(&r.roots).insert(id, Arc::new(bytes));
@@ -1523,26 +1330,12 @@ unsafe extern "system" fn create_signature(
                 D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW,
                 D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW,
             ];
-            if args
-                .iter()
-                .any(|a| addresses.iter().any(|t| t.0 as u32 == a[0]))
-            {
+            if args.iter().any(|a| addresses.iter().any(|t| t.0 as u32 == a[0])) {
                 r.problem("a command signature with GPU addresses among its arguments: a replay reads the recorded addresses");
             }
-            let root = if root.is_null() {
-                NONE
-            } else {
-                r.object(root, "a root signature")
-            };
-            lock(&r.signatures).insert(
-                id,
-                wire::Signature {
-                    id,
-                    stride: d.ByteStride,
-                    args,
-                    root,
-                },
-            );
+            let root = if root.is_null() { NONE } else { r.object(root, "a root signature") };
+            lock(&r.signatures)
+                .insert(id, wire::Signature { id, stride: d.ByteStride, args, root });
             r.ids.set(p as usize, id);
         }
         hr
@@ -1560,14 +1353,8 @@ unsafe extern "system" fn create_queries(
         let hr = own!(this, ID3D12Device_Vtbl.CreateQueryHeap)(this, desc, iid, out);
         if let Some((r, p)) = made(hr, out) {
             let id = r.id();
-            lock(&r.queries).insert(
-                id,
-                wire::QueryHeap {
-                    id,
-                    kind: (*desc).Type.0,
-                    count: (*desc).Count,
-                },
-            );
+            lock(&r.queries)
+                .insert(id, wire::QueryHeap { id, kind: (*desc).Type.0, count: (*desc).Count });
             r.ids.set(p as usize, id);
         }
         hr
@@ -1588,23 +1375,13 @@ unsafe extern "system" fn create_descriptors(
             let d = &*desc;
             let visible = d.Flags.0 & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE.0 != 0;
             let cpu = heap.GetCPUDescriptorHandleForHeapStart().ptr;
-            let gpu = if visible {
-                heap.GetGPUDescriptorHandleForHeapStart().ptr
-            } else {
-                0
-            };
+            let gpu = if visible { heap.GetGPUDescriptorHandleForHeapStart().ptr } else { 0 };
             let step = own!(this, ID3D12Device_Vtbl.GetDescriptorHandleIncrementSize)(this, d.Type)
                 as usize;
             let id = r.id();
             write(&r.descriptors).add(Arc::new(Heap::new(id, d, cpu, gpu, step.max(1))));
             r.ids.set(p as usize, id);
-            r.tell_gone(
-                &*heap,
-                Gone::Heap {
-                    id,
-                    ptr: p as usize,
-                },
-            );
+            r.tell_gone(&*heap, Gone::Heap { id, ptr: p as usize });
         }
         hr
     }
@@ -1644,7 +1421,10 @@ unsafe fn clear_of(clear: *const D3D12_CLEAR_VALUE) -> Option<[u32; 5]> {
     (!clear.is_null()).then(|| unsafe { clear.cast::<[u32; 5]>().read() })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn create_committed(
     this: Ptr,
     props: *const D3D12_HEAP_PROPERTIES,
@@ -1661,17 +1441,17 @@ unsafe extern "system" fn create_committed(
             this, props, flags, desc, state, clear, iid, out,
         );
         if let Some((r, p)) = made(hr, out) {
-            let place = Place::Committed {
-                props: gpu::from_props(&*props),
-                flags: flags.0,
-            };
+            let place = Place::Committed { props: gpu::from_props(&*props), flags: flags.0 };
             r.add(p, place, state.0, clear_of(clear));
         }
         hr
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn create_placed(
     this: Ptr,
     heap: Ptr,
@@ -1837,10 +1617,7 @@ unsafe extern "system" fn create_sampler(
     unsafe {
         own!(this, ID3D12Device_Vtbl.CreateSampler)(this, desc, at);
         if let Some(r) = recorder().filter(|_| !ours()) {
-            r.set_view(
-                at.ptr,
-                &Slot::new(slot::SAMPLER, NONE, NONE, desc.cast(), 52),
-            );
+            r.set_view(at.ptr, &Slot::new(slot::SAMPLER, NONE, NONE, desc.cast(), 52));
         }
     }
 }
@@ -1861,7 +1638,10 @@ unsafe extern "system" fn copy_descriptors_simple(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn copy_descriptors(
     this: Ptr,
     n_to: u32,
@@ -1884,11 +1664,7 @@ unsafe extern "system" fn copy_descriptors(
         let step =
             own!(this, ID3D12Device_Vtbl.GetDescriptorHandleIncrementSize)(this, kind) as usize;
         let size = |sizes: *const u32, i: u32| {
-            if sizes.is_null() {
-                1
-            } else {
-                *sizes.add(i as usize)
-            }
+            if sizes.is_null() { 1 } else { *sizes.add(i as usize) }
         };
         let (mut i, mut j, mut done_to, mut done_from) = (0, 0, 0, 0);
         while i < n_to && j < n_from {
@@ -1997,12 +1773,7 @@ unsafe extern "system" fn draw(
             first,
             first_instance,
         );
-        note(this, |_| Cmd::Draw {
-            vertices,
-            instances,
-            first,
-            first_instance,
-        });
+        note(this, |_| Cmd::Draw { vertices, instances, first, first_instance });
     }
 }
 
@@ -2024,13 +1795,7 @@ unsafe extern "system" fn draw_indexed(
             base,
             first_instance,
         );
-        note(this, |_| Cmd::DrawIndexed {
-            indices,
-            instances,
-            first,
-            base,
-            first_instance,
-        });
+        note(this, |_| Cmd::DrawIndexed { indices, instances, first, base, first_instance });
     }
 }
 
@@ -2078,10 +1843,7 @@ unsafe fn location(r: &Recorder, l: &D3D12_TEXTURE_COPY_LOCATION) -> Loc {
     unsafe {
         let res = r.resource(std::mem::transmute_copy::<_, Ptr>(&l.pResource));
         if l.Type == D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX {
-            return Loc::Sub {
-                res,
-                sub: l.Anonymous.SubresourceIndex,
-            };
+            return Loc::Sub { res, sub: l.Anonymous.SubresourceIndex };
         }
         let p = l.Anonymous.PlacedFootprint;
         let f = p.Footprint;
@@ -2124,9 +1886,7 @@ unsafe extern "system" fn copy_texture(
             dst: location(r, &*dst),
             at: [x, y, z],
             src: location(r, &*src),
-            part: part
-                .as_ref()
-                .map(|b| [b.left, b.top, b.front, b.right, b.bottom, b.back]),
+            part: part.as_ref().map(|b| [b.left, b.top, b.front, b.right, b.bottom, b.back]),
         });
     }
 }
@@ -2135,10 +1895,7 @@ unsafe extern "system" fn copy_resource(this: Ptr, dst: Ptr, src: Ptr) {
     // SAFETY: as above.
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.CopyResource)(this, dst, src);
-        note_change(this, |r| Cmd::CopyResource {
-            dst: r.resource(dst),
-            src: r.resource(src),
-        });
+        note_change(this, |r| Cmd::CopyResource { dst: r.resource(dst), src: r.resource(src) });
     }
 }
 
@@ -2165,7 +1922,10 @@ unsafe extern "system" fn resolve(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn resolve_region(
     this: Ptr,
     dst: Ptr,
@@ -2180,10 +1940,9 @@ unsafe extern "system" fn resolve_region(
 ) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList1_Vtbl.ResolveSubresourceRegion
-        )(this, dst, dst_sub, x, y, src, src_sub, part, format, mode);
+        own!(this, ID3D12GraphicsCommandList1_Vtbl.ResolveSubresourceRegion)(
+            this, dst, dst_sub, x, y, src, src_sub, part, format, mode,
+        );
         note(this, |r| Cmd::ResolveRegion {
             dst: r.resource(dst),
             dst_sub,
@@ -2206,10 +1965,7 @@ unsafe fn rects(n: u32, all: *const RECT) -> Vec<[i32; 4]> {
         return Vec::new();
     }
     // SAFETY: `n` rectangles.
-    unsafe { std::slice::from_raw_parts(all, n as usize) }
-        .iter()
-        .map(rect)
-        .collect()
+    unsafe { std::slice::from_raw_parts(all, n as usize) }.iter().map(rect).collect()
 }
 
 unsafe extern "system" fn topology(this: Ptr, kind: D3D_PRIMITIVE_TOPOLOGY) {
@@ -2225,9 +1981,7 @@ unsafe extern "system" fn viewports(this: Ptr, n: u32, all: *const D3D12_VIEWPOR
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.RSSetViewports)(this, n, all);
         note(this, |_| Cmd::Viewports {
-            all: (0..n as usize)
-                .map(|i| all.add(i).cast::<[f32; 6]>().read())
-                .collect(),
+            all: (0..n as usize).map(|i| all.add(i).cast::<[f32; 6]>().read()).collect(),
         });
     }
 }
@@ -2244,9 +1998,7 @@ unsafe extern "system" fn blend_factor(this: Ptr, factor: *const f32) {
     // SAFETY: as above.
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.OMSetBlendFactor)(this, factor);
-        note(this, |_| Cmd::BlendFactor {
-            factor: factor.cast::<[f32; 4]>().as_ref().copied(),
-        });
+        note(this, |_| Cmd::BlendFactor { factor: factor.cast::<[f32; 4]>().as_ref().copied() });
     }
 }
 
@@ -2270,9 +2022,7 @@ unsafe extern "system" fn set_pipeline(this: Ptr, pso: Ptr) {
     // SAFETY: as above.
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.SetPipelineState)(this, pso);
-        note(this, |r| Cmd::Pipeline {
-            pso: r.object(pso, "a pipeline"),
-        });
+        note(this, |r| Cmd::Pipeline { pso: r.object(pso, "a pipeline") });
     }
 }
 
@@ -2322,9 +2072,7 @@ unsafe extern "system" fn set_heaps(this: Ptr, n: u32, all: *const Ptr) {
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.SetDescriptorHeaps)(this, n, all);
         note(this, |r| Cmd::Heaps {
-            heaps: (0..n as usize)
-                .map(|i| r.object(*all.add(i), "a descriptor heap"))
-                .collect(),
+            heaps: (0..n as usize).map(|i| r.object(*all.add(i), "a descriptor heap")).collect(),
         });
     }
 }
@@ -2343,10 +2091,7 @@ unsafe extern "system" fn root_compute(this: Ptr, root: Ptr) {
 unsafe extern "system" fn root_graphics(this: Ptr, root: Ptr) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootSignature
-        )(this, root);
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootSignature)(this, root);
         note(this, |r| Cmd::RootSignature {
             graphics: true,
             root: r.object(root, "a root signature"),
@@ -2362,21 +2107,13 @@ fn table(r: &Recorder, graphics: bool, param: u32, at: u64) -> Cmd {
     if heap == NONE {
         r.problem("a descriptor table in no heap seen made");
     }
-    Cmd::Table {
-        graphics,
-        param,
-        heap,
-        slot,
-    }
+    Cmd::Table { graphics, param, heap, slot }
 }
 
 unsafe extern "system" fn table_compute(this: Ptr, param: u32, at: D3D12_GPU_DESCRIPTOR_HANDLE) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetComputeRootDescriptorTable
-        )(this, param, at);
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetComputeRootDescriptorTable)(this, param, at);
         note(this, |r| table(r, false, param, at.ptr));
     }
 }
@@ -2384,10 +2121,7 @@ unsafe extern "system" fn table_compute(this: Ptr, param: u32, at: D3D12_GPU_DES
 unsafe extern "system" fn table_graphics(this: Ptr, param: u32, at: D3D12_GPU_DESCRIPTOR_HANDLE) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootDescriptorTable
-        )(this, param, at);
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRootDescriptorTable)(this, param, at);
         note(this, |r| table(r, true, param, at.ptr));
     }
 }
@@ -2395,40 +2129,26 @@ unsafe extern "system" fn table_graphics(this: Ptr, param: u32, at: D3D12_GPU_DE
 unsafe extern "system" fn constant_compute(this: Ptr, param: u32, value: u32, offset: u32) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstant
-        )(this, param, value, offset);
-        note(this, |_| Cmd::Constants {
-            graphics: false,
-            param,
-            offset,
-            values: vec![value],
-        });
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstant)(
+            this, param, value, offset,
+        );
+        note(this, |_| Cmd::Constants { graphics: false, param, offset, values: vec![value] });
     }
 }
 
 unsafe extern "system" fn constant_graphics(this: Ptr, param: u32, value: u32, offset: u32) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstant
-        )(this, param, value, offset);
-        note(this, |_| Cmd::Constants {
-            graphics: true,
-            param,
-            offset,
-            values: vec![value],
-        });
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstant)(
+            this, param, value, offset,
+        );
+        note(this, |_| Cmd::Constants { graphics: true, param, offset, values: vec![value] });
     }
 }
 
 unsafe fn values(n: u32, data: *const c_void) -> Vec<u32> {
     // SAFETY: `n` values, of any alignment.
-    (0..n as usize)
-        .map(|i| unsafe { data.cast::<u32>().add(i).read_unaligned() })
-        .collect()
+    (0..n as usize).map(|i| unsafe { data.cast::<u32>().add(i).read_unaligned() }).collect()
 }
 
 unsafe extern "system" fn constants_compute(
@@ -2440,16 +2160,10 @@ unsafe extern "system" fn constants_compute(
 ) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstants
-        )(this, param, n, data, offset);
-        note(this, |_| Cmd::Constants {
-            graphics: false,
-            param,
-            offset,
-            values: values(n, data),
-        });
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetComputeRoot32BitConstants)(
+            this, param, n, data, offset,
+        );
+        note(this, |_| Cmd::Constants { graphics: false, param, offset, values: values(n, data) });
     }
 }
 
@@ -2462,16 +2176,10 @@ unsafe extern "system" fn constants_graphics(
 ) {
     // SAFETY: as above.
     unsafe {
-        own!(
-            this,
-            ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstants
-        )(this, param, n, data, offset);
-        note(this, |_| Cmd::Constants {
-            graphics: true,
-            param,
-            offset,
-            values: values(n, data),
-        });
+        own!(this, ID3D12GraphicsCommandList_Vtbl.SetGraphicsRoot32BitConstants)(
+            this, param, n, data, offset,
+        );
+        note(this, |_| Cmd::Constants { graphics: true, param, offset, values: values(n, data) });
     }
 }
 
@@ -2509,9 +2217,7 @@ unsafe extern "system" fn index_buffer(this: Ptr, view: *const D3D12_INDEX_BUFFE
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.IASetIndexBuffer)(this, view);
         note(this, |r| Cmd::IndexBuffer {
-            view: view
-                .as_ref()
-                .map(|v| (address(r, v.BufferLocation), v.SizeInBytes, v.Format.0)),
+            view: view.as_ref().map(|v| (address(r, v.BufferLocation), v.SizeInBytes, v.Format.0)),
         });
     }
 }
@@ -2557,19 +2263,18 @@ unsafe extern "system" fn targets(
                         return r.view((*colors.add(i)).ptr);
                     }
                     let all = read(&r.descriptors);
-                    all.cpu((*colors).ptr)
-                        .map_or(Slot::EMPTY, |(h, first)| h.get(first + i as u32))
+                    all.cpu((*colors).ptr).map_or(Slot::EMPTY, |(h, first)| h.get(first + i as u32))
                 })
                 .collect();
-            Cmd::Targets {
-                colors,
-                depth: depth.as_ref().map(|d| r.view(d.ptr)),
-            }
+            Cmd::Targets { colors, depth: depth.as_ref().map(|d| r.view(d.ptr)) }
         });
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the method's own arguments, fixed by the D3D12.X table it sits in"
+)]
 unsafe extern "system" fn clear_depth(
     this: Ptr,
     view: D3D12_CPU_DESCRIPTOR_HANDLE,
@@ -2618,12 +2323,8 @@ unsafe extern "system" fn discard(this: Ptr, res: Ptr, region: *const D3D12_DISC
         own!(this, ID3D12GraphicsCommandList_Vtbl.DiscardResource)(this, res, region);
         note(this, |r| Cmd::Discard {
             res: r.resource(res),
-            rects: region
-                .as_ref()
-                .map_or(Vec::new(), |d| rects(d.NumRects, d.pRects)),
-            subs: region
-                .as_ref()
-                .map(|d| [d.FirstSubresource, d.NumSubresources]),
+            rects: region.as_ref().map_or(Vec::new(), |d| rects(d.NumRects, d.pRects)),
+            subs: region.as_ref().map(|d| [d.FirstSubresource, d.NumSubresources]),
         });
     }
 }
@@ -2644,11 +2345,7 @@ unsafe extern "system" fn end_query(this: Ptr, heap: Ptr, kind: D3D12_QUERY_TYPE
     // SAFETY: as above.
     unsafe {
         own!(this, ID3D12GraphicsCommandList_Vtbl.EndQuery)(this, heap, kind, index);
-        note(this, |r| Cmd::EndQuery {
-            heap: r.object(heap, "a query heap"),
-            kind: kind.0,
-            index,
-        });
+        note(this, |r| Cmd::EndQuery { heap: r.object(heap, "a query heap"), kind: kind.0, index });
     }
 }
 
@@ -2715,11 +2412,7 @@ unsafe extern "system" fn write_immediate(
             all: (0..n as usize)
                 .map(|i| {
                     let p = all.add(i).read();
-                    let mode = if modes.is_null() {
-                        0
-                    } else {
-                        modes.add(i).read().0
-                    };
+                    let mode = if modes.is_null() { 0 } else { modes.add(i).read().0 };
                     (address(r, p.Dest), p.Value, mode)
                 })
                 .collect(),
@@ -2769,11 +2462,7 @@ mod tests {
         all.remove(2);
         assert_eq!(at(&all, 0x2000), None);
         let h = heap(4, 0, 0, 2);
-        let s = Slot {
-            kind: slot::SRV,
-            res: 5,
-            ..Slot::EMPTY
-        };
+        let s = Slot { kind: slot::SRV, res: 5, ..Slot::EMPTY };
         h.set(1, &s);
         h.set(2, &s);
         assert_eq!(h.all(), [Slot::EMPTY, s]);

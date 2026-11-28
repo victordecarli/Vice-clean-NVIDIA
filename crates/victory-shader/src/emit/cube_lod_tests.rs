@@ -87,10 +87,7 @@ fn guest_cube_gradient_selects_mip_by_footprint() {
             range(ResourceType::Uav, 8, 4, 0, 0),
             range(ResourceType::Sampler, 0, 4, 1, 2),
         ],
-        io: StageIo::Cs(ComputeIo {
-            rsrc2: 3 << 1,
-            threads: [1, 1, 1],
-        }),
+        io: StageIo::Cs(ComputeIo { rsrc2: 3 << 1, threads: [1, 1, 1] }),
         code: words.into_iter().flat_map(u32::to_le_bytes).collect(),
     };
     let (shader, _) = build_compute_shader(&native).unwrap();
@@ -119,10 +116,7 @@ fn guest_cube_gradient_selects_mip_by_footprint() {
                 &root,
                 &pso,
                 &Dispatch {
-                    roots: vec![(
-                        0,
-                        Root::Constants(vec![0; shader.user_data_dwords() as usize]),
-                    )],
+                    roots: vec![(0, Root::Constants(vec![0; shader.user_data_dwords() as usize]))],
                     views: &[
                         View::Cube(SIZE as u32, MIPS, &texels),
                         View::RawUav(cases.len() as u32),

@@ -40,7 +40,8 @@ pub(super) type Piece = (u64, u32);
 
 /// Since the last frame-rate line: pieces fetched and hashed, those found
 /// suspect, and those fetched because an earlier fetch was.
-pub(super) static STATS: [std::sync::atomic::AtomicU64; 3] = [const { std::sync::atomic::AtomicU64::new(0) }; 3];
+pub(super) static STATS: [std::sync::atomic::AtomicU64; 3] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 3];
 
 /// The pieces whose last fetch was not what a flight ended with.
 #[derive(Default)]
@@ -92,9 +93,14 @@ impl Check {
     /// For `landed`, parts of pieces that `plans` may have written, whose
     /// compares' results are in `differs`: the parts are given their places
     /// in the pieces that come down.
-    pub(super) fn new<'a>(plans: impl Iterator<Item = &'a CardPlan>, differs: &[u32], landed: &mut [Landed]) -> Check {
+    pub(super) fn new<'a>(
+        plans: impl Iterator<Item = &'a CardPlan>,
+        differs: &[u32],
+        landed: &mut [Landed],
+    ) -> Check {
         let mut index: HashMap<Piece, usize> = HashMap::new();
-        let (mut copies, mut of, mut within, mut total) = (Vec::new(), Vec::new(), Vec::new(), 0u64);
+        let (mut copies, mut of, mut within, mut total) =
+            (Vec::new(), Vec::new(), Vec::new(), 0u64);
         for (shadow, lo, _, at) in landed {
             let number = shadow.card_piece_of(*lo);
             let piece = (shadow.id(), number);
@@ -138,7 +144,8 @@ impl Check {
         };
         let (_, from, to, at) = &self.copies[i];
         // SAFETY: the caller's.
-        let bytes = unsafe { std::slice::from_raw_parts((data + *at as usize) as *const u8, to - from) };
+        let bytes =
+            unsafe { std::slice::from_raw_parts((data + *at as usize) as *const u8, to - from) };
         self.found[i].store(if self::hash(bytes) == hash { 1 } else { 2 }, Ordering::Relaxed);
     }
 
@@ -198,8 +205,10 @@ fn seeds() -> [[u32; 4]; 64] {
 }
 
 fn tail(parts: &mut [[u32; 4]; 64], bytes: &[u8]) {
-    for (thread, chunk) in bytes.chunks_exact(16).enumerate() {
-        let with = std::array::from_fn(|i| u32::from_le_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]]));
+    for (thread, chunk) in bytes.as_chunks::<16>().0.iter().enumerate() {
+        let with = std::array::from_fn(|i| {
+            u32::from_le_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]])
+        });
         step(&mut parts[thread], with);
     }
 }
@@ -217,10 +226,17 @@ fn hash_plain(bytes: &[u8]) -> u32 {
 fn hash_avx2(bytes: &[u8]) -> u32 {
     use std::arch::x86_64::*;
     let mut parts = seeds();
-    let rows = bytes.chunks_exact(1024);
-    let rest = rows.remainder();
+    let (rows, rest) = bytes.as_chunks::<1024>();
+    let rows = rows.iter();
     let mul = _mm256_setr_epi32(
-        MUL[0] as i32, MUL[1] as i32, MUL[2] as i32, MUL[3] as i32, MUL[0] as i32, MUL[1] as i32, MUL[2] as i32, MUL[3] as i32,
+        MUL[0] as i32,
+        MUL[1] as i32,
+        MUL[2] as i32,
+        MUL[3] as i32,
+        MUL[0] as i32,
+        MUL[1] as i32,
+        MUL[2] as i32,
+        MUL[3] as i32,
     );
     let state = parts.as_mut_ptr().cast::<__m256i>();
     for row in rows {
@@ -229,11 +245,17 @@ fn hash_avx2(bytes: &[u8]) -> u32 {
             // SAFETY: two threads' hashes of 16 bytes each, and their 32 of
             // the row's 1,024 bytes.
             unsafe {
-                let h = _mm256_xor_si256(_mm256_loadu_si256(state.add(k)), _mm256_loadu_si256(from.add(k)));
+                let h = _mm256_xor_si256(
+                    _mm256_loadu_si256(state.add(k)),
+                    _mm256_loadu_si256(from.add(k)),
+                );
                 let x = _mm256_mullo_epi32(h, mul);
                 // y, z, w, x of each.
                 let turned = _mm256_shuffle_epi32::<0b00_11_10_01>(x);
-                _mm256_storeu_si256(state.add(k), _mm256_xor_si256(turned, _mm256_srli_epi32::<15>(x)));
+                _mm256_storeu_si256(
+                    state.add(k),
+                    _mm256_xor_si256(turned, _mm256_srli_epi32::<15>(x)),
+                );
             }
         }
     }
@@ -247,7 +269,8 @@ mod tests {
 
     #[test]
     fn the_wide_hash_is_the_plain_one() {
-        let bytes: Vec<u8> = (0..65_536u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8).collect();
+        let bytes: Vec<u8> =
+            (0..65_536u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8).collect();
         for n in [0usize, 16, 32, 1008, 1024, 1040, 5000 & !15, 65_536] {
             assert_eq!(hash(&bytes[..n]), hash_plain(&bytes[..n]), "{n} bytes");
         }
@@ -290,7 +313,11 @@ mod tests {
     fn a_piece_caught_in_between_is_fetched_again() {
         let count: &[u32] = &[0, 3, 5];
         // The first is fetched while the second has cleared it.
-        assert_eq!(landed(&[count, count], &[(1, 0), (1, 2)], false), (0, 1), "the CPU's side keeps what was in between");
+        assert_eq!(
+            landed(&[count, count], &[(1, 0), (1, 2)], false),
+            (0, 1),
+            "the CPU's side keeps what was in between"
+        );
         assert_eq!(landed(&[count, count], &[(1, 0), (1, 2)], true), (5, 2));
         // And again, while the third was at it; the fourth finds it whole.
         let four = [count; 4];
@@ -308,7 +335,9 @@ mod tests {
     fn hash_costs() {
         let (bytes, held) = (vec![0x5Au8; 96 << 20], vec![0x5Au8; 96 << 20]);
         let pieces = || bytes.chunks(64 << 10).zip(held.chunks(64 << 10));
-        let compare = |a: &[u8], b: &[u8]| a.chunks(4096).zip(b.chunks(4096)).filter(|(a, b)| a != b).count() as u32;
+        let compare = |a: &[u8], b: &[u8]| {
+            a.chunks(4096).zip(b.chunks(4096)).filter(|(a, b)| a != b).count() as u32
+        };
         for _ in 0..5 {
             let mut all = 0u32;
             let mut time = |f: &dyn Fn(&[u8], &[u8]) -> u32| {
@@ -318,12 +347,11 @@ mod tests {
                 }
                 t.elapsed().as_secs_f64() * 1e3
             };
-            let (hashed, compared, both) = (
-                time(&|a, _| hash(a)),
-                time(&compare),
-                time(&|a, b| hash(a) ^ compare(a, b)),
+            let (hashed, compared, both) =
+                (time(&|a, _| hash(a)), time(&compare), time(&|a, b| hash(a) ^ compare(a, b)));
+            println!(
+                "96 MB: hashed {hashed:.2} ms, compared {compared:.2} ms, both {both:.2} ms ({all:#x})"
             );
-            println!("96 MB: hashed {hashed:.2} ms, compared {compared:.2} ms, both {both:.2} ms ({all:#x})");
         }
     }
 }

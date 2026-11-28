@@ -69,10 +69,7 @@ fn native(cross: bool, fi: bool, bc: bool, alias: bool, wave64: bool) -> NativeP
             user_data: 4,
             slot: 1,
         }],
-        io: StageIo::Cs(ComputeIo {
-            rsrc2: 5 << 1,
-            threads: [THREADS, 1, 1],
-        }),
+        io: StageIo::Cs(ComputeIo { rsrc2: 5 << 1, threads: [THREADS, 1, 1] }),
         code: words.iter().flat_map(|w| w.to_le_bytes()).collect(),
     }
 }
@@ -121,11 +118,8 @@ fn lowered(native: &NativeProgram, host_wave: u32) -> Result<HostShader, ShaderE
 #[test]
 fn permlane_fetch_inactive_outside_the_host_branch_is_rejected() {
     let mut native = native(true, true, false, false, false);
-    let mut words: Vec<u32> = native
-        .code
-        .chunks_exact(4)
-        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
-        .collect();
+    let mut words: Vec<u32> =
+        native.code.as_chunks::<4>().0.iter().map(|w| u32::from_le_bytes(*w)).collect();
     // Skip the permutation when EXEC is empty. Structurisation turns this
     // into a host lane branch, so FI cannot read lanes that took the skip.
     words.insert(8, 0xBF88_0002); // s_cbranch_execz +2 (to the EXEC restore)
@@ -141,9 +135,7 @@ fn permlane_fetch_inactive_outside_the_host_branch_is_rejected() {
 
 #[test]
 fn permlane_rows_and_inactive_sources() {
-    let _one = super::valu_tests::ONE_AT_A_TIME
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let mut ran = 0;
     for (backend, warp) in [("hardware", false), ("WARP", true)] {
         let Ok(host) = Host::new(warp) else {
@@ -162,10 +154,7 @@ fn permlane_rows_and_inactive_sources() {
                 )
                 .expect("wave capabilities");
         }
-        eprintln!(
-            "{backend} waves {}..{}",
-            options.WaveLaneCountMin, options.WaveLaneCountMax
-        );
+        eprintln!("{backend} waves {}..{}", options.WaveLaneCountMin, options.WaveLaneCountMax);
         if options.WaveLaneCountMax < 32 {
             eprintln!("{backend} cannot hold two 16-lane rows; GPU checks skipped");
             continue;

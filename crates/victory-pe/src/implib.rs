@@ -180,18 +180,12 @@ mod tests {
                     dll: "kernel32.dll".into(),
                     // `object` does not expose the hint of a short-format
                     // import, so it is always 0 here.
-                    export: ImportSymbol::Name {
-                        hint: 0,
-                        name: "ExitProcess".into()
-                    },
+                    export: ImportSymbol::Name { hint: 0, name: "ExitProcess".into() },
                     kind: LibImportKind::Code,
                 },
                 LibImport {
                     dll: "version.dll".into(),
-                    export: ImportSymbol::Name {
-                        hint: 0,
-                        name: "GetFileVersionInfoSizeW".into()
-                    },
+                    export: ImportSymbol::Name { hint: 0, name: "GetFileVersionInfoSizeW".into() },
                     kind: LibImportKind::Code,
                 },
             ]
@@ -202,14 +196,7 @@ mod tests {
     fn parses_imports_by_ordinal() {
         let lib = archive(vec![(
             "d3d12.dll/",
-            import_object(
-                import_type::CODE,
-                name_type::ORDINAL,
-                42,
-                "Alpha",
-                "d3d12.dll",
-                None,
-            ),
+            import_object(import_type::CODE, name_type::ORDINAL, 42, "Alpha", "d3d12.dll", None),
         )]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(parsed.other_members, 0);
@@ -224,25 +211,11 @@ mod tests {
         let lib = archive(vec![
             (
                 "a.dll/",
-                import_object(
-                    import_type::DATA,
-                    name_type::NAME,
-                    0,
-                    "tls_index",
-                    "a.dll",
-                    None,
-                ),
+                import_object(import_type::DATA, name_type::NAME, 0, "tls_index", "a.dll", None),
             ),
             (
                 "b.dll/",
-                import_object(
-                    import_type::CONST,
-                    name_type::NAME,
-                    0,
-                    "limit",
-                    "b.dll",
-                    None,
-                ),
+                import_object(import_type::CONST, name_type::NAME, 0, "limit", "b.dll", None),
             ),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
@@ -269,13 +242,7 @@ mod tests {
         )]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(parsed.other_members, 0);
-        assert_eq!(
-            parsed.imports[0].export,
-            ImportSymbol::Name {
-                hint: 0,
-                name: "Remote".into()
-            }
-        );
+        assert_eq!(parsed.imports[0].export, ImportSymbol::Name { hint: 0, name: "Remote".into() });
     }
 
     #[test]
@@ -319,11 +286,7 @@ mod tests {
             ),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
-        let names: Vec<_> = parsed
-            .imports
-            .iter()
-            .map(|i| i.export.to_string())
-            .collect();
+        let names: Vec<_> = parsed.imports.iter().map(|i| i.export.to_string()).collect();
         assert_eq!(parsed.other_members, 0);
         assert_eq!(names, ["Remap", "Thing", "plain"]);
     }
@@ -340,10 +303,8 @@ mod tests {
                 None,
             )
         };
-        let lib = archive(vec![
-            ("kernel32.dll/", exit_process()),
-            ("kernel32.dll/", exit_process()),
-        ]);
+        let lib =
+            archive(vec![("kernel32.dll/", exit_process()), ("kernel32.dll/", exit_process())]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(parsed.imports.len(), 1);
         assert_eq!(parsed.other_members, 0);
@@ -355,25 +316,11 @@ mod tests {
         let lib = archive(vec![
             (
                 "a.dll/",
-                import_object(
-                    import_type::CODE,
-                    name_type::NAME,
-                    0,
-                    "table",
-                    "a.dll",
-                    None,
-                ),
+                import_object(import_type::CODE, name_type::NAME, 0, "table", "a.dll", None),
             ),
             (
                 "a.dll/",
-                import_object(
-                    import_type::DATA,
-                    name_type::NAME,
-                    0,
-                    "table",
-                    "a.dll",
-                    None,
-                ),
+                import_object(import_type::DATA, name_type::NAME, 0, "table", "a.dll", None),
             ),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
@@ -386,65 +333,26 @@ mod tests {
         let lib = archive(vec![
             (
                 "b.dll/",
-                import_object(
-                    import_type::CODE,
-                    name_type::ORDINAL,
-                    1,
-                    "second",
-                    "b.dll",
-                    None,
-                ),
+                import_object(import_type::CODE, name_type::ORDINAL, 1, "second", "b.dll", None),
+            ),
+            ("a.dll/", import_object(import_type::CODE, name_type::NAME, 0, "zeta", "a.dll", None)),
+            (
+                "a.dll/",
+                import_object(import_type::CODE, name_type::NAME, 0, "alpha", "a.dll", None),
             ),
             (
                 "a.dll/",
-                import_object(import_type::CODE, name_type::NAME, 0, "zeta", "a.dll", None),
-            ),
-            (
-                "a.dll/",
-                import_object(
-                    import_type::CODE,
-                    name_type::NAME,
-                    0,
-                    "alpha",
-                    "a.dll",
-                    None,
-                ),
-            ),
-            (
-                "a.dll/",
-                import_object(
-                    import_type::CODE,
-                    name_type::ORDINAL,
-                    9,
-                    "first",
-                    "a.dll",
-                    None,
-                ),
+                import_object(import_type::CODE, name_type::ORDINAL, 9, "first", "a.dll", None),
             ),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
-        let pairs: Vec<_> = parsed
-            .imports
-            .iter()
-            .map(|i| (i.dll.as_str(), i.export.clone()))
-            .collect();
+        let pairs: Vec<_> =
+            parsed.imports.iter().map(|i| (i.dll.as_str(), i.export.clone())).collect();
         assert_eq!(
             pairs,
             [
-                (
-                    "a.dll",
-                    ImportSymbol::Name {
-                        hint: 0,
-                        name: "alpha".into()
-                    }
-                ),
-                (
-                    "a.dll",
-                    ImportSymbol::Name {
-                        hint: 0,
-                        name: "zeta".into()
-                    }
-                ),
+                ("a.dll", ImportSymbol::Name { hint: 0, name: "alpha".into() }),
+                ("a.dll", ImportSymbol::Name { hint: 0, name: "zeta".into() }),
                 ("a.dll", ImportSymbol::Ordinal(9)),
                 ("b.dll", ImportSymbol::Ordinal(1)),
             ]
@@ -508,34 +416,19 @@ mod tests {
             }),
             // A long-format descriptor: no short-format `Sig2`.
             ("long.lib/", {
-                let mut long = import_object(
-                    import_type::CODE,
-                    name_type::NAME,
-                    0,
-                    "Old",
-                    "old.dll",
-                    None,
-                );
+                let mut long =
+                    import_object(import_type::CODE, name_type::NAME, 0, "Old", "old.dll", None);
                 long[2..4].copy_from_slice(&0u16.to_le_bytes());
                 long
             }),
             // An import header whose string table is cut short.
             ("short.lib/", {
-                let mut short = import_object(
-                    import_type::CODE,
-                    name_type::NAME,
-                    0,
-                    "Cut",
-                    "cut.dll",
-                    None,
-                );
+                let mut short =
+                    import_object(import_type::CODE, name_type::NAME, 0, "Cut", "cut.dll", None);
                 short.truncate(24);
                 short
             }),
-            (
-                "a.dll/",
-                import_object(import_type::CODE, name_type::NAME, 0, "Kept", "a.dll", None),
-            ),
+            ("a.dll/", import_object(import_type::CODE, name_type::NAME, 0, "Kept", "a.dll", None)),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(parsed.other_members, 3);
@@ -551,10 +444,7 @@ mod tests {
         assert_eq!(odd.len() % 2, 1);
         let lib = archive(vec![
             ("a.dll/", odd),
-            (
-                "b.dll/",
-                import_object(import_type::CODE, name_type::NAME, 0, "Next", "b.dll", None),
-            ),
+            ("b.dll/", import_object(import_type::CODE, name_type::NAME, 0, "Next", "b.dll", None)),
         ]);
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(parsed.imports.len(), 2);
@@ -568,29 +458,16 @@ mod tests {
         // is not valid UTF-8.
         let mut lib = archive(vec![(
             "x.dll/",
-            import_object(
-                import_type::CODE,
-                name_type::NAME,
-                0,
-                "Caf\u{e9}",
-                "x.dll",
-                None,
-            ),
+            import_object(import_type::CODE, name_type::NAME, 0, "Caf\u{e9}", "x.dll", None),
         )]);
-        let at = lib
-            .windows(2)
-            .position(|w| w == [0xC3, 0xA9])
-            .expect("the name is in the member");
+        let at = lib.windows(2).position(|w| w == [0xC3, 0xA9]).expect("the name is in the member");
         lib[at] = 0xFF;
         let parsed = ImportLibrary::parse(&lib).unwrap();
         assert_eq!(
             parsed.imports[0].export,
             // One replacement character for the invalid byte, one for the
             // continuation byte that is then unexpected.
-            ImportSymbol::Name {
-                hint: 0,
-                name: "Caf\u{fffd}\u{fffd}".into()
-            }
+            ImportSymbol::Name { hint: 0, name: "Caf\u{fffd}\u{fffd}".into() }
         );
     }
 
@@ -613,10 +490,7 @@ mod tests {
     fn rejects_a_truncated_member_header() {
         let mut data = b"!<arch>\n".to_vec();
         data.extend_from_slice(&[b'x'; 20]);
-        assert!(matches!(
-            ImportLibrary::parse(&data),
-            Err(PeError::Malformed(_))
-        ));
+        assert!(matches!(ImportLibrary::parse(&data), Err(PeError::Malformed(_))));
     }
 
     #[test]
@@ -626,9 +500,6 @@ mod tests {
         let mut member = archive_member("a.dll/", &[0u8; 0x100]);
         member.truncate(60 + 4);
         data.extend_from_slice(&member);
-        assert!(matches!(
-            ImportLibrary::parse(&data),
-            Err(PeError::Malformed(_))
-        ));
+        assert!(matches!(ImportLibrary::parse(&data), Err(PeError::Malformed(_))));
     }
 }

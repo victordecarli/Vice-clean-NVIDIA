@@ -26,12 +26,10 @@ pub struct HleModule {
 impl HleModule {
     pub fn serves(&self, dll: &str) -> bool {
         let dll = dll.to_ascii_lowercase();
-        self.dlls
-            .iter()
-            .any(|pattern| match pattern.strip_suffix('*') {
-                Some(prefix) => dll.starts_with(prefix),
-                None => dll == *pattern,
-            })
+        self.dlls.iter().any(|pattern| match pattern.strip_suffix('*') {
+            Some(prefix) => dll.starts_with(prefix),
+            None => dll == *pattern,
+        })
     }
 }
 
@@ -39,10 +37,7 @@ impl HleModule {
 #[macro_export]
 macro_rules! hle_export {
     ($f:ident) => {
-        $crate::HleExport {
-            name: stringify!($f),
-            address: $f as *const () as usize,
-        }
+        $crate::HleExport { name: stringify!($f), address: $f as *const () as usize }
     };
 }
 
@@ -73,22 +68,14 @@ mod tests {
             names.sort_unstable();
             let before = names.len();
             names.dedup();
-            assert_eq!(
-                before,
-                names.len(),
-                "duplicate export in module {}",
-                module.name
-            );
+            assert_eq!(before, names.len(), "duplicate export in module {}", module.name);
         }
     }
 
     #[test]
     fn api_set_prefix_matching() {
-        let m = HleModule {
-            name: "t",
-            dlls: &["api-ms-win-core-libraryloader-*"],
-            exports: vec![],
-        };
+        let m =
+            HleModule { name: "t", dlls: &["api-ms-win-core-libraryloader-*"], exports: vec![] };
         assert!(m.serves("API-MS-WIN-CORE-LIBRARYLOADER-L1-2-0.dll"));
         assert!(!m.serves("api-ms-win-core-file-l1-1-0.dll"));
     }

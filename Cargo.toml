@@ -30,6 +30,7 @@ clap = { version = "4.6.9", features = ["derive"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 toml = "1.2.2"
 object = { version = "0.41.0", default-features = false, features = ["read_core", "pe", "coff", "archive", "std"] }
 windows-sys = "0.61.2"
@@ -50,19 +51,32 @@ unused_must_use = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
-# This fork: two style lints are let through until the newer code is tidied
-# (tuple-heavy signatures and indexed loops in the translator and GPU side).
-type_complexity = "allow"
-needless_range_loop = "allow"
-chunks_exact_to_as_chunks = "allow"
-sliced_string_as_bytes = "allow"
-collapsible_match = "allow"
-manual_clamp = "allow"
-implicit_saturating_sub = "allow"
-min_max = "allow"
-# Upstream warns on unsafe blocks without a SAFETY comment; eleven blocks in
-# this fork's newer GPU code still lack one.
-undocumented_unsafe_blocks = "allow"
+# Keep complexity and argument-count checks at the project-configured thresholds.
+cognitive_complexity = "warn"
+undocumented_unsafe_blocks = "warn"
+# An unexplained `allow` hides a problem from every later reader and reviewer.
+allow_attributes_without_reason = "warn"
+# Debug leftovers and placeholders must not reach main: a `todo!` in a path
+# title code reaches is an abort across the FFI boundary.
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Libraries log through `tracing`; the two binaries opt out at their roots,
+# tests are exempt through clippy.toml.
+print_stdout = "warn"
+print_stderr = "warn"
+# Leaving the process from library code skips destructors and the crash log;
+# the few legitimate exits carry an `allow` with the reason.
+exit = "warn"
+# Leaks belong in `Box::leak`/`ManuallyDrop`, where the intent is visible.
+mem_forget = "warn"
+# `result.ok();` is a silently swallowed error.
+unused_result_ok = "warn"
+# A panic on a path title code reaches aborts the title (AGENTS.md, rule 5):
+# return the API's error, or shape the code so no `Option`/`Result` is left
+# to unwrap. Tests are exempt through clippy.toml.
+unwrap_used = "warn"
+expect_used = "warn"
 
 [profile.dev.package."*"]
 # Dependencies (hashing, parsing) are hot paths when chewing through

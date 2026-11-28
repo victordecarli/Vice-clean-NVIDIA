@@ -56,9 +56,7 @@ pub fn no_uav_barriers(cmds: Vec<Cmd>) -> (Vec<Cmd>, u32) {
 /// Barriers only: what a list left out still does to the states of
 /// resources.
 pub fn barriers_only(cmds: Vec<Cmd>) -> Vec<Cmd> {
-    cmds.into_iter()
-        .filter(|c| matches!(c, Cmd::Barriers { .. }))
-        .collect()
+    cmds.into_iter().filter(|c| matches!(c, Cmd::Barriers { .. })).collect()
 }
 
 /// Joins the barrier calls with no work between them into one; how many
@@ -113,36 +111,19 @@ fn join(have: &mut Vec<Barrier>, b: Barrier) {
             }
             have.push(b);
         }
-        Barrier::Transition {
-            flags: 0,
-            res,
-            sub,
-            before,
-            after,
-        } => {
+        Barrier::Transition { flags: 0, res, sub, before, after } => {
             // The last one of this resource, if it is of the same part of it.
             let last = have
                 .iter()
                 .rposition(|h| matches!(h, Barrier::Transition { res: r, .. } if *r == res));
             if let Some(i) = last
-                && let Barrier::Transition {
-                    flags: 0,
-                    sub: s,
-                    before: first,
-                    after: until,
-                    ..
-                } = have[i]
+                && let Barrier::Transition { flags: 0, sub: s, before: first, after: until, .. } =
+                    have[i]
                 && s == sub
                 && until == before
             {
                 if first != after {
-                    have[i] = Barrier::Transition {
-                        flags: 0,
-                        res,
-                        sub,
-                        before: first,
-                        after,
-                    };
+                    have[i] = Barrier::Transition { flags: 0, res, sub, before: first, after };
                 } else {
                     have.remove(i);
                     if after == UNORDERED_ACCESS {
@@ -178,12 +159,7 @@ pub fn find_clamps(cmds: &[Cmd], psos: &HashSet<u32>, next: &mut u64) -> Vec<Cla
     for (at, c) in cmds.iter().enumerate() {
         match c {
             Cmd::Pipeline { pso } => bound = *pso,
-            Cmd::Constants {
-                graphics: false,
-                param: 0,
-                offset,
-                values,
-            } => {
+            Cmd::Constants { graphics: false, param: 0, offset, values } => {
                 for (i, v) in values.iter().enumerate() {
                     if let Some(c) = constants.get_mut(*offset as usize + i) {
                         *c = *v;
@@ -192,21 +168,13 @@ pub fn find_clamps(cmds: &[Cmd], psos: &HashSet<u32>, next: &mut u64) -> Vec<Cla
             }
             // The clamp's parameters: constants (kind, stride, records,
             // ...), arguments, count, then where it writes.
-            Cmd::RootView {
-                graphics: false,
-                param: 3,
-                va: Va::At { res, offset: 0 },
-                ..
-            } => to = Some(*res),
+            Cmd::RootView { graphics: false, param: 3, va: Va::At { res, offset: 0 }, .. } => {
+                to = Some(*res)
+            }
             Cmd::Dispatch { .. } if psos.contains(&bound) => {
                 if let Some(scratch) = to {
                     let bytes = u64::from(constants[1]) * u64::from(constants[2]);
-                    found.push(Clamp {
-                        at,
-                        scratch,
-                        bytes,
-                        result: *next,
-                    });
+                    found.push(Clamp { at, scratch, bytes, result: *next });
                     *next += bytes.next_multiple_of(256);
                 }
             }
@@ -278,14 +246,9 @@ pub fn skip_clamps(cmds: Vec<Cmd>, clamps: &[Clamp]) -> Vec<Cmd> {
                     out.push(Cmd::Barriers { all });
                 }
             }
-            Cmd::Indirect {
-                signature,
-                most,
-                args,
-                at,
-                count,
-                count_at,
-            } if last.contains_key(&args) => {
+            Cmd::Indirect { signature, most, args, at, count, count_at }
+                if last.contains_key(&args) =>
+            {
                 let result = last.get(&args).copied().unwrap_or(0);
                 out.push(Cmd::Indirect {
                     signature,
@@ -362,13 +325,8 @@ pub fn batch_clamps(
     }
     let of_clamp =
         |b: &Barrier| matches!(b, Barrier::Transition { res, .. } if scratches.contains(res));
-    let moved = |before, after| Barrier::Transition {
-        flags: 0,
-        res: scratch,
-        sub: ALL,
-        before,
-        after,
-    };
+    let moved =
+        |before, after| Barrier::Transition { flags: 0, res: scratch, sub: ALL, before, after };
     // What the last clamp into a scratch buffer clamped: source, offset,
     // kind.
     let mut clamps: HashMap<u32, (u32, u64, u32)> = HashMap::new();
@@ -380,33 +338,24 @@ pub fn batch_clamps(
     while let Some(c) = cmds.next() {
         match &c {
             // A clamp's own commands: its root signature and all it sets.
-            Cmd::RootSignature {
-                graphics: false, ..
-            } if matches!(cmds.peek(), Some(Cmd::Pipeline { pso }) if psos.contains(pso)) => {}
+            Cmd::RootSignature { graphics: false, .. } if matches!(cmds.peek(), Some(Cmd::Pipeline { pso }) if psos.contains(pso)) =>
+                {}
             Cmd::Pipeline { pso } => {
                 bound = *pso;
                 if !psos.contains(pso) {
                     out.push(c);
                 }
             }
-            Cmd::Constants {
-                graphics: false,
-                values,
-                offset,
-                ..
-            } if psos.contains(&bound) => {
+            Cmd::Constants { graphics: false, values, offset, .. } if psos.contains(&bound) => {
                 for (i, v) in values.iter().enumerate() {
                     if let Some(c) = constants.get_mut(*offset as usize + i) {
                         *c = *v;
                     }
                 }
             }
-            Cmd::RootView {
-                graphics: false,
-                param,
-                va: Va::At { res, offset },
-                ..
-            } if psos.contains(&bound) => {
+            Cmd::RootView { graphics: false, param, va: Va::At { res, offset }, .. }
+                if psos.contains(&bound) =>
+            {
                 if let Some(v) = views.get_mut(*param as usize) {
                     *v = (*res, *offset);
                 }
@@ -414,13 +363,9 @@ pub fn batch_clamps(
             Cmd::Dispatch { .. } if psos.contains(&bound) => {
                 done.clamps += 1;
                 let (source, offset) = views[1];
-                clamps.insert(
-                    views[3].0,
-                    (source, offset + u64::from(constants[3]), constants[0]),
-                );
+                clamps.insert(views[3].0, (source, offset + u64::from(constants[3]), constants[0]));
                 // What it was clamped for follows: a batch is open by then.
-                let full =
-                    |o: &Batch| !o.sources.contains(&source) && o.sources.len() == SOURCES;
+                let full = |o: &Batch| !o.sources.contains(&source) && o.sources.len() == SOURCES;
                 if dirty && (constants[0] != DISPATCH || careful) || open.as_ref().is_some_and(full)
                 {
                     open = None;
@@ -433,18 +378,12 @@ pub fn batch_clamps(
                 jobs.resize(table + 16 + 16 * 2048, 0);
                 out.push(Cmd::Barriers {
                     all: vec![
-                        Barrier::Uav {
-                            flags: 0,
-                            res: NONE,
-                        },
+                        Barrier::Uav { flags: 0, res: NONE },
                         moved(if readable { INDIRECT_ARGUMENT } else { 0 }, UNORDERED_ACCESS),
                     ],
                 });
                 readable = true;
-                out.push(Cmd::RootSignature {
-                    graphics: false,
-                    root: BATCH_ROOT,
-                });
+                out.push(Cmd::RootSignature { graphics: false, root: BATCH_ROOT });
                 out.push(Cmd::Pipeline { pso: BATCH });
                 let at = out.len();
                 let mut view = |kind, param: usize, res, offset| {
@@ -461,12 +400,8 @@ pub fn batch_clamps(
                 view(slot::SRV, SOURCES, BATCH_JOBS, table as u64);
                 view(slot::UAV, SOURCES + 1, scratch, 0);
                 view(slot::UAV, SOURCES + 2, views[4].0, views[4].1);
-                out.push(Cmd::Dispatch {
-                    groups: [JOBS.div_ceil(64), 1, 1],
-                });
-                out.push(Cmd::Barriers {
-                    all: vec![moved(UNORDERED_ACCESS, INDIRECT_ARGUMENT)],
-                });
+                out.push(Cmd::Dispatch { groups: [JOBS.div_ceil(64), 1, 1] });
+                out.push(Cmd::Barriers { all: vec![moved(UNORDERED_ACCESS, INDIRECT_ARGUMENT)] });
                 open = Some(Batch {
                     table,
                     at,
@@ -490,14 +425,9 @@ pub fn batch_clamps(
                 }
                 out.push(c);
             }
-            Cmd::Indirect {
-                signature,
-                most,
-                args,
-                at,
-                count,
-                count_at,
-            } if clamps.contains_key(args) => {
+            Cmd::Indirect { signature, most, args, at, count, count_at }
+                if clamps.contains_key(args) =>
+            {
                 let (source, offset, kind) = clamps.get(args).copied().unwrap_or_default();
                 let Some(o) = &mut open else {
                     // Not clamped by any batch: left out, which shows.
@@ -508,10 +438,8 @@ pub fn batch_clamps(
                     None => {
                         o.sources.push(source);
                         let i = o.sources.len() - 1;
-                        if let Some(Cmd::RootView {
-                            va: Va::At { res, .. },
-                            ..
-                        }) = out.get_mut(o.at + i)
+                        if let Some(Cmd::RootView { va: Va::At { res, .. }, .. }) =
+                            out.get_mut(o.at + i)
                         {
                             *res = source;
                         }
@@ -532,12 +460,8 @@ pub fn batch_clamps(
                     }
                 }
                 let place = o.base + u64::from(i * SLOT);
-                let words = [
-                    job(slot as u32, kind, times.min(TIMES)),
-                    offset as u32,
-                    place as u32,
-                    0,
-                ];
+                let words =
+                    [job(slot as u32, kind, times.min(TIMES)), offset as u32, place as u32, 0];
                 let mut put = |at: usize, w: u32| {
                     jobs[o.table + at..o.table + at + 4].copy_from_slice(&w.to_le_bytes());
                 };
@@ -565,9 +489,7 @@ pub fn batch_clamps(
         }
     }
     if readable {
-        out.push(Cmd::Barriers {
-            all: vec![moved(INDIRECT_ARGUMENT, 0)],
-        });
+        out.push(Cmd::Barriers { all: vec![moved(INDIRECT_ARGUMENT, 0)] });
     }
     (out, done)
 }
@@ -586,13 +508,7 @@ mod tests {
         Barrier::Uav { flags: 0, res }
     }
     fn moved(res: u32, before: i32, after: i32) -> Barrier {
-        Barrier::Transition {
-            flags: 0,
-            res,
-            sub: ALL,
-            before,
-            after,
-        }
+        Barrier::Transition { flags: 0, res, sub: ALL, before, after }
     }
     fn barriers(all: &[Barrier]) -> Cmd {
         Cmd::Barriers { all: all.to_vec() }
@@ -614,33 +530,16 @@ mod tests {
         assert_eq!(n, 2);
         assert_eq!(
             out,
-            vec![
-                pso(1),
-                go(),
-                pso(2),
-                Cmd::CopyResource { dst: 1, src: 2 },
-                pso(1),
-                go()
-            ]
+            vec![pso(1), go(), pso(2), Cmd::CopyResource { dst: 1, src: 2 }, pso(1), go()]
         );
         assert_eq!(skip_pipelines(list.clone(), &HashSet::new()), (list, 0));
     }
 
     #[test]
     fn uav_barriers_are_dropped() {
-        let list = vec![
-            barriers(&[uav(0)]),
-            go(),
-            barriers(&[uav(1), moved(1, 8, 4)]),
-        ];
-        assert_eq!(
-            no_uav_barriers(list.clone()),
-            (vec![go(), barriers(&[moved(1, 8, 4)])], 2)
-        );
-        assert_eq!(
-            barriers_only(list.clone()),
-            vec![list[0].clone(), list[2].clone()]
-        );
+        let list = vec![barriers(&[uav(0)]), go(), barriers(&[uav(1), moved(1, 8, 4)])];
+        assert_eq!(no_uav_barriers(list.clone()), (vec![go(), barriers(&[moved(1, 8, 4)])], 2));
+        assert_eq!(barriers_only(list.clone()), vec![list[0].clone(), list[2].clone()]);
     }
 
     #[test]
@@ -662,22 +561,11 @@ mod tests {
         assert_eq!(saved, 4);
         assert_eq!(
             out,
-            vec![
-                barriers(&[moved(1, 0, 64), uav(0)]),
-                pso(1),
-                go(),
-                barriers(&[uav(1)]),
-                go()
-            ]
+            vec![barriers(&[moved(1, 0, 64), uav(0)]), pso(1), go(), barriers(&[uav(1)]), go()]
         );
         // Parts of a resource are not mixed up.
-        let part = |sub, before, after| Barrier::Transition {
-            flags: 0,
-            res: 1,
-            sub,
-            before,
-            after,
-        };
+        let part =
+            |sub, before, after| Barrier::Transition { flags: 0, res: 1, sub, before, after };
         let list = vec![
             barriers(&[part(0, 4, 8)]),
             barriers(&[part(1, 4, 8)]),
@@ -705,23 +593,14 @@ mod tests {
                     graphics: false,
                     kind: 3,
                     param: 3,
-                    va: Va::At {
-                        res: scratch,
-                        offset: 0,
-                    },
+                    va: Va::At { res: scratch, offset: 0 },
                 },
                 go(),
                 barriers(&[uav(0), moved(scratch, 8, 0x200)]),
             ]
         };
-        let run = |args, at| Cmd::Indirect {
-            signature: 1,
-            most: 1,
-            args,
-            at,
-            count: 0,
-            count_at: 0,
-        };
+        let run =
+            |args, at| Cmd::Indirect { signature: 1, most: 1, args, at, count: 0, count_at: 0 };
         let mut list = clamp(5, 12, 2);
         list.extend([pso(1), run(5, 12), run(5, 0), run(6, 0)]);
         list.extend(clamp(5, 12, 100));
@@ -729,10 +608,7 @@ mod tests {
         let mut next = 0;
         let found = find_clamps(&list, &HashSet::from([9]), &mut next);
         assert_eq!(
-            found
-                .iter()
-                .map(|c| (c.scratch, c.bytes, c.result))
-                .collect::<Vec<_>>(),
+            found.iter().map(|c| (c.scratch, c.bytes, c.result)).collect::<Vec<_>>(),
             [(5, 24, 0), (5, 1200, 256)]
         );
         assert_eq!(next, 256 + 1280);
@@ -740,40 +616,18 @@ mod tests {
         assert_eq!(kept.len(), list.len() + 6);
         assert_eq!(
             kept[7],
-            Cmd::CopyBuffer {
-                dst: RESULTS,
-                dst_at: 0,
-                src: 5,
-                src_at: 0,
-                len: 24
-            }
+            Cmd::CopyBuffer { dst: RESULTS, dst_at: 0, src: 5, src_at: 0, len: 24 }
         );
-        assert_eq!(
-            kept.iter()
-                .filter(|c| matches!(c, Cmd::CopyBuffer { .. }))
-                .count(),
-            2
-        );
+        assert_eq!(kept.iter().filter(|c| matches!(c, Cmd::CopyBuffer { .. })).count(), 2);
         let skipped = skip_clamps(list, &found);
-        assert!(
-            !skipped
-                .iter()
-                .any(|c| matches!(c, Cmd::Dispatch { .. } | Cmd::Barriers { .. }))
-        );
+        assert!(!skipped.iter().any(|c| matches!(c, Cmd::Dispatch { .. } | Cmd::Barriers { .. })));
         let runs: Vec<(u32, u64)> = skipped
             .iter()
             .filter_map(|c| {
-                if let Cmd::Indirect { args, at, .. } = c {
-                    Some((*args, *at))
-                } else {
-                    None
-                }
+                if let Cmd::Indirect { args, at, .. } = c { Some((*args, *at)) } else { None }
             })
             .collect();
-        assert_eq!(
-            runs,
-            [(RESULTS, 12), (RESULTS, 0), (6, 0), (RESULTS, 256 + 24)]
-        );
+        assert_eq!(runs, [(RESULTS, 12), (RESULTS, 0), (6, 0), (RESULTS, 256 + 24)]);
     }
 
     #[test]
@@ -788,10 +642,7 @@ mod tests {
             };
             vec![
                 barriers(&[uav(0), moved(5, 0x200, 8)]),
-                Cmd::RootSignature {
-                    graphics: false,
-                    root: 8,
-                },
+                Cmd::RootSignature { graphics: false, root: 8 },
                 pso(9),
                 Cmd::Constants {
                     graphics: false,
@@ -807,14 +658,7 @@ mod tests {
                 barriers(&[uav(0), moved(5, 8, 0x200)]),
             ]
         };
-        let run = |at| Cmd::Indirect {
-            signature: 1,
-            most: 1,
-            args: 5,
-            at,
-            count: 0,
-            count_at: 0,
-        };
+        let run = |at| Cmd::Indirect { signature: 1, most: 1, args: 5, at, count: 0, count_at: 0 };
         // A dispatch, two indirect ones with a wait of the title's between
         // them, then draws: a window of two and another buffer's.
         let mut list = vec![pso(1), go()];
@@ -833,7 +677,11 @@ mod tests {
         for (careful, batches) in [(false, 3), (true, 4)] {
             let mut jobs = Vec::new();
             let (out, done) = batch_clamps(list.clone(), &clamps, &compute, 99, careful, &mut jobs);
-            assert_eq!((done.clamps, done.batches, done.jobs), (5, batches, 6), "careful {careful}");
+            assert_eq!(
+                (done.clamps, done.batches, done.jobs),
+                (5, batches, 6),
+                "careful {careful}"
+            );
             assert_eq!(jobs.len(), table * batches as usize);
             let passes = out.iter().filter(|c| matches!(c, Cmd::Pipeline { pso: BATCH })).count();
             assert_eq!(passes, batches as usize);
@@ -879,7 +727,8 @@ mod tests {
         }
         // A list without clamps is left as it is.
         let plain = vec![pso(1), go(), barriers(&[uav(0)])];
-        let (out, done) = batch_clamps(plain.clone(), &clamps, &compute, 99, false, &mut Vec::new());
+        let (out, done) =
+            batch_clamps(plain.clone(), &clamps, &compute, 99, false, &mut Vec::new());
         assert_eq!((out, done), (plain, Batched::default()));
     }
 }

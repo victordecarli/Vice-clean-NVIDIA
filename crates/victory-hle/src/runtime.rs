@@ -41,10 +41,7 @@ pub fn forget_image(base: usize) {
 
 pub fn image_path(base: usize) -> Option<PathBuf> {
     let paths = IMAGE_PATHS.lock().unwrap_or_else(|e| e.into_inner());
-    paths
-        .iter()
-        .find(|(b, _)| *b == base)
-        .map(|(_, p)| p.clone())
+    paths.iter().find(|(b, _)| *b == base).map(|(_, p)| p.clone())
 }
 
 /// The title image whose original file is called `file` (any case).
@@ -102,12 +99,8 @@ impl Title {
     /// where it has none); the storage folder is left for the caller.
     pub fn from_manifest(text: &str) -> Title {
         let elements = elements(text);
-        let get = |path: &str| {
-            elements
-                .iter()
-                .find(|(p, _)| p == path)
-                .map(|(_, text)| text.as_str())
-        };
+        let get =
+            |path: &str| elements.iter().find(|(p, _)| p == path).map(|(_, text)| text.as_str());
         let id = get("Game/TitleId").and_then(|v| u32::from_str_radix(v, 16).ok());
         let storage_mb = get("Game/PersistentLocalStorage/SizeMB").and_then(|v| v.parse().ok());
         Title {
@@ -181,16 +174,13 @@ fn elements(text: &str) -> Vec<(String, String)> {
             continue;
         }
         let closed = tag.ends_with('/');
-        let name = tag
-            .trim_end_matches('/')
-            .split_whitespace()
-            .next()
-            .unwrap_or("");
+        let name = tag.trim_end_matches('/').split_whitespace().next().unwrap_or("");
         path.push(name);
         let body = field_text(rest);
-        let body = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&apos;", "'"), ("&amp;", "&")]
-            .iter()
-            .fold(body, |b, (entity, c)| b.replace(entity, c));
+        let body =
+            [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&apos;", "'"), ("&amp;", "&")]
+                .iter()
+                .fold(body, |b, (entity, c)| b.replace(entity, c));
         out.push((path.join("/"), body));
         if closed {
             path.pop();
@@ -222,11 +212,7 @@ pub fn set_title(title: Title) {
 
 /// The running title; the default (id 0, no storage) until set.
 pub fn title() -> Title {
-    TITLE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
-        .unwrap_or_default()
+    TITLE.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_default()
 }
 
 /// Gives the process the console's millisecond timers. Titles pace
@@ -239,9 +225,9 @@ pub fn title() -> Title {
 pub fn use_console_timers() {
     use windows_sys::Win32::Media::timeBeginPeriod;
     use windows_sys::Win32::System::Threading::{
-        GetCurrentProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
-        ProcessPowerThrottling, SetProcessInformation,
+        GetCurrentProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+        PROCESS_POWER_THROTTLING_STATE, ProcessPowerThrottling, SetProcessInformation,
     };
     // Also: the system does not run this process at reduced speed (its
     // "efficiency mode": lower clock, the slow cores of a hybrid processor)
@@ -280,13 +266,18 @@ pub fn use_console_timers() {
 /// `VICTORY_PROCESS_PRIORITY=normal`: as it was started.
 #[cfg(windows)]
 fn ahead_of_other_programs() {
-    use windows_sys::Win32::System::Threading::{ABOVE_NORMAL_PRIORITY_CLASS, GetCurrentProcess, SetPriorityClass};
+    use windows_sys::Win32::System::Threading::{
+        ABOVE_NORMAL_PRIORITY_CLASS, GetCurrentProcess, SetPriorityClass,
+    };
     if std::env::var_os("VICTORY_PROCESS_PRIORITY").is_some_and(|v| v == "normal" || v == "0") {
         return;
     }
     // SAFETY: a plain process setting.
     let set = unsafe { SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS) } != 0;
-    tracing::info!(set, "the process runs above normal priority (VICTORY_PROCESS_PRIORITY=normal: not)");
+    tracing::info!(
+        set,
+        "the process runs above normal priority (VICTORY_PROCESS_PRIORITY=normal: not)"
+    );
 }
 
 #[cfg(test)]

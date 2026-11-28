@@ -116,7 +116,15 @@ pub(super) fn put(kind: Kind, name: &'static str, t: (u64, u64), a: u64, b: u64,
 }
 
 /// Records an event of `thread`.
-fn put_of(thread: u32, kind: Kind, name: &'static str, (t0, t1): (u64, u64), a: u64, b: u64, stack: u32) {
+fn put_of(
+    thread: u32,
+    kind: Kind,
+    name: &'static str,
+    (t0, t1): (u64, u64),
+    a: u64,
+    b: u64,
+    stack: u32,
+) {
     let slots = SLOTS.load(Ordering::Acquire);
     if slots.is_null() {
         return;
@@ -176,10 +184,7 @@ pub struct Span {
 /// A span named `name`.
 #[inline(always)]
 pub fn span(name: &'static str) -> Span {
-    Span {
-        name,
-        began: if on() { ticks() } else { 0 },
-    }
+    Span { name, began: if on() { ticks() } else { 0 } }
 }
 
 impl Span {
@@ -350,7 +355,9 @@ pub(crate) fn title_thread() {
     for place in &TITLES {
         match place.load(Ordering::Relaxed) {
             there if there == id => return,
-            0 if place.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_ok() => return,
+            0 if place.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_ok() => {
+                return;
+            }
             _ => {}
         }
     }
@@ -361,7 +368,9 @@ pub(crate) fn title_thread() {
 /// on a value in memory has no event of its own).
 fn sample() {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Diagnostics::Debug::{CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext};
+    use windows_sys::Win32::System::Diagnostics::Debug::{
+        CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext,
+    };
     use windows_sys::Win32::System::Threading::{
         OpenThread, ResumeThread, SuspendThread, THREAD_GET_CONTEXT, THREAD_SUSPEND_RESUME,
     };
@@ -379,7 +388,8 @@ fn sample() {
                 Some(o) => o.1,
                 None => {
                     // SAFETY: a thread of our own process.
-                    let handle = unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, 0, id) };
+                    let handle =
+                        unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, 0, id) };
                     open.push((id, handle));
                     handle
                 }
@@ -413,7 +423,10 @@ fn sample() {
             // What lies near the instruction may be a return address; where
             // the instruction is the system's, all of it may tell something.
             let mut frames = [0usize; DEPTH];
-            let near = words.iter().copied().filter(|w| *w != 0 && (at >> 40 == 0x7f || w.abs_diff(at) < 0x1000_0000));
+            let near = words
+                .iter()
+                .copied()
+                .filter(|w| *w != 0 && (at >> 40 == 0x7f || w.abs_diff(at) < 0x1000_0000));
             for (frame, word) in frames.iter_mut().zip(near) {
                 *frame = word;
             }
@@ -456,7 +469,8 @@ fn parse(text: &str) -> (Option<(Vec<f64>, u64)>, &str) {
     let mut parts = text.splitn(3, ',');
     let three = (parts.next(), parts.next(), parts.next());
     if let (Some(from), Some(frames), Some(file)) = three
-        && let Ok(from) = from.split('+').map(|f| f.trim().parse::<f64>()).collect::<Result<Vec<f64>, _>>()
+        && let Ok(from) =
+            from.split('+').map(|f| f.trim().parse::<f64>()).collect::<Result<Vec<f64>, _>>()
         && let Ok(frames) = frames.trim().parse::<u64>()
     {
         return (Some((from, frames)), file);
@@ -471,7 +485,8 @@ fn asked() -> Option<&'static Asked> {
     ASKED
         .get_or_init(|| {
             let file = std::env::var_os("VICTORY_TIMELINE").filter(|v| !v.is_empty())?;
-            let number = |name: &str| std::env::var(name).ok().and_then(|v| v.trim().parse::<f64>().ok());
+            let number =
+                |name: &str| std::env::var(name).ok().and_then(|v| v.trim().parse::<f64>().ok());
             let text = file.to_string_lossy();
             let (when, file) = parse(&text);
             let (after, frames) = when.unwrap_or_else(|| {
@@ -556,7 +571,8 @@ pub(crate) fn presented() {
     let file = match asked.after.len() {
         1 => asked.file.clone(),
         _ => {
-            let end = asked.file.extension().map_or("json".into(), |e| e.to_string_lossy().into_owned());
+            let end =
+                asked.file.extension().map_or("json".into(), |e| e.to_string_lossy().into_owned());
             asked.file.with_extension(format!("{after:.0}.{end}"))
         }
     };
@@ -589,7 +605,10 @@ pub(super) fn make_room() {
         return;
     }
     fn zeroed<T>(n: usize) -> *mut T {
-        let layout = std::alloc::Layout::array::<T>(n).expect("a small number");
+        // Too large a count is an allocation that fails.
+        let Ok(layout) = std::alloc::Layout::array::<T>(n) else {
+            return std::ptr::null_mut();
+        };
         // SAFETY: not of no size.
         unsafe { std::alloc::alloc_zeroed(layout) }.cast()
     }
@@ -633,12 +652,9 @@ pub(super) fn end() -> Data {
     let count = NEXT_STACK.swap(0, Ordering::SeqCst).min(STACKS);
     // SAFETY: that many were given out; each was written before the event
     // that names it.
-    let stacks = unsafe { std::slice::from_raw_parts(STACK.load(Ordering::Acquire), count) }.to_vec();
-    Data {
-        events,
-        stacks,
-        lost: taken.saturating_sub(EVENTS),
-    }
+    let stacks =
+        unsafe { std::slice::from_raw_parts(STACK.load(Ordering::Acquire), count) }.to_vec();
+    Data { events, stacks, lost: taken.saturating_sub(EVENTS) }
 }
 
 /// Objects threads stand at now, by a hash of theirs: releases of a lock
@@ -677,7 +693,10 @@ mod tests {
     #[test]
     fn a_timeline_is_asked_for_by_seconds_frames_and_a_file() {
         assert_eq!(parse("120,20,D:/a.json"), (Some((vec![120.0], 20)), "D:/a.json"));
-        assert_eq!(parse("120+130.5,20,D:/a,b.json"), (Some((vec![120.0, 130.5], 20)), "D:/a,b.json"));
+        assert_eq!(
+            parse("120+130.5,20,D:/a,b.json"),
+            (Some((vec![120.0, 130.5], 20)), "D:/a,b.json")
+        );
         assert_eq!(parse("D:/a,1,2.json"), (None, "D:/a,1,2.json"));
         assert_eq!(parse("D:/a.json"), (None, "D:/a.json"));
     }

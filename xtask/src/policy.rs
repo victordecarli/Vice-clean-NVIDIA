@@ -15,11 +15,13 @@ const MAX_FILE_SIZE: usize = 640 * 1024;
 const MAX_ENCODED_RUN: usize = 512;
 
 const ALLOWED_EXTENSIONS: &[&str] = &[
-    "rs", "toml", "md", "txt", "lock", "yml", "yaml", "json", "hlsl", "hlsli", "ps1", "cmd", "sh", "py",
+    "rs", "toml", "md", "txt", "lock", "yml", "yaml", "json", "hlsl", "hlsli", "ps1", "cmd", "sh",
+    "py",
 ];
 const ALLOWED_NAMES: &[&str] = &[
     ".gitignore",
     ".gitattributes",
+    ".git-blame-ignore-revs",
     ".editorconfig",
     ".victory-root",
     "pre-commit",
@@ -91,11 +93,8 @@ pub fn run(root: &Path, staged: bool) -> Result<()> {
 
 fn list_files(root: &Path, staged: bool) -> Result<Vec<String>> {
     let git = |args: &[&str]| -> Result<Option<Vec<String>>> {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .output()
-            .context("running git")?;
+        let out =
+            Command::new("git").args(args).current_dir(root).output().context("running git")?;
         if !out.status.success() {
             return Ok(None);
         }
@@ -108,22 +107,12 @@ fn list_files(root: &Path, staged: bool) -> Result<Vec<String>> {
         ))
     };
     if staged {
-        return git(&[
-            "diff",
-            "--cached",
-            "--name-only",
-            "--diff-filter=ACMR",
-            "-z",
-        ])?
-        .context("--staged needs a git repository");
+        return git(&["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"])?
+            .context("--staged needs a git repository");
     }
-    if let Some(mut tracked) = git(&[
-        "ls-files",
-        "-z",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-    ])? {
+    if let Some(mut tracked) =
+        git(&["ls-files", "-z", "--cached", "--others", "--exclude-standard"])?
+    {
         tracked.sort();
         tracked.dedup();
         return Ok(tracked);
@@ -135,10 +124,7 @@ fn list_files(root: &Path, staged: bool) -> Result<Vec<String>> {
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
         .filter_map(|e| {
-            e.path()
-                .strip_prefix(root)
-                .ok()
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
+            e.path().strip_prefix(root).ok().map(|p| p.to_string_lossy().replace('\\', "/"))
         })
         .collect())
 }
@@ -149,17 +135,12 @@ pub fn check(path: &str, content: &[u8]) -> Vec<String> {
     let name = path.rsplit('/').next().unwrap_or(path);
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
     let allowed = ALLOWED_NAMES.contains(&name)
-        || ext
-            .as_deref()
-            .is_some_and(|e| ALLOWED_EXTENSIONS.contains(&e));
+        || ext.as_deref().is_some_and(|e| ALLOWED_EXTENSIONS.contains(&e));
     if !allowed {
         problems.push("file type not on the allowlist".to_owned());
     }
     if content.len() > MAX_FILE_SIZE {
-        problems.push(format!(
-            "{} bytes exceeds the {MAX_FILE_SIZE}-byte limit",
-            content.len()
-        ));
+        problems.push(format!("{} bytes exceeds the {MAX_FILE_SIZE}-byte limit", content.len()));
     }
     for (magic, what) in FORBIDDEN_MAGIC {
         if content.starts_with(magic) {
@@ -198,17 +179,11 @@ fn longest_hex_literal_run(content: &[u8]) -> usize {
     while i < content.len() {
         match &content[i..] {
             [b'\\' | b'0', b'x' | b'X', rest @ ..] => {
-                let len = rest
-                    .iter()
-                    .take_while(|b| b.is_ascii_hexdigit() || **b == b'_')
-                    .count();
+                let len = rest.iter().take_while(|b| b.is_ascii_hexdigit() || **b == b'_').count();
                 run += rest[..len].iter().filter(|b| b.is_ascii_hexdigit()).count();
                 longest = longest.max(run);
                 // Skip a type suffix such as `u8` or `u32`.
-                let suffix = rest[len..]
-                    .iter()
-                    .take_while(|b| b.is_ascii_alphanumeric())
-                    .count();
+                let suffix = rest[len..].iter().take_while(|b| b.is_ascii_alphanumeric()).count();
                 i += 2 + len + suffix;
             }
             [b, ..] if matches!(b, b',' | b'\\') || b.is_ascii_whitespace() => i += 1,
@@ -228,7 +203,7 @@ mod tests {
     /// Enforces the policy wherever tests run, even in clones without the hook.
     #[test]
     fn repository_passes_policy() {
-        super::run(&crate::workspace_root(), false).unwrap();
+        super::run(&crate::workspace_root().unwrap(), false).unwrap();
     }
 
     #[test]
@@ -241,18 +216,9 @@ mod tests {
     #[test]
     fn rejects_game_like_files() {
         assert!(!check("assets/tex.dds", b"DDS \x7c\0\0\0").is_empty());
-        assert!(
-            !check("notes.txt", b"MZ\x90\0").is_empty(),
-            "magic wins over extension"
-        );
-        assert!(
-            !check("data.bin", b"hello").is_empty(),
-            "extension not allowed"
-        );
-        assert!(
-            !check("a.rs", &vec![b'a'; 600 * 1024]).is_empty(),
-            "too big"
-        );
+        assert!(!check("notes.txt", b"MZ\x90\0").is_empty(), "magic wins over extension");
+        assert!(!check("data.bin", b"hello").is_empty(), "extension not allowed");
+        assert!(!check("a.rs", &vec![b'a'; 600 * 1024]).is_empty(), "too big");
     }
 
     #[test]
@@ -291,10 +257,7 @@ mod tests {
         );
         // A short constant table, like the 16-entry ones in the tree, stays legal.
         let table: Vec<String> = synthetic(16).map(|w| format!("0x{w:08x}_u32")).collect();
-        let src = format!(
-            "const T: [u32; 16] = [\n    {},\n];\n",
-            table.join(",\n    ")
-        );
+        let src = format!("const T: [u32; 16] = [\n    {},\n];\n", table.join(",\n    "));
         assert!(check("src/table.rs", src.as_bytes()).is_empty());
     }
 }

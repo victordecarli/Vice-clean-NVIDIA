@@ -126,13 +126,25 @@ impl Host {
                 &mut heap,
             )?;
             let heap = heap.ok_or_else(windows::core::Error::empty)?;
-            let allocator: ID3D12CommandAllocator = self.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
+            let allocator: ID3D12CommandAllocator =
+                self.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)?;
             let mut lists = Vec::with_capacity(2 * MOST);
             for at in 0..2 * MOST as u32 {
-                let list: ID3D12GraphicsCommandList =
-                    self.device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None)?;
+                let list: ID3D12GraphicsCommandList = self.device.CreateCommandList(
+                    0,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    &allocator,
+                    None,
+                )?;
                 list.EndQuery(&heap, D3D12_QUERY_TYPE_TIMESTAMP, at);
-                list.ResolveQueryData(&heap, D3D12_QUERY_TYPE_TIMESTAMP, at, 1, &buffer, u64::from(at) * 8);
+                list.ResolveQueryData(
+                    &heap,
+                    D3D12_QUERY_TYPE_TIMESTAMP,
+                    at,
+                    1,
+                    &buffer,
+                    u64::from(at) * 8,
+                );
                 list.Close()?;
                 lists.push(list.cast()?);
             }
@@ -182,6 +194,9 @@ mod tests {
         let (from, to) = times[5];
         // (The two clocks agree to some tens of microseconds.)
         let near = 2_000;
-        assert!(from <= to && from + near >= sent && to <= done + near, "{sent} {from} {to} {done}");
+        assert!(
+            from <= to && from + near >= sent && to <= done + near,
+            "{sent} {from} {to} {done}"
+        );
     }
 }

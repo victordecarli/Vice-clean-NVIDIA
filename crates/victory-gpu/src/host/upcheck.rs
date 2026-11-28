@@ -155,7 +155,7 @@ static STALE: Mutex<BTreeMap<(u64, u64), Stale>> = Mutex::new(BTreeMap::new());
 pub(super) fn record(
     host: &Host,
     list: &ID3D12GraphicsCommandList,
-    dirty: &[(std::sync::Arc<Shadow>, Vec<(usize, usize)>)],
+    dirty: &[crate::shadow::Dirty],
 ) -> Option<Looks> {
     let mut noted = std::mem::take(&mut *NOTED.lock().unwrap_or_else(|e| e.into_inner()));
     let mut all: Vec<(std::sync::Arc<Shadow>, Taken)> = Vec::new();
@@ -189,7 +189,13 @@ pub(super) fn record(
             std::ptr::copy_nonoverlapping(taken.was.as_ptr(), to.add(at), n);
             std::ptr::copy_nonoverlapping(taken.new.as_ptr(), to.add(at + n), n);
             list.SetComputeRootShaderResourceView(1, shadow.buffer.GetGPUVirtualAddress());
-            let constants = [taken.at as u32, (n / 4) as u32, at as u32, (at + n) as u32, (i as u64 * ANSWER) as u32];
+            let constants = [
+                taken.at as u32,
+                (n / 4) as u32,
+                at as u32,
+                (at + n) as u32,
+                (i as u64 * ANSWER) as u32,
+            ];
             list.SetComputeRoot32BitConstants(0, 5, constants.as_ptr().cast(), 0);
             list.Dispatch((n / 4).div_ceil(64) as u32, 1, 1);
             at += 2 * n;
@@ -199,7 +205,13 @@ pub(super) fn record(
         let done: Vec<D3D12_RESOURCE_BARRIER> = all
             .iter()
             .filter(|(s, _)| seen.insert(std::sync::Arc::as_ptr(s) as usize))
-            .map(|(s, _)| transition(&s.buffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST))
+            .map(|(s, _)| {
+                transition(
+                    &s.buffer,
+                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                )
+            })
             .collect();
         list.ResourceBarrier(&done);
     }
@@ -219,7 +231,8 @@ impl Looks {
     /// The submission has run: what it found is counted.
     pub(super) fn read(self) {
         // SAFETY: the mapping holds an answer for each; the card has run.
-        let answers = unsafe { std::slice::from_raw_parts(self.found.1 as *const [u32; 4], self.of.len()) };
+        let answers =
+            unsafe { std::slice::from_raw_parts(self.found.1 as *const [u32; 4], self.of.len()) };
         let mut stale = STALE.lock().unwrap_or_else(|e| e.into_inner());
         for ((shadow, bytes), &[words, at, card, cpu]) in self.of.iter().zip(answers) {
             let (start, len) = shadow.span();
@@ -230,7 +243,10 @@ impl Looks {
                 e.sends += 1;
                 e.words += u64::from(words);
                 if e.some.len() < 4 {
-                    e.some.push(format!("{words} words from +{at:#x} (card {card:#x}, sent {cpu:#x}; {})", known(shadow.id(), at as usize)));
+                    e.some.push(format!(
+                        "{words} words from +{at:#x} (card {card:#x}, sent {cpu:#x}; {})",
+                        known(shadow.id(), at as usize)
+                    ));
                 }
             }
         }
@@ -243,7 +259,9 @@ fn line(stale: &mut BTreeMap<(u64, u64), Stale>) {
     static SAID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let now = now_ms();
     let said = SAID.load(Ordering::Relaxed);
-    if now < said + 1000 || SAID.compare_exchange(said, now, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+    if now < said + 1000
+        || SAID.compare_exchange(said, now, Ordering::Relaxed, Ordering::Relaxed).is_err()
+    {
         return;
     }
     let all = std::mem::take(stale);
@@ -304,9 +322,16 @@ fn known(copy: u64, at: usize) -> String {
     }
     // (Fetched pieces begin where title memory's do; the copy may begin
     // inside one.)
-    let last = [at / PIECE, (at / PIECE).saturating_sub(1)].iter().filter_map(|p| known.fetched.get(p)).max().copied();
+    let last = [at / PIECE, (at / PIECE).saturating_sub(1)]
+        .iter()
+        .filter_map(|p| known.fetched.get(p))
+        .max()
+        .copied();
     match last {
-        Some(frame) => format!("declared; last fetched {} frames ago", crate::frame::current().saturating_sub(frame)),
+        Some(frame) => format!(
+            "declared; last fetched {} frames ago",
+            crate::frame::current().saturating_sub(frame)
+        ),
         None => "declared; never fetched".into(),
     }
 }
@@ -380,9 +405,15 @@ static MISPLACED: Mutex<(u64, Misplaced)> = Mutex::new((0, BTreeMap::new()));
 /// destination, or shaders of it write there, or an earlier copy of it put
 /// there for what lies between; and a source that shaders of it write first.
 pub(super) fn order(runs: &[&HostList]) {
-    let (mut read, mut written, mut copied): (Vec<(usize, usize)>, Vec<(usize, usize)>, Vec<(usize, usize)>) =
-        (Vec::new(), Vec::new(), Vec::new());
-    let meets = |all: &[(usize, usize)], from: usize, to: usize| all.iter().rev().find(|r| r.0 < to && from < r.1).copied();
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
+    let (mut read, mut written, mut copied): (
+        Vec<(usize, usize)>,
+        Vec<(usize, usize)>,
+        Vec<(usize, usize)>,
+    ) = (Vec::new(), Vec::new(), Vec::new());
+    let meets = |all: &[(usize, usize)], from: usize, to: usize| {
+        all.iter().rev().find(|r| r.0 < to && from < r.1).copied()
+    };
     let mut misplaced = MISPLACED.lock().unwrap_or_else(|e| e.into_inner());
     for list in runs {
         for step in &list.deferred().copies {
@@ -427,7 +458,9 @@ pub(super) fn order(runs: &[&HostList]) {
         tracing::warn!("up-copy check, copies out of place: {n} ({bytes} bytes): {what}");
     }
     for ((what, len, dst), (n, src, declared)) in all.into_iter().take(16) {
-        tracing::warn!("up-copy check, a copy out of place: {n} times {len:#x} bytes from {src:#x} to {dst:#x}: {what} ({declared:#x} bytes there)");
+        tracing::warn!(
+            "up-copy check, a copy out of place: {n} times {len:#x} bytes from {src:#x} to {dst:#x}: {what} ({declared:#x} bytes there)"
+        );
     }
 }
 
@@ -462,15 +495,19 @@ pub(super) fn at_rest(host: &Host) {
 /// refresh will not bring them up to date.
 fn look_for_stale() {
     const MOST: usize = 1 << 30;
+    #[allow(clippy::type_complexity, reason = "a working table of this function alone")]
     let mut by: BTreeMap<(u64, u64), (bool, u64, usize, Vec<String>)> = BTreeMap::new();
-    let compared = crate::shadow::stale_pages(MOST, &mut |shadow, page, words, (at, copy, title)| {
-        let e = by.entry(shadow.span()).or_insert((shadow.carded(), 0, 0, Vec::new()));
-        e.1 += words as u64;
-        e.2 += 1;
-        if e.3.len() < 4 {
-            e.3.push(format!("{words} words in the 64 KiB at {page:#x} (the first at {at:#x}: the copy {copy:#x}, title memory {title:#x})"));
-        }
-    });
+    let compared = crate::shadow::stale_pages(
+        MOST,
+        &mut |shadow, page, words, (at, copy, title)| {
+            let e = by.entry(shadow.span()).or_insert((shadow.carded(), 0, 0, Vec::new()));
+            e.1 += words as u64;
+            e.2 += 1;
+            if e.3.len() < 4 {
+                e.3.push(format!("{words} words in the 64 KiB at {page:#x} (the first at {at:#x}: the copy {copy:#x}, title memory {title:#x})"));
+            }
+        },
+    );
     tracing::info!(
         "up-copy check at rest: {} MB of copies held for unchanged compared with title memory, {} copies are stale",
         compared >> 20,
@@ -588,7 +625,15 @@ fn look(host: &Host) -> Option<u64> {
     run(host, |list| {
         for (i, d) in shown.iter().enumerate() {
             // SAFETY: an open list; live buffers, the ranges in them.
-            unsafe { list.CopyBufferRegion(&held, (i * PIECE) as u64, &d.shadow.buffer, d.at as u64, d.len as u64) };
+            unsafe {
+                list.CopyBufferRegion(
+                    &held,
+                    (i * PIECE) as u64,
+                    &d.shadow.buffer,
+                    d.at as u64,
+                    d.len as u64,
+                )
+            };
         }
     })?;
     let mut by: BTreeMap<(u64, u64), (u64, usize, Vec<String>)> = BTreeMap::new();
@@ -662,7 +707,8 @@ mod tests {
         // Bytes 5..18 of a copy: the words at 8 and 12.
         let (was, new): (Vec<u8>, Vec<u8>) = ((5..18).collect(), (105..118).collect());
         note(u64::MAX, 5, &was, &new);
-        let noted = NOTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&u64::MAX).expect("noted");
+        let noted =
+            NOTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&u64::MAX).expect("noted");
         let [t] = &noted[..] else { panic!("one piece") };
         assert_eq!((t.at, &t.was[..], &t.new[..]), (8, &was[3..11], &new[3..11]));
     }
@@ -681,25 +727,46 @@ mod tests {
         all
     }
 
-    fn title_of(resource: usize, view: bool, len: usize) -> (&'static mut [u8], usize, std::sync::Arc<Shadow>) {
+    fn title_of(
+        resource: usize,
+        view: bool,
+        len: usize,
+    ) -> (&'static mut [u8], usize, std::sync::Arc<Shadow>) {
         use windows_sys::Win32::System::Memory::{
-            CreateFileMappingW, FILE_MAP_WRITE, MEM_COMMIT, MEM_RESERVE, MapViewOfFile, PAGE_READWRITE, VirtualAlloc,
+            CreateFileMappingW, FILE_MAP_WRITE, MEM_COMMIT, MEM_RESERVE, MapViewOfFile,
+            PAGE_READWRITE, VirtualAlloc,
         };
         const WRITE_WATCH: u32 = 0x20_0000;
         // SAFETY: memory of our own, never freed.
         let base = unsafe {
             if view {
-                let section = CreateFileMappingW(-1isize as _, std::ptr::null(), PAGE_READWRITE, 0, len as u32, std::ptr::null());
+                let section = CreateFileMappingW(
+                    -1isize as _,
+                    std::ptr::null(),
+                    PAGE_READWRITE,
+                    0,
+                    len as u32,
+                    std::ptr::null(),
+                );
                 assert!(!section.is_null());
                 MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, len).Value.cast::<u8>()
             } else {
-                VirtualAlloc(std::ptr::null(), len, MEM_RESERVE | MEM_COMMIT | WRITE_WATCH, PAGE_READWRITE).cast::<u8>()
+                VirtualAlloc(
+                    std::ptr::null(),
+                    len,
+                    MEM_RESERVE | MEM_COMMIT | WRITE_WATCH,
+                    PAGE_READWRITE,
+                )
+                .cast::<u8>()
             }
         };
         assert!(!base.is_null());
         crate::shadow::register(resource, base as u64, len as u64);
         let shadow = crate::shadow::find(base as u64, 64).expect("a copy");
-        assert!(super::super::relay_exact() && super::super::relay_copy(), "set VICTORY_RELAY=2 VICTORY_RELAY_COPY=1");
+        assert!(
+            super::super::relay_exact() && super::super::relay_copy(),
+            "set VICTORY_RELAY=2 VICTORY_RELAY_COPY=1"
+        );
         // SAFETY: `len` bytes just committed.
         (unsafe { std::slice::from_raw_parts_mut(base, len) }, base as usize, shadow)
     }
@@ -717,9 +784,11 @@ mod tests {
             unsafe {
                 for _ in 0..times {
                     list.list.CopyBufferRegion(&self.1, 0, &self.0, 0, 64 << 20);
-                    list.list.ResourceBarrier(&[
-                        transition(&self.1, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON),
-                    ]);
+                    list.list.ResourceBarrier(&[transition(
+                        &self.1,
+                        D3D12_RESOURCE_STATE_COPY_DEST,
+                        D3D12_RESOURCE_STATE_COMMON,
+                    )]);
                 }
             }
         }
@@ -732,8 +801,11 @@ mod tests {
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len());
             list.list.CopyBufferRegion(&shadow.buffer, at as u64, &upload, 0, bytes.len() as u64);
-            list.list
-                .ResourceBarrier(&[transition(&shadow.buffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON)]);
+            list.list.ResourceBarrier(&[transition(
+                &shadow.buffer,
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                D3D12_RESOURCE_STATE_COMMON,
+            )]);
         }
         list.keep(&upload);
     }
@@ -742,7 +814,8 @@ mod tests {
     fn card(host: &Host, shadow: &Shadow) -> Vec<u8> {
         let (held, data) = host.shared_buffer(LEN as u64).unwrap();
         // SAFETY: an open list; live buffers.
-        run(host, |list| unsafe { list.CopyBufferRegion(&held, 0, &shadow.buffer, 0, LEN as u64) }).unwrap();
+        run(host, |list| unsafe { list.CopyBufferRegion(&held, 0, &shadow.buffer, 0, LEN as u64) })
+            .unwrap();
         // SAFETY: the mapping; the copy has run.
         unsafe { std::slice::from_raw_parts(data, LEN) }.to_vec()
     }
@@ -912,11 +985,21 @@ mod tests {
             lists.push(busy);
             for v in 0..3usize {
                 let list = host.new_list().unwrap();
-                list.defer_copy((start + AT) as *mut u8, (start + 65_536 + v * 256) as *const u8, 256);
+                list.defer_copy(
+                    (start + AT) as *mut u8,
+                    (start + 65_536 + v * 256) as *const u8,
+                    256,
+                );
                 shadow.refresh(&list, (start + AT) as u64, 256);
                 // SAFETY: an open list; live buffers.
                 unsafe {
-                    list.list.CopyBufferRegion(&out, (v * 256) as u64, &shadow.buffer, AT as u64, 256);
+                    list.list.CopyBufferRegion(
+                        &out,
+                        (v * 256) as u64,
+                        &shadow.buffer,
+                        AT as u64,
+                        256,
+                    );
                 }
                 list.close();
                 host.execute_own(&list);
@@ -951,17 +1034,30 @@ mod tests {
     #[test]
     #[ignore = "wants VICTORY_RELAY=2 VICTORY_RELAY_COPY=1 and a process of its own"]
     fn each_submission_reads_its_own_copy_in_pc_memory() {
-        each_reads_its_own(256 << 10, 0x8888, std::env::var_os("VICTORY_CARD_ALL").is_some_and(|v| v == "1"));
+        each_reads_its_own(
+            256 << 10,
+            0x8888,
+            std::env::var_os("VICTORY_CARD_ALL").is_some_and(|v| v == "1"),
+        );
     }
 
     /// What a draw of `list` reads at `at`: comes to `out`.
-    fn read_out(list: &HostList, shadow: &std::sync::Arc<Shadow>, at: usize, n: usize, out: (&ID3D12Resource, u64)) {
+    fn read_out(
+        list: &HostList,
+        shadow: &std::sync::Arc<Shadow>,
+        at: usize,
+        n: usize,
+        out: (&ID3D12Resource, u64),
+    ) {
         shadow.refresh(list, shadow.span().0 + at as u64, n as u64);
         // SAFETY: an open list; live buffers.
         unsafe {
             list.list.CopyBufferRegion(out.0, out.1, &shadow.buffer, at as u64, n as u64);
-            list.list
-                .ResourceBarrier(&[transition(&shadow.buffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON)]);
+            list.list.ResourceBarrier(&[transition(
+                &shadow.buffer,
+                D3D12_RESOURCE_STATE_COPY_SOURCE,
+                D3D12_RESOURCE_STATE_COMMON,
+            )]);
         }
     }
 
@@ -973,7 +1069,8 @@ mod tests {
         let Some(host) = host() else {
             return;
         };
-        let buffers: Vec<_> = sizes.iter().enumerate().map(|(i, &n)| title_of(resource + i, i == 0, n)).collect();
+        let buffers: Vec<_> =
+            sizes.iter().enumerate().map(|(i, &n)| title_of(resource + i, i == 0, n)).collect();
         let slow = Slow::new(host);
         let (out, out_data) = host.shared_buffer(1 << 20).unwrap();
         let mut seed = 0x9e37_79b9_7f4a_7c15u64 ^ resource as u64;
@@ -1025,20 +1122,31 @@ mod tests {
                     slow.record(&list, 4 + next(12));
                 }
                 for op in 0..1 + next(10) {
-                    let word = |next: &mut dyn FnMut(usize) -> usize| OWN + next((ALL - OWN - 256) / 4) * 4;
+                    let word = |next: &mut dyn FnMut(usize) -> usize| {
+                        OWN + next((ALL - OWN - 256) / 4) * 4
+                    };
                     match next(5) {
                         0 | 1 => {
                             let (d, s) = (next(2), next(3));
                             let n = 4 * (1 + next(64));
                             let to = word(&mut next);
-                            let from = if s == 2 || next(2) == 0 { next((OWN - 256) / 4) * 4 } else { word(&mut next) };
+                            let from = if s == 2 || next(2) == 0 {
+                                next((OWN - 256) / 4) * 4
+                            } else {
+                                word(&mut next)
+                            };
                             if d == s && from < to + n && to < from + n {
                                 continue;
                             }
-                            assert!(list.place_copy(made[d].0 + to, made[s].0 + from, n), "done in the list");
+                            assert!(
+                                list.place_copy(made[d].0 + to, made[s].0 + from, n),
+                                "done in the list"
+                            );
                             let bytes = model[s][from..from + n].to_vec();
                             model[d][to..to + n].copy_from_slice(&bytes);
-                            told += &format!("\n  s{submission} op{op}: copy {d}+{to:#x} <- {s}+{from:#x} {n:#x}");
+                            told += &format!(
+                                "\n  s{submission} op{op}: copy {d}+{to:#x} <- {s}+{from:#x} {n:#x}"
+                            );
                         }
                         2 => {
                             let (b, at, n) = (next(2), word(&mut next), 4 * (1 + next(32)));
@@ -1048,14 +1156,24 @@ mod tests {
                             shadow.gpu_writes(&list, (*start + at) as u64, n as u64);
                             write(host, &list, shadow, at, &vec![value; n]);
                             model[b][at..at + n].fill(value);
-                            told += &format!("\n  s{submission} op{op}: shader {b}+{at:#x} {n:#x} = {value:#x}");
+                            told += &format!(
+                                "\n  s{submission} op{op}: shader {b}+{at:#x} {n:#x} = {value:#x}"
+                            );
                         }
                         _ => {
                             let (b, n) = (next(2), 256);
-                            let at = if next(4) == 0 { next((OWN - 256) / 4) * 4 } else { word(&mut next) };
+                            let at = if next(4) == 0 {
+                                next((OWN - 256) / 4) * 4
+                            } else {
+                                word(&mut next)
+                            };
                             let place = expected.len() * 256;
                             read_out(&list, &made[b].1, at, n, (&out, place as u64));
-                            expected.push((place, model[b][at..at + n].to_vec(), format!("s{submission} op{op}: read {b}+{at:#x}")));
+                            expected.push((
+                                place,
+                                model[b][at..at + n].to_vec(),
+                                format!("s{submission} op{op}: read {b}+{at:#x}"),
+                            ));
                         }
                     }
                 }
@@ -1068,12 +1186,18 @@ mod tests {
                 // SAFETY: inside the mapping; the copies into it have run.
                 let got = unsafe { std::slice::from_raw_parts(out_data.add(at), bytes.len()) };
                 if let Some(k) = (0..bytes.len()).find(|&k| got[k] != bytes[k]) {
-                    panic!("round {round}, {what}: at +{k:#x} {:#x}, not {:#x}{told}", got[k], bytes[k]);
+                    panic!(
+                        "round {round}, {what}: at +{k:#x} {:#x}, not {:#x}{told}",
+                        got[k], bytes[k]
+                    );
                 }
             }
             for (b, title) in titles.iter().enumerate() {
                 if let Some(k) = (0..ALL).find(|&k| title[k] != model[b][k]) {
-                    panic!("round {round}: title memory {b}+{k:#x} is {:#x}, not {:#x}{told}", title[k], model[b][k]);
+                    panic!(
+                        "round {round}: title memory {b}+{k:#x} is {:#x}, not {:#x}{told}",
+                        title[k], model[b][k]
+                    );
                 }
             }
             // Brought up to date by the next, the copies hold it too.
@@ -1089,7 +1213,10 @@ mod tests {
                 // SAFETY: as above.
                 let got = unsafe { std::slice::from_raw_parts(out_data.add(b * ALL), ALL) };
                 if let Some(k) = (0..ALL).find(|&k| got[k] != model[k]) {
-                    panic!("round {round}: the copy {b}+{k:#x} is {:#x}, not {:#x}{told}", got[k], model[k]);
+                    panic!(
+                        "round {round}: the copy {b}+{k:#x} is {:#x}, not {:#x}{told}",
+                        got[k], model[k]
+                    );
                 }
             }
             if on() {
@@ -1181,7 +1308,11 @@ mod tests {
             "title memory"
         );
         let holds = card(host, &shadow);
-        assert_eq!([holds[D], holds[D + 64], holds[D + 128], holds[D + 192], holds[S]], [2, 7, 0, 5, 9], "the card");
+        assert_eq!(
+            [holds[D], holds[D + 64], holds[D + 128], holds[D + 192], holds[S]],
+            [2, 7, 0, 5, 9],
+            "the card"
+        );
         assert_eq!(look(host), Some(0));
         // With the debug layer.
         if let Some(said) = host.log_messages() {
@@ -1255,7 +1386,11 @@ mod tests {
                         write(host, &list, &shadow, at, &[0xEE; 4]);
                         slow.record(&list, 1);
                     }
-                    let value = if next(3) == 0 { [7, 7, 7, 7] } else { (0x8000_0000 | (round as u32) << 8 | next(256) as u32).to_le_bytes() };
+                    let value = if next(3) == 0 {
+                        [7, 7, 7, 7]
+                    } else {
+                        (0x8000_0000 | (round as u32) << 8 | next(256) as u32).to_le_bytes()
+                    };
                     write(host, &list, &shadow, at, &value);
                     model[at..at + 4].copy_from_slice(&value);
                 }
@@ -1278,7 +1413,11 @@ mod tests {
                 lists.push(all);
                 assert_eq!(look(host), Some(0), "round {round}: the card's side is the CPU's side");
                 let holds = card(host, &shadow);
-                let wrong = |held: &[u8]| (0..USED / 4).filter(|w| held[w * 4..w * 4 + 4] != model[w * 4..w * 4 + 4]).collect::<Vec<_>>();
+                let wrong = |held: &[u8]| {
+                    (0..USED / 4)
+                        .filter(|w| held[w * 4..w * 4 + 4] != model[w * 4..w * 4 + 4])
+                        .collect::<Vec<_>>()
+                };
                 let (on_card, in_title) = (wrong(&holds), wrong(title));
                 assert!(
                     on_card.is_empty() && in_title.is_empty(),

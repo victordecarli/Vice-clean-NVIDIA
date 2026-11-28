@@ -17,15 +17,9 @@ pub fn write_if_changed(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if std::fs::read(path).is_ok_and(|existing| existing == bytes) {
         return Ok(());
     }
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("image");
+    let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("image");
     let sequence = NEXT_STAGING.fetch_add(1, Ordering::Relaxed);
-    let staging = path.with_file_name(format!(
-        ".{name}.{}.{sequence}.tmp",
-        std::process::id()
-    ));
+    let staging = path.with_file_name(format!(".{name}.{}.{sequence}.tmp", std::process::id()));
     std::fs::write(&staging, bytes)?;
     if let Err(error) = std::fs::rename(&staging, path) {
         let _ = std::fs::remove_file(&staging);
@@ -67,10 +61,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("missing-parent").join("image.bin");
         assert!(write_if_changed(&path, b"bytes").is_err());
-        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
-            .unwrap()
-            .filter_map(|entry| entry.ok())
-            .collect();
+        let leftovers: Vec<_> =
+            std::fs::read_dir(dir.path()).unwrap().filter_map(|entry| entry.ok()).collect();
         assert!(leftovers.is_empty(), "no staging file survives an error");
     }
 }

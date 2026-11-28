@@ -15,24 +15,11 @@ pub fn run(file: &Path, list_imports: bool, list_exports: bool) -> Result<()> {
     if let Some(cv) = &info.codeview {
         println!("pdb            {}  (key {})", cv.pdb_path, cv.symbol_key());
     }
-    println!(
-        "kind           {}",
-        if info.is_dll() { "dll" } else { "exe" }
-    );
-    println!(
-        "subsystem      {} ({})",
-        info.subsystem,
-        info.subsystem_name()
-    );
-    println!(
-        "image base     {:#x}  size {:#x}",
-        info.image_base, info.size_of_image
-    );
+    println!("kind           {}", if info.is_dll() { "dll" } else { "exe" });
+    println!("subsystem      {} ({})", info.subsystem, info.subsystem_name());
+    println!("image base     {:#x}  size {:#x}", info.image_base, info.size_of_image);
     println!("entry rva      {:#x}", info.entry_rva);
-    println!(
-        "stack          reserve {:#x} commit {:#x}",
-        info.stack_reserve, info.stack_commit
-    );
+    println!("stack          reserve {:#x} commit {:#x}", info.stack_reserve, info.stack_commit);
     println!(
         "dll flags      {:#06x}{}",
         info.dll_characteristics,
@@ -60,11 +47,7 @@ pub fn run(file: &Path, list_imports: bool, list_exports: bool) -> Result<()> {
         );
     }
 
-    println!(
-        "\nimports        {} functions from {} DLLs",
-        info.import_count(),
-        info.imports.len()
-    );
+    println!("\nimports        {} functions from {} DLLs", info.import_count(), info.imports.len());
     for m in &info.imports {
         println!("  {:<48} {:>5}", m.dll, m.entries.len());
         if list_imports {
@@ -105,10 +88,7 @@ pub fn lib_exports(lib: &Path, list: bool) -> Result<()> {
         ImportLibrary::parse(&data).with_context(|| format!("parsing {}", lib.display()))?;
     let mut by_dll: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for i in &parsed.imports {
-        by_dll
-            .entry(i.dll.to_ascii_lowercase())
-            .or_default()
-            .push(i.export.to_string());
+        by_dll.entry(i.dll.to_ascii_lowercase()).or_default().push(i.export.to_string());
     }
     println!(
         "{} exports from {} DLLs ({} other members)",
@@ -141,14 +121,6 @@ fn dll_flags(v: u16) -> String {
         (APPCONTAINER, "appcontainer"),
         (GUARD_CF, "cfg"),
     ];
-    let set: Vec<_> = names
-        .iter()
-        .filter(|(f, _)| v & f != 0)
-        .map(|(_, n)| *n)
-        .collect();
-    if set.is_empty() {
-        String::new()
-    } else {
-        format!("  ({})", set.join(", "))
-    }
+    let set: Vec<_> = names.iter().filter(|(f, _)| v & f != 0).map(|(_, n)| *n).collect();
+    if set.is_empty() { String::new() } else { format!("  ({})", set.join(", ")) }
 }

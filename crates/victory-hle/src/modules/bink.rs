@@ -49,10 +49,7 @@ fn parse_mode(value: Option<&OsStr>) -> Mode {
         "1" => Mode::NotLooping,
         v if v.eq_ignore_ascii_case("all") => Mode::All,
         v => {
-            tracing::warn!(
-                value = v,
-                "VICTORY_SKIP_BINK: expected 1 or all; not skipping"
-            );
+            tracing::warn!(value = v, "VICTORY_SKIP_BINK: expected 1 or all; not skipping");
             Mode::Off
         }
     }
@@ -60,7 +57,7 @@ fn parse_mode(value: Option<&OsStr>) -> Mode {
 
 /// The start of the player's movie structure (`HBINK` points at it).
 #[repr(C)]
-#[allow(dead_code)] // the layout; not every field is read
+#[allow(dead_code, reason = "the layout; not every field is read")] // the layout; not every field is read
 struct Movie {
     width: u32,
     height: u32,
@@ -128,9 +125,7 @@ pub fn wrap(dll: &str, name: &str, address: usize) -> usize {
 }
 
 fn wrap_with(mode: Mode, dll: &str, name: &str, address: usize) -> usize {
-    let is_bink = dll
-        .get(..4)
-        .is_some_and(|start| start.eq_ignore_ascii_case("bink"));
+    let is_bink = dll.get(..4).is_some_and(|start| start.eq_ignore_ascii_case("bink"));
     if mode == Mode::Off || !is_bink || address == 0 {
         return address;
     }
@@ -239,10 +234,7 @@ impl ImportResolver for SkipMovies<'_> {
     fn resolve(&self, dll: &str, symbol: &ImportSymbol) -> Resolution {
         match (self.inner.resolve(dll, symbol), symbol) {
             (
-                Resolution::Found {
-                    address,
-                    provenance: Provenance::Title,
-                },
+                Resolution::Found { address, provenance: Provenance::Title },
                 ImportSymbol::Name { name, .. },
             ) => Resolution::Found {
                 address: wrap(dll, name, address),
@@ -321,10 +313,7 @@ mod tests {
         let do_async = bind(Mode::NotLooping, dll, "BinkDoFrameAsyncMulti", dll_wait);
         assert_ne!(wait as usize, dll_wait as *const () as usize);
         // A second Bink DLL keeps its own exports.
-        assert_eq!(
-            wrap_with(Mode::NotLooping, "bink2other.dll", "BinkWait", 0x2000),
-            0x2000
-        );
+        assert_eq!(wrap_with(Mode::NotLooping, "bink2other.dll", "BinkWait", 0x2000), 0x2000);
 
         // A movie that plays once is on its last frame at its first wait,
         // and stays there; the DLL is not called until it is closed.

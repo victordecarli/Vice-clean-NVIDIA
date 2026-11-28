@@ -806,11 +806,8 @@ pub(super) const VOP3P: &[(u16, &str)] = &[
     (0x022, "v_fma_mixhi_f16"),
 ];
 
-pub(super) const VINTRP: &[(u16, &str)] = &[
-    (0x000, "v_interp_p1_f32"),
-    (0x001, "v_interp_p2_f32"),
-    (0x002, "v_interp_mov_f32"),
-];
+pub(super) const VINTRP: &[(u16, &str)] =
+    &[(0x000, "v_interp_p1_f32"), (0x001, "v_interp_p2_f32"), (0x002, "v_interp_mov_f32")];
 
 pub(super) const DS: &[(u16, &str)] = &[
     (0x000, "ds_add_u32"),

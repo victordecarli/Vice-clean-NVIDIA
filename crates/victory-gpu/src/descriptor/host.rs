@@ -239,7 +239,8 @@ pub(crate) struct HostHeap {
 
 /// Since the last frame line: writes that left `placed` alone
 /// ([`spans_quick`]), writes that took its lock.
-pub(crate) static SPANS_QUICK: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
+pub(crate) static SPANS_QUICK: [std::sync::atomic::AtomicU64; 2] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 2];
 
 /// Whether a slot's write of no placed texture view leaves `placed` alone
 /// when the slot is not in it ([`HostHeap::spanned`]; `VICTORY_SPANS_QUICK=1`;
@@ -391,11 +392,13 @@ fn begun_before(view: &View) -> Option<u64> {
 /// Slots shown late ([`show_after`]), the frames they waited, the longest;
 /// those that were given the neutral texture meanwhile; those not shown any
 /// more when their time came.
-static LATE: [std::sync::atomic::AtomicU64; 5] = [const { std::sync::atomic::AtomicU64::new(0) }; 5];
+static LATE: [std::sync::atomic::AtomicU64; 5] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 5];
 
 /// What a texture slot showed before its last write: its record (0: null or
 /// the neutral texture), when (ms), and the submissions begun and finished.
 #[cfg(feature = "diagnostics")]
+#[allow(clippy::type_complexity, reason = "a table this file alone fills and reads")]
 static BEFORE: Mutex<std::collections::BTreeMap<u32, (u64, u64, (u64, u64), &'static str)>> =
     Mutex::new(std::collections::BTreeMap::new());
 
@@ -422,7 +425,10 @@ fn neutral() -> Option<&'static ID3D12Resource> {
                 let mut made: Option<ID3D12Resource> = None;
                 device
                     .CreateCommittedResource(
-                        &D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() },
+                        &D3D12_HEAP_PROPERTIES {
+                            Type: D3D12_HEAP_TYPE_DEFAULT,
+                            ..Default::default()
+                        },
                         D3D12_HEAP_FLAG_NONE,
                         &D3D12_RESOURCE_DESC {
                             Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
@@ -441,11 +447,16 @@ fn neutral() -> Option<&'static ID3D12Resource> {
                     .ok()?;
                 let made = made?;
                 let queue: ID3D12CommandQueue = device
-                    .CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC { Type: D3D12_COMMAND_LIST_TYPE_COPY, ..Default::default() })
+                    .CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
+                        Type: D3D12_COMMAND_LIST_TYPE_COPY,
+                        ..Default::default()
+                    })
                     .ok()?;
-                let allocator: ID3D12CommandAllocator = device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY).ok()?;
-                let list: ID3D12GraphicsCommandList =
-                    device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, &allocator, None).ok()?;
+                let allocator: ID3D12CommandAllocator =
+                    device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY).ok()?;
+                let list: ID3D12GraphicsCommandList = device
+                    .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, &allocator, None)
+                    .ok()?;
                 let to = D3D12_TEXTURE_COPY_LOCATION {
                     pResource: std::mem::transmute_copy(&made),
                     Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
@@ -472,7 +483,9 @@ fn neutral() -> Option<&'static ID3D12Resource> {
                 queue.ExecuteCommandLists(&[Some(windows::core::Interface::cast(&list).ok()?)]);
                 queue.Signal(&fence, 1).ok()?;
                 // (Without an event: this waits.)
-                fence.SetEventOnCompletion(1, windows::Win32::Foundation::HANDLE::default()).ok()?;
+                fence
+                    .SetEventOnCompletion(1, windows::Win32::Foundation::HANDLE::default())
+                    .ok()?;
                 Some(made)
             }
         })
@@ -503,7 +516,11 @@ fn neutral_for(view: &View, at: D3D12_CPU_DESCRIPTOR_HANDLE) -> Option<ID3D12Res
             ViewDimension: D3D12_SRV_DIMENSION_TEXTURE2DARRAY,
             Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
             Anonymous: D3D12_SHADER_RESOURCE_VIEW_DESC_0 {
-                Texture2DArray: D3D12_TEX2D_ARRAY_SRV { MipLevels: 1, ArraySize: 1, ..Default::default() },
+                Texture2DArray: D3D12_TEX2D_ARRAY_SRV {
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    ..Default::default()
+                },
             },
         },
         _ => {
@@ -573,7 +590,8 @@ pub(crate) fn flip_now() {
 
 /// Since the start: slots made from their new view after its upload had run,
 /// and those the title had written again by then.
-pub(crate) static FLIPPED: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
+pub(crate) static FLIPPED: [std::sync::atomic::AtomicU64; 2] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 2];
 
 /// The key of the record at `handle`, a view's descriptor slot; 0: none.
 fn record_key(handle: u64) -> u64 {
@@ -587,7 +605,8 @@ fn record_key(handle: u64) -> u64 {
 /// room, or no heap could be had), and when (`crate::host::moment`). A
 /// texture pass makes their slots due again once the card has room
 /// ([`HostHeap::texture_slots_waiting`]).
-static WAITING: Mutex<std::collections::BTreeMap<u64, u64>> = Mutex::new(std::collections::BTreeMap::new());
+static WAITING: Mutex<std::collections::BTreeMap<u64, u64>> =
+    Mutex::new(std::collections::BTreeMap::new());
 
 /// The last upload of the placed texture at `start` left a held level
 /// without tiles. A texture picked by index is uploaded once and then
@@ -719,7 +738,9 @@ impl Spans {
     /// Otherwise (a draw made the slot from what it held), and under
     /// [`Rule::Never`], a view that clashes with other spans is left out.
     fn note(&mut self, index: u32, start: u64, end: u64, newer: bool) -> Vec<u32> {
-        let same = |span: Option<&(u64, std::collections::BTreeSet<u32>)>| span.is_some_and(|s| s.0 == end);
+        let same = |span: Option<&(u64, std::collections::BTreeSet<u32>)>| {
+            span.is_some_and(|s| s.0 == end)
+        };
         if self.by_slot.get(&index) == Some(&start) && same(self.by_start.get(&start)) {
             return Vec::new();
         }
@@ -785,7 +806,13 @@ impl Spans {
 
     /// The lowest level a view of the texture at `start` starts at.
     fn first_viewed(&self, start: u64) -> Option<u32> {
-        self.by_start.get(&start)?.1.iter().filter_map(|slot| self.first.get(slot)).map(|&(first, _)| first).min()
+        self.by_start
+            .get(&start)?
+            .1
+            .iter()
+            .filter_map(|slot| self.first.get(slot))
+            .map(|&(first, _)| first)
+            .min()
     }
 
     /// The first span that starts inside `[start, end)` past the first
@@ -835,7 +862,11 @@ impl Spans {
         let before = if self.by_start.contains_key(&start) {
             None
         } else {
-            self.by_start.range(..start).next_back().filter(|(_, span)| span.0 > start).map(|(_, span)| span)
+            self.by_start
+                .range(..start)
+                .next_back()
+                .filter(|(_, span)| span.0 > start)
+                .map(|(_, span)| span)
         };
         before
             .into_iter()
@@ -908,10 +939,8 @@ static REMAPPED: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
 /// The lowest start and the highest end of any span of [`Spans`] so far
 /// (the start is `u64::MAX` until there is one): what the runtime does to
 /// memory outside is none of the texture pass's business.
-static SPANNED: [std::sync::atomic::AtomicU64; 2] = [
-    std::sync::atomic::AtomicU64::new(u64::MAX),
-    std::sync::atomic::AtomicU64::new(0),
-];
+static SPANNED: [std::sync::atomic::AtomicU64; 2] =
+    [std::sync::atomic::AtomicU64::new(u64::MAX), std::sync::atomic::AtomicU64::new(0)];
 
 /// Since the start: slots whose view a newer view of other memory there
 /// made stale; ranges of memory noted as mapped, unmapped or written;
@@ -1122,7 +1151,8 @@ fn not_taken(site: usize) {
         let mut counts = n.get();
         counts[site] += 1;
         if counts[site] >= BATCH {
-            super::QUEUE_LOCK[3][site].fetch_add(u64::from(counts[site]), std::sync::atomic::Ordering::Relaxed);
+            super::QUEUE_LOCK[3][site]
+                .fetch_add(u64::from(counts[site]), std::sync::atomic::Ordering::Relaxed);
             counts[site] = 0;
         }
         n.set(counts);
@@ -1154,7 +1184,8 @@ pub(crate) fn queue_host_textures() -> bool {
 /// Records of textures the host writes left out of the queue
 /// ([`queue_host_textures`]) since the start, counted by each thread in
 /// batches.
-pub(crate) static HOST_TEXTURES_LEFT_OUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(crate) static HOST_TEXTURES_LEFT_OUT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 fn host_texture_left_out() {
     const BATCH: u32 = 64;
@@ -1219,7 +1250,10 @@ impl TextureQueue {
         }
         self.writes += 1;
         let write = self.writes;
-        self.put(index, Waiting { due, written: frame, write, looks: 0, mapped: 0, checked: (0, 0, 0, 0, 0) });
+        self.put(
+            index,
+            Waiting { due, written: frame, write, looks: 0, mapped: 0, checked: (0, 0, 0, 0, 0) },
+        );
     }
 
     fn remove(&mut self, index: u32) {
@@ -1269,7 +1303,12 @@ impl TextureQueue {
                 if w.looks > 0 || w.mapped > 0 {
                     // (Only these can wait for a look again: `recheck`
                     // leaves a look, `partly` some bytes mapped.)
-                    due.again.push((w.written, index, w.write, Some(w.checked).filter(|c| c.2 != 0)));
+                    due.again.push((
+                        w.written,
+                        index,
+                        w.write,
+                        Some(w.checked).filter(|c| c.2 != 0),
+                    ));
                 } else {
                     due.fresh.push((w.written, index, w.write));
                 }
@@ -1321,9 +1360,10 @@ impl Due {
     fn ordered(self, max: usize) -> (Vec<(u32, u64)>, Vec<Option<Checked>>) {
         let Due { mut again, mut fresh } = self;
         // By the number of the write, counted over the run.
-        again.sort_unstable_by(|a, b| b.2.cmp(&a.2));
-        fresh.sort_unstable_by(|a, b| b.2.cmp(&a.2));
-        let mut order: Vec<(u32, u64)> = again.iter().map(|&(_, index, write, _)| (index, write)).collect();
+        again.sort_unstable_by_key(|a| std::cmp::Reverse(a.2));
+        fresh.sort_unstable_by_key(|a| std::cmp::Reverse(a.2));
+        let mut order: Vec<(u32, u64)> =
+            again.iter().map(|&(_, index, write, _)| (index, write)).collect();
         let mut known: Vec<Option<Checked>> = again.iter().map(|a| a.3).collect();
         let (mut new, mut old) = (0, fresh.len());
         while new < old && order.len() < max {
@@ -1405,8 +1445,20 @@ impl TextureQueue {
     /// with fingerprint `print`: looked at again from frame `due`, for a
     /// title that fills a texture's memory after it wrote the view (the
     /// `looks`-th such look; `uploaded` is the upload's frame).
-    #[allow(clippy::too_many_arguments)]
-    fn recheck(&mut self, index: u32, write: u64, due: u64, at: (u64, u64), print: u64, looks: u8, uploaded: u64) {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the upload and the look it rechecks, as the queue keeps them"
+    )]
+    fn recheck(
+        &mut self,
+        index: u32,
+        write: u64,
+        due: u64,
+        at: (u64, u64),
+        print: u64,
+        looks: u8,
+        uploaded: u64,
+    ) {
         if let Some(w) = self.same(index, write) {
             (w.due, w.looks, w.mapped) = (due, 1, 0);
             w.checked = (at.0, at.1, print, looks, uploaded);
@@ -1427,7 +1479,10 @@ impl TextureQueue {
         self.writes += 1;
         let write = self.writes;
         let due = self.slots.get(&index).map_or(due, |w| w.due.min(due));
-        self.put(index, Waiting { due, written: frame, write, looks: 0, mapped: 0, checked: (0, 0, 0, 0, 0) });
+        self.put(
+            index,
+            Waiting { due, written: frame, write, looks: 0, mapped: 0, checked: (0, 0, 0, 0, 0) },
+        );
     }
 
     /// Bytes of slot `index`'s memory that were mapped at its last upload
@@ -1497,7 +1552,8 @@ impl TextureQueue {
 /// had been due before the pass took them (in all, and the most); after
 /// looks that found their memory not there, with the frames since their
 /// write (in all, and the most). ([`TextureQueue::note_served`].)
-pub(crate) static SERVED: [std::sync::atomic::AtomicU64; 6] = [const { std::sync::atomic::AtomicU64::new(0) }; 6];
+pub(crate) static SERVED: [std::sync::atomic::AtomicU64; 6] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 6];
 
 /// Whether `view` is of a texture the title may fill itself: a texture it
 /// placed in memory, or a texture object.
@@ -1551,13 +1607,7 @@ fn raw_range(size: u64, offset: u64, len: u64) -> (Option<RawRange>, Option<Cut>
     } else {
         None
     };
-    (
-        Some(RawRange {
-            first: asked,
-            elements: elements as u32,
-        }),
-        cut,
-    )
+    (Some(RawRange { first: asked, elements: elements as u32 }), cut)
 }
 
 // Since launch, in Cut order: past the end, shortened, sub-dword, unaligned.
@@ -1591,7 +1641,8 @@ fn raw_view_range(
 
 /// Buffer views left null because the host would refuse them
 /// ([`buffer_view_ok`]), since the start.
-pub(crate) static REFUSED_VIEWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(crate) static REFUSED_VIEWS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Whether the host device is gone, and why (the first time it is asked
 /// after that): for passes that make many views, to name the one that did
@@ -1605,8 +1656,10 @@ pub(crate) fn device_removed() -> Option<String> {
 
 /// Writes of title view-heap slots with a placed texture view and with a
 /// view of a texture object, since the start (diagnostic counts).
-pub(crate) static PLACED_TEXTURE_SLOTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub(crate) static OBJECT_TEXTURE_SLOTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(crate) static PLACED_TEXTURE_SLOTS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+pub(crate) static OBJECT_TEXTURE_SLOTS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Bytes per element and typed integer format bits of a buffer view, decoded
 /// in a single pass over the view descriptor; `(None, 0)` if not a buffer view.
@@ -1760,7 +1813,8 @@ pub(crate) fn shown_bytes(at: u32, n: u32) -> Option<(u32, Vec<u8>, u32)> {
             return None;
         }
         let mut bytes = vec![0u8; n as usize * 32];
-        crate::host::read_into(host.cpu(at).ptr as *const u8, &mut bytes).then_some((at, bytes, end))
+        crate::host::read_into(host.cpu(at).ptr as *const u8, &mut bytes)
+            .then_some((at, bytes, end))
     })?
 }
 
@@ -1968,13 +2022,12 @@ impl HostHeap {
         let make = |count: u32| -> windows::core::Result<ID3D12DescriptorHeap> {
             // SAFETY: plain heap creation.
             unsafe {
-                host.device
-                    .CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
-                        Type: kind,
-                        NumDescriptors: count,
-                        Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-                        NodeMask: 0,
-                    })
+                host.device.CreateDescriptorHeap(&D3D12_DESCRIPTOR_HEAP_DESC {
+                    Type: kind,
+                    NumDescriptors: count,
+                    Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+                    NodeMask: 0,
+                })
             }
         };
         // A view heap ends at the null slot shaders clamp view indices to
@@ -1983,11 +2036,7 @@ impl HostHeap {
         if !sampler {
             probe_view_limit();
         }
-        let null = if sampler {
-            0
-        } else {
-            victory_shader::emit::view_heap_limit()
-        };
+        let null = if sampler { 0 } else { victory_shader::emit::view_heap_limit() };
         let raw = if sampler { 0 } else { victory_shader::emit::raw_views() };
         let extra = if sampler { 0 } else { dynamic_slots(count, null) };
         let (heap, count, size) = if null == 0 {
@@ -2005,7 +2054,10 @@ impl HostHeap {
             } else {
                 // shortcut: descriptors past the host's limit are left out; a title that reaches
                 // them needs remapping. They read the null slot instead.
-                tracing::warn!(count, "host view heap capped at {size}; views past it read a null slot");
+                tracing::warn!(
+                    count,
+                    "host view heap capped at {size}; views past it read a null slot"
+                );
                 null - extra
             };
             match make(size) {
@@ -2057,7 +2109,9 @@ impl HostHeap {
             dynamic: extra,
             sampler,
             raw,
-            twins: (0..if raw == 0 { 0 } else { count + extra }).map(|_| std::sync::atomic::AtomicBool::new(false)).collect(),
+            twins: (0..if raw == 0 { 0 } else { count + extra })
+                .map(|_| std::sync::atomic::AtomicBool::new(false))
+                .collect(),
             #[cfg(feature = "diagnostics")]
             written: (0..if sampler || !crate::book::on() { 0 } else { size })
                 .map(|_| std::sync::atomic::AtomicU32::new(0))
@@ -2117,9 +2171,8 @@ impl HostHeap {
                     ..Default::default()
                 })?;
             let start = block.GetCPUDescriptorHandleForHeapStart();
-            let at = |i: u32| D3D12_CPU_DESCRIPTOR_HANDLE {
-                ptr: start.ptr + (i * self.step) as usize,
-            };
+            let at =
+                |i: u32| D3D12_CPU_DESCRIPTOR_HANDLE { ptr: start.ptr + (i * self.step) as usize };
             // (The twins are null buffer views.)
             let ends = if self.raw == 0 { [total, total] } else { [self.raw.min(total), total] };
             let mut done = 0;
@@ -2198,7 +2251,8 @@ impl std::ops::DerefMut for QueueGuard<'_> {
 impl Drop for QueueGuard<'_> {
     fn drop(&mut self) {
         if let Some((site, since)) = self.held {
-            super::QUEUE_LOCK[2][site].fetch_add(since.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+            super::QUEUE_LOCK[2][site]
+                .fetch_add(since.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }
@@ -2222,7 +2276,8 @@ impl HostHeap {
             }
         };
         super::QUEUE_LOCK[0][site].fetch_add(1, Relaxed);
-        let held = matches!(site, DUE | MADE_DUE | STALE).then(|| (site, std::time::Instant::now()));
+        let held =
+            matches!(site, DUE | MADE_DUE | STALE).then(|| (site, std::time::Instant::now()));
         QueueGuard { queue, held }
     }
 
@@ -2277,7 +2332,9 @@ impl HostHeap {
                 self.too_long.fetch_min(n as u32, std::sync::atomic::Ordering::Relaxed);
             }
             static ONCE: std::sync::Once = std::sync::Once::new();
-            ONCE.call_once(|| tracing::warn!(n, "no free dynamic descriptor slots: a table is not made"));
+            ONCE.call_once(|| {
+                tracing::warn!(n, "no free dynamic descriptor slots: a table is not made")
+            });
             #[cfg(feature = "diagnostics")]
             {
                 use crate::copystat::{C, add};
@@ -2327,7 +2384,15 @@ impl HostHeap {
     /// [`TextureQueue::checked`] said of it then, read in the same take of
     /// the lock (the pass asked it slot by slot, under the lock each time);
     /// and the queue's counts ([`TextureQueue::census`]).
-    pub(crate) fn texture_slots_due_known(&self, frame: u64, max: usize) -> (Vec<(u32, u64)>, Vec<Option<Checked>>, [u64; 6]) {
+    #[allow(
+        clippy::type_complexity,
+        reason = "the type is written once; callers take its parts apart"
+    )]
+    pub(crate) fn texture_slots_due_known(
+        &self,
+        frame: u64,
+        max: usize,
+    ) -> (Vec<(u32, u64)>, Vec<Option<Checked>>, [u64; 6]) {
         let (due, census) = self.queue(super::queue_site::DUE).due_and_census(frame);
         let (order, known) = if max == 0 { (Vec::new(), Vec::new()) } else { due.ordered(max) };
         (order, known, census)
@@ -2374,7 +2439,9 @@ impl HostHeap {
     /// whether memory was noted since a pass last took the notes.
     pub(crate) fn texture_news(&self) -> (u64, bool) {
         let writes = self.queue(super::queue_site::OTHER).writes;
-        let noted = |ranges: &Mutex<Vec<(u64, u64)>>| !ranges.lock().unwrap_or_else(|e| e.into_inner()).is_empty();
+        let noted = |ranges: &Mutex<Vec<(u64, u64)>>| {
+            !ranges.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
+        };
         (writes, noted(&REMAPPED) || noted(&PAGE_WRITTEN) || noted(&BAKE_PAGE_WRITTEN))
     }
 
@@ -2406,7 +2473,7 @@ impl HostHeap {
     }
 
     /// Title slot `index` was uploaded whole: see [`TextureQueue::recheck`].
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, reason = "passes TextureQueue::recheck its arguments")]
     pub(crate) fn texture_slot_recheck(
         &self,
         index: u32,
@@ -2546,7 +2613,8 @@ impl HostHeap {
     /// writes (DirectStorage completions) immediately (`due = frame`) right
     /// before a one-shot ped/decoration bake draw.
     pub(crate) fn texture_slots_bake_written(&self, frame: u64) -> usize {
-        let mut ranges = std::mem::take(&mut *BAKE_PAGE_WRITTEN.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut ranges =
+            std::mem::take(&mut *BAKE_PAGE_WRITTEN.lock().unwrap_or_else(|e| e.into_inner()));
         if ranges.is_empty() {
             return 0;
         }
@@ -2562,7 +2630,9 @@ impl HostHeap {
         slots.dedup();
         slots.retain(|&slot| !self.tabled_lately(slot, frame));
         let mut textures = self.queue(super::queue_site::MADE_DUE);
-        slots.retain(|slot| textures.slots.get(slot).is_none_or(|w| w.mapped > 0 || w.checked.2 != 0));
+        slots.retain(|slot| {
+            textures.slots.get(slot).is_none_or(|w| w.mapped > 0 || w.checked.2 != 0)
+        });
         for &slot in &slots {
             textures.changed(slot, frame, frame);
         }
@@ -2585,7 +2655,9 @@ impl HostHeap {
         let mut textures = self.queue(super::queue_site::MADE_DUE);
         // Uploaded before: out of the queue, or in it after an upload (in
         // part, or whole and being looked at again).
-        slots.retain(|slot| textures.slots.get(slot).is_none_or(|w| w.mapped > 0 || w.checked.2 != 0));
+        slots.retain(|slot| {
+            textures.slots.get(slot).is_none_or(|w| w.mapped > 0 || w.checked.2 != 0)
+        });
         PAGE_WRITES[2].fetch_add(held as u64, Relaxed);
         PAGE_WRITES[3].fetch_add(slots.len() as u64, Relaxed);
         if !due {
@@ -2744,7 +2816,10 @@ impl HostHeap {
         const AWAY_MS: u64 = 3000;
         static WAIT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
         let wait = *WAIT.get_or_init(|| {
-            std::env::var("VICTORY_TEXTURE_AWAY_MS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(AWAY_MS)
+            std::env::var("VICTORY_TEXTURE_AWAY_MS")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(AWAY_MS)
         });
         let _made = self.made.lock(index);
         let Some(key) = self.made.get(index).filter(|&key| key != 0) else {
@@ -2754,7 +2829,9 @@ impl HostHeap {
         {
             let mut away = self.away.lock().unwrap_or_else(|e| e.into_inner());
             match away.get(&index) {
-                Some(&(was, since)) if was == key && now.saturating_sub(since) < wait => return false,
+                Some(&(was, since)) if was == key && now.saturating_sub(since) < wait => {
+                    return false;
+                }
                 Some(&(was, _)) if was == key => {
                     away.remove(&index);
                 }
@@ -2795,7 +2872,12 @@ impl HostHeap {
     /// The same of a slot that shows nothing of the texture the record at
     /// `handle` views, or something else: until then it shows the neutral
     /// texture ([`show_after`]).
-    pub(crate) fn texture_slot_show_after(&self, list: &crate::host::HostList, index: u32, handle: u64) {
+    pub(crate) fn texture_slot_show_after(
+        &self,
+        list: &crate::host::HostList,
+        index: u32,
+        handle: u64,
+    ) {
         if self.show_later(index, handle) {
             self.flip(list, index, handle, Some(crate::frame::current()));
         }
@@ -2844,7 +2926,12 @@ impl HostHeap {
 
     /// [`HostHeap::texture_slot_show_after`] of a texture whose upload `job`
     /// makes: shown when that has run.
-    pub(crate) fn texture_slot_show_ahead(&self, job: &crate::texture::ahead::Job, index: u32, handle: u64) {
+    pub(crate) fn texture_slot_show_ahead(
+        &self,
+        job: &crate::texture::ahead::Job,
+        index: u32,
+        handle: u64,
+    ) {
         if !self.show_later(index, handle) {
             return;
         }
@@ -2867,7 +2954,8 @@ impl HostHeap {
             && let Some(view) = super::view(handle)
             && let Some(View::Shader(resource, _)) = placed_texture(&view).or(Some(view))
             && crate::resource::buffer_bytes(resource as crate::object::This).is_none()
-            && crate::resource::host_resource(resource as crate::object::This).is_some_and(crate::pool::fresh)
+            && crate::resource::host_resource(resource as crate::object::This)
+                .is_some_and(crate::pool::fresh)
             && !crate::texture::ahead::there(resource as crate::object::This)
         {
             return self.texture_slot_show_after(list, index, handle);
@@ -3052,7 +3140,9 @@ impl HostHeap {
             // (A slot shown late is null until now.)
             let view = view_at(f.key as u32, (f.key >> 32) as u32);
             let there = shown != 0 || f.late.is_some();
-            let (true, true, Some(view)) = (f.key != 0 && record_key(f.handle) == f.key, there, view) else {
+            let (true, true, Some(view)) =
+                (f.key != 0 && record_key(f.handle) == f.key, there, view)
+            else {
                 FLIPPED[1].fetch_add(1, Relaxed);
                 LATE[4].fetch_add(u64::from(f.late.is_some()), Relaxed);
                 continue;
@@ -3070,7 +3160,11 @@ impl HostHeap {
             }
             if let Some(kept) = make(&view, self.at(f.index)) {
                 #[cfg(feature = "diagnostics")]
-                note_before(f.index, shown, if f.late.is_some() { "shown after its upload" } else { "flip" });
+                note_before(
+                    f.index,
+                    shown,
+                    if f.late.is_some() { "shown after its upload" } else { "flip" },
+                );
                 self.put(f.index);
                 #[cfg(feature = "diagnostics")]
                 let was = shown;
@@ -3221,9 +3315,7 @@ impl HostHeap {
 
     /// What `tabled` holds for title slot `index`; 0: never a table's.
     fn tabled_stamp(&self, index: u32) -> u32 {
-        self.tabled
-            .get(index as usize)
-            .map_or(0, |s| s.load(std::sync::atomic::Ordering::Relaxed))
+        self.tabled.get(index as usize).map_or(0, |s| s.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// The queue's part of a write of title slot `index` in `frame`:
@@ -3234,7 +3326,8 @@ impl HostHeap {
         let now = (frame as u32).wrapping_add(1) & !TABLED_READ;
         // A table's slot lately: the draw that reads it uploads its
         // texture, so its write waits for that draw.
-        let lately = stamp != 0 && u64::from(now.wrapping_sub(stamp & !TABLED_READ)) <= TABLED_FRAMES;
+        let lately =
+            stamp != 0 && u64::from(now.wrapping_sub(stamp & !TABLED_READ)) <= TABLED_FRAMES;
         // Made now by a draw of this frame that read it through a table:
         // up to date.
         let read_now = seen && stamp == now | TABLED_READ;
@@ -3312,14 +3405,18 @@ impl HostHeap {
                 PLACED_TEXTURE_SLOTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 true
             }
-            Some(View::Shader(r, _)) if crate::resource::buffer_bytes(*r as crate::object::This).is_none() => {
+            Some(View::Shader(r, _))
+                if crate::resource::buffer_bytes(*r as crate::object::This).is_none() =>
+            {
                 OBJECT_TEXTURE_SLOTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 // A texture the host renders to or writes: nothing for the
                 // pass to bring up to date ([`queue_host_textures`]).
-                queue_host_textures() || crate::resource::title_fills(*r as crate::object::This) || {
-                    host_texture_left_out();
-                    false
-                }
+                queue_host_textures()
+                    || crate::resource::title_fills(*r as crate::object::This)
+                    || {
+                        host_texture_left_out();
+                        false
+                    }
             }
             _ => false,
         };
@@ -3336,7 +3433,8 @@ impl HostHeap {
                 // view's description, after format, dimension, mapping
                 // and a pad.)
                 let at = u64::from(desc[10]) | u64::from(desc[11]) << 32;
-                let held = crate::resource::placed_bytes_from(resource, crate::resource::first_mip(desc));
+                let held =
+                    crate::resource::placed_bytes_from(resource, crate::resource::first_mip(desc));
                 Some((resource, at, desc[4], held.map_or(u64::MAX, |held| at.saturating_add(held))))
             }
             _ => None,
@@ -3345,7 +3443,10 @@ impl HostHeap {
         // `spanned` changes only here.)
         let in_spans = |index: u32| {
             let bit = 1u64 << (index % 64);
-            self.spanned.0.get(index as usize / 64).is_none_or(|w| w.load(std::sync::atomic::Ordering::Acquire) & bit != 0)
+            self.spanned
+                .0
+                .get(index as usize / 64)
+                .is_none_or(|w| w.load(std::sync::atomic::Ordering::Acquire) & bit != 0)
         };
         let stale = if placed_view.is_none() && !in_spans(index) && spans_quick() {
             SPANS_QUICK[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -3379,7 +3480,11 @@ impl HostHeap {
         if !stale.is_empty() {
             STALE[0].fetch_add(stale.len() as u64, std::sync::atomic::Ordering::Relaxed);
             // Only the ones the queue may hold.
-            let queued: Vec<u32> = stale.iter().map(|&(slot, _)| slot).filter(|&slot| self.queued(slot) != Some(false)).collect();
+            let queued: Vec<u32> = stale
+                .iter()
+                .map(|&(slot, _)| slot)
+                .filter(|&slot| self.queued(slot) != Some(false))
+                .collect();
             if queued.is_empty() {
                 not_taken(super::queue_site::STALE);
             } else {
@@ -3461,7 +3566,12 @@ impl HostHeap {
     /// made one, else as [`HostHeap::make_at`] does, and keeps that
     /// ([`ListViews`]). What is known of the record in this recording;
     /// `None` (the slot is not made): not a view kept so.
-    pub(crate) fn make_listed(&self, recording: u64, words: [u32; 3], index: u32) -> Option<Listed> {
+    pub(crate) fn make_listed(
+        &self,
+        recording: u64,
+        words: [u32; 3],
+        index: u32,
+    ) -> Option<Listed> {
         if self.sampler {
             return None;
         }
@@ -3517,7 +3627,14 @@ impl HostHeap {
         }
         let Some(host) = host() else { return };
         // SAFETY: a slot of our heap, and one of this thread's heap.
-        unsafe { host.device.CopyDescriptorsSimple(1, self.cpu(to), from, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+        unsafe {
+            host.device.CopyDescriptorsSimple(
+                1,
+                self.cpu(to),
+                from,
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            )
+        };
     }
 
     /// Makes slot `index` read nothing: a null view, or a plain sampler.
@@ -3535,7 +3652,8 @@ impl HostHeap {
 
     /// Where the raw twin of slot `index` is made.
     fn twin(&self, index: u32) -> Option<D3D12_CPU_DESCRIPTOR_HANDLE> {
-        (index < self.twins.len() as u32).then(|| staged(self.sampler, 1).unwrap_or_else(|| self.cpu(self.raw + index)))
+        (index < self.twins.len() as u32)
+            .then(|| staged(self.sampler, 1).unwrap_or_else(|| self.cpu(self.raw + index)))
     }
 
     /// The raw twin of slot `index` was made by this thread ([`make_twinned`]),
@@ -3610,10 +3728,7 @@ impl HostHeap {
             },
         };
         // SAFETY: a slot of our heap and a live buffer covering the range.
-        unsafe {
-            host.device
-                .CreateShaderResourceView(buffer, Some(&desc), self.at(index))
-        };
+        unsafe { host.device.CreateShaderResourceView(buffer, Some(&desc), self.at(index)) };
         self.put(index);
         // (Bound by its handle, not read by index.)
         self.clear_twin(index);
@@ -3703,9 +3818,7 @@ impl HostHeap {
     pub(crate) fn gpu_handle(&self, index: u32) -> D3D12_GPU_DESCRIPTOR_HANDLE {
         // SAFETY: a live shader-visible heap.
         let start = unsafe { self.heap.GetGPUDescriptorHandleForHeapStart().ptr };
-        D3D12_GPU_DESCRIPTOR_HANDLE {
-            ptr: start + u64::from(index) * u64::from(self.step),
-        }
+        D3D12_GPU_DESCRIPTOR_HANDLE { ptr: start + u64::from(index) * u64::from(self.step) }
     }
 
     /// Makes slot `index` (a dynamic one) a constant buffer view of host
@@ -3719,17 +3832,15 @@ impl HostHeap {
     /// `VICTORY_SLOT_HOLDS=0`: only the list holds it, as before.
     pub(crate) fn constant_at(&self, index: u32, buffer: &ID3D12Resource, gpu: u64, size: u32) {
         static HOLDS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let holds = *HOLDS.get_or_init(|| std::env::var_os("VICTORY_SLOT_HOLDS").is_none_or(|v| v != "0"));
+        let holds =
+            *HOLDS.get_or_init(|| std::env::var_os("VICTORY_SLOT_HOLDS").is_none_or(|v| v != "0"));
         let Some(host) = host() else { return };
         let desc = D3D12_CONSTANT_BUFFER_VIEW_DESC {
             BufferLocation: gpu,
             SizeInBytes: constant_bytes(size),
         };
         // SAFETY: a slot of our heap; the memory is the caller's.
-        unsafe {
-            host.device
-                .CreateConstantBufferView(Some(&desc), self.at(index))
-        };
+        unsafe { host.device.CreateConstantBufferView(Some(&desc), self.at(index)) };
         self.put(index);
         // A program that reads it as raw bytes reads its twin.
         let twin = self.twin(index).filter(|_| desc.SizeInBytes > 0);
@@ -3797,9 +3908,7 @@ impl HostHeap {
     }
 
     fn cpu(&self, index: u32) -> D3D12_CPU_DESCRIPTOR_HANDLE {
-        D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr: self.cpu + index as usize * self.step as usize,
-        }
+        D3D12_CPU_DESCRIPTOR_HANDLE { ptr: self.cpu + index as usize * self.step as usize }
     }
 
     /// The records last seen of the title's heap, `step` bytes each, held for
@@ -3899,7 +4008,10 @@ impl HostHeap {
         // the opening, profile cpu-1).
         if tag == VIEW_TAG
             && quick_mirror()
-            && self.quick.get(index as usize).is_some_and(|k| k.load(std::sync::atomic::Ordering::Acquire) == key)
+            && self
+                .quick
+                .get(index as usize)
+                .is_some_and(|k| k.load(std::sync::atomic::Ordering::Acquire) == key)
             && let Some(view) = view_at(i, generation)
         {
             return Some(view);
@@ -4001,7 +4113,14 @@ impl HostHeap {
                     self.keep(index, kept);
                 }
                 let late = Some(crate::frame::current());
-                let flip = Flip { after, heap: std::ptr::from_ref(self) as usize, index, handle, key, late };
+                let flip = Flip {
+                    after,
+                    heap: std::ptr::from_ref(self) as usize,
+                    index,
+                    handle,
+                    key,
+                    late,
+                };
                 FLIPS.lock().unwrap_or_else(|e| e.into_inner()).push(flip);
                 NEW_LATER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 drop(held);
@@ -4014,11 +4133,8 @@ impl HostHeap {
             }
             self.quick_is(index, 0);
             self.made.set(index, if later { 0 } else { key });
-            let kept = if later {
-                None
-            } else {
-                make_twinned(&view, self.at(index), self.twin(index))
-            };
+            let kept =
+                if later { None } else { make_twinned(&view, self.at(index), self.twin(index)) };
             if kept.is_none() && !self.sampler {
                 null_for(&view, self.at(index));
             }
@@ -4197,11 +4313,7 @@ fn srv_desc(words: &[u32; 10]) -> D3D12_SHADER_RESOURCE_VIEW_DESC {
     let mut words = *words;
     words[0] = crate::resource::pc_format(words[0]);
     // SAFETY: 40 bytes in the host's layout.
-    unsafe {
-        std::ptr::from_ref(&words)
-            .cast::<D3D12_SHADER_RESOURCE_VIEW_DESC>()
-            .read_unaligned()
-    }
+    unsafe { std::ptr::from_ref(&words).cast::<D3D12_SHADER_RESOURCE_VIEW_DESC>().read_unaligned() }
 }
 
 fn uav_desc(words: &[u32; 10]) -> D3D12_UNORDERED_ACCESS_VIEW_DESC {
@@ -4209,9 +4321,7 @@ fn uav_desc(words: &[u32; 10]) -> D3D12_UNORDERED_ACCESS_VIEW_DESC {
     words[0] = crate::resource::pc_format(words[0]);
     // SAFETY: 40 bytes in the host's layout.
     unsafe {
-        std::ptr::from_ref(&words)
-            .cast::<D3D12_UNORDERED_ACCESS_VIEW_DESC>()
-            .read_unaligned()
+        std::ptr::from_ref(&words).cast::<D3D12_UNORDERED_ACCESS_VIEW_DESC>().read_unaligned()
     }
 }
 
@@ -4234,14 +4344,12 @@ fn element_size(desc: &D3D12_SHADER_RESOURCE_VIEW_DESC) -> u64 {
 /// address and length.
 pub(crate) fn buffer_range(view: &View) -> Option<(u64, u64)> {
     let (base, words): (u64, &[u32; 10]) = match view {
-        View::Shader(r, Some(desc)) => (
-            crate::resource::buffer_bytes(*r as crate::object::This)?.0 as u64,
-            desc,
-        ),
-        View::Placed(false, resource, desc) if resource[0] == 1 => (
-            u64::from(desc[10]) | u64::from(desc[11]) << 32,
-            desc[..10].try_into().ok()?,
-        ),
+        View::Shader(r, Some(desc)) => {
+            (crate::resource::buffer_bytes(*r as crate::object::This)?.0 as u64, desc)
+        }
+        View::Placed(false, resource, desc) if resource[0] == 1 => {
+            (u64::from(desc[10]) | u64::from(desc[11]) << 32, desc[..10].try_into().ok()?)
+        }
         View::Unordered(r, _, Some(desc)) => {
             let base = crate::resource::buffer_bytes(*r as crate::object::This)?.0 as u64;
             return unordered_range(base, desc);
@@ -4256,10 +4364,7 @@ pub(crate) fn buffer_range(view: &View) -> Option<(u64, u64)> {
     let element = element_size(&desc);
     // SAFETY: a buffer view's union member.
     let buffer = unsafe { desc.Anonymous.Buffer };
-    Some((
-        base + buffer.FirstElement * element,
-        u64::from(buffer.NumElements) * element,
-    ))
+    Some((base + buffer.FirstElement * element, u64::from(buffer.NumElements) * element))
 }
 
 /// The address a shader finds in a descriptor of title memory: where a
@@ -4313,7 +4418,9 @@ fn view_extent() -> bool {
 /// part's one), and for buffer objects, a part that also lies in a smaller
 /// buffer object. The slot then showed a copy nothing brought up to date,
 /// and what shaders wrote through it was looked for in the other copy.
-pub(crate) fn buffer_copy(view: &View) -> Option<(std::sync::Arc<crate::shadow::Shadow>, u64, u64)> {
+pub(crate) fn buffer_copy(
+    view: &View,
+) -> Option<(std::sync::Arc<crate::shadow::Shadow>, u64, u64)> {
     let (address, len) = buffer_range(view)?;
     if len == 0 {
         return None;
@@ -4343,10 +4450,7 @@ fn unordered_range(base: u64, words: &[u32; 10]) -> Option<(u64, u64)> {
     } else {
         crate::resource::element(desc.Format.0 as u32)?.0
     };
-    Some((
-        base + buffer.FirstElement * element,
-        u64::from(buffer.NumElements) * element,
-    ))
+    Some((base + buffer.FirstElement * element, u64::from(buffer.NumElements) * element))
 }
 
 /// The host resource a slot made by [`make`] views, if any.
@@ -4380,7 +4484,14 @@ fn raw_window(offset: u64, first: u64, count: u32, stride: u32) -> Option<(u64, 
 /// without the raw flag, with strides the host has no structured buffers
 /// for. Since every buffer view of the heap is made for shaders that pick
 /// them by index, one such view ended the run (2026-11-24, run 10).
-fn buffer_view_ok(format: DXGI_FORMAT, first: u64, count: u32, stride: u32, raw: bool, width: u64) -> bool {
+fn buffer_view_ok(
+    format: DXGI_FORMAT,
+    first: u64,
+    count: u32,
+    stride: u32,
+    raw: bool,
+    width: u64,
+) -> bool {
     use crate::resource::family;
     let f = format.0 as u32;
     let element = if raw {
@@ -4413,7 +4524,8 @@ fn buffer_view_ok(format: DXGI_FORMAT, first: u64, count: u32, stride: u32, raw:
 /// Raw twins ([`raw_twins`]) made since the last frame line, and those of them that
 /// do not begin on 16 bytes, as a raw view must ([`move_raw`]), and those of
 /// these that could not be moved there (null).
-pub(crate) static TWINS: [std::sync::atomic::AtomicU64; 3] = [const { std::sync::atomic::AtomicU64::new(0) }; 3];
+pub(crate) static TWINS: [std::sync::atomic::AtomicU64; 3] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 3];
 
 /// Moves the raw view at `at`, a slot of our heaps the card does not see,
 /// which shows `bytes` from `start` on (GPU address), `by` bytes on: for a
@@ -4431,7 +4543,9 @@ pub(crate) fn move_raw(at: D3D12_CPU_DESCRIPTOR_HANDLE, start: u64, bytes: u32, 
     if !crate::host::read_into(at.ptr as *const u8, &mut words) {
         return false;
     }
-    let word = |i: usize| u32::from_le_bytes([words[4 * i], words[4 * i + 1], words[4 * i + 2], words[4 * i + 3]]);
+    let word = |i: usize| {
+        u32::from_le_bytes([words[4 * i], words[4 * i + 1], words[4 * i + 2], words[4 * i + 3]])
+    };
     let address = u64::from(word(0)) | u64::from(word(1)) << 32;
     if address != start || word(2) != bytes || start >> 48 != 0 {
         return false;
@@ -4451,7 +4565,14 @@ pub(crate) fn move_raw(at: D3D12_CPU_DESCRIPTOR_HANDLE, start: u64, bytes: u32, 
 /// The bytes a buffer view the host takes ([`buffer_view_ok`]) shows as a raw
 /// view (first dword, dwords, and the bytes past that dword it begins: a raw
 /// view begins on 16 bytes); of a buffer of `width` bytes.
-fn twin_window(format: DXGI_FORMAT, first: u64, count: u32, stride: u32, raw: bool, width: u64) -> Option<(u64, u32, u32)> {
+fn twin_window(
+    format: DXGI_FORMAT,
+    first: u64,
+    count: u32,
+    stride: u32,
+    raw: bool,
+    width: u64,
+) -> Option<(u64, u32, u32)> {
     use std::sync::atomic::Ordering::Relaxed;
     TWINS[0].fetch_add(1, Relaxed);
     let element = if raw {
@@ -4461,7 +4582,8 @@ fn twin_window(format: DXGI_FORMAT, first: u64, count: u32, stride: u32, raw: bo
     } else {
         crate::resource::element(format.0 as u32).map_or(0, |(bytes, _)| bytes)
     };
-    let (start, end) = (first * element, ((first + u64::from(count)) * element).next_multiple_of(4));
+    let (start, end) =
+        (first * element, ((first + u64::from(count)) * element).next_multiple_of(4));
     let end = end.min(width & !3);
     let from = start & !15;
     if end <= start {
@@ -4487,7 +4609,11 @@ fn buffer_srv(
     // SAFETY: a buffer view's union member.
     let own = unsafe { &mut desc.Anonymous.Buffer };
     let start = address + own.FirstElement * unit;
-    let kind = (own.StructureByteStride, own.Flags.0 & D3D12_BUFFER_SRV_FLAG_RAW.0 != 0, desc.Format.0 as u32);
+    let kind = (
+        own.StructureByteStride,
+        own.Flags.0 & D3D12_BUFFER_SRV_FLAG_RAW.0 != 0,
+        desc.Format.0 as u32,
+    );
     let home = view_home(shadow.clone(), start, u64::from(own.NumElements) * unit, kind);
     if !std::sync::Arc::ptr_eq(&home, &shadow) {
         // Its own bytes: it begins where they do.
@@ -4498,7 +4624,14 @@ fn buffer_srv(
     // SAFETY: a buffer view's union member.
     let structured = unsafe { desc.Anonymous.Buffer };
     let window = (desc.Format == DXGI_FORMAT_UNKNOWN)
-        .then(|| raw_window(offset, structured.FirstElement, structured.NumElements, structured.StructureByteStride))
+        .then(|| {
+            raw_window(
+                offset,
+                structured.FirstElement,
+                structured.NumElements,
+                structured.StructureByteStride,
+            )
+        })
         .flatten();
     if let Some((first, count)) = window {
         desc.Format = DXGI_FORMAT_R32_TYPELESS;
@@ -4514,16 +4647,13 @@ fn buffer_srv(
     let buffer = unsafe { &mut desc.Anonymous.Buffer };
     if window.is_none() {
         if element == 0 || offset % element != 0 {
-            once!(
-                offset,
-                element,
-                "buffer view not on an element of its host copy"
-            );
+            once!(offset, element, "buffer view not on an element of its host copy");
             return None;
         }
         buffer.FirstElement += offset / element;
     }
-    let (first, count, stride) = (buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride);
+    let (first, count, stride) =
+        (buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride);
     let raw = buffer.Flags.0 & D3D12_BUFFER_SRV_FLAG_RAW.0 != 0;
     let width = shadow.width();
     if !buffer_view_ok(desc.Format, first, count, stride, raw, width) {
@@ -4545,10 +4675,7 @@ fn buffer_srv(
     }
     let host = host()?;
     // SAFETY: a live buffer and a slot of our heap.
-    unsafe {
-        host.device
-            .CreateShaderResourceView(&shadow.buffer, Some(&desc), at)
-    };
+    unsafe { host.device.CreateShaderResourceView(&shadow.buffer, Some(&desc), at) };
     if let Some(twin) = twin {
         let window = twin_window(desc.Format, first, count, stride, raw, width);
         if let Some((first, count, by)) = window {
@@ -4561,11 +4688,13 @@ fn buffer_srv(
             };
             // SAFETY: a live buffer and a slot of our heap.
             let start = unsafe {
-                host.device
-                    .CreateShaderResourceView(&shadow.buffer, Some(&desc), twin);
+                host.device.CreateShaderResourceView(&shadow.buffer, Some(&desc), twin);
                 shadow.buffer.GetGPUVirtualAddress() + first * 4
             };
-            if by > 0 && !(staged(false, 1).is_some_and(|s| s.ptr == twin.ptr) && move_raw(twin, start, count.saturating_mul(4), by)) {
+            if by > 0
+                && !(staged(false, 1).is_some_and(|s| s.ptr == twin.ptr)
+                    && move_raw(twin, start, count.saturating_mul(4), by))
+            {
                 TWINS[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 null_buffer_view(twin);
             }
@@ -4603,7 +4732,11 @@ fn buffer_uav(
     // SAFETY: a buffer view's union member.
     let own = unsafe { &mut desc.Anonymous.Buffer };
     let start = address + own.FirstElement * unit;
-    let kind = (own.StructureByteStride, own.Flags.0 & D3D12_BUFFER_UAV_FLAG_RAW.0 != 0, desc.Format.0 as u32);
+    let kind = (
+        own.StructureByteStride,
+        own.Flags.0 & D3D12_BUFFER_UAV_FLAG_RAW.0 != 0,
+        desc.Format.0 as u32,
+    );
     let home = view_home(shadow.clone(), start, u64::from(own.NumElements) * unit, kind);
     let mut address = address;
     if !std::sync::Arc::ptr_eq(&home, &shadow) {
@@ -4629,7 +4762,9 @@ fn buffer_uav(
     let offset = shadow.offset(address);
     // A structured view as a raw view of the same bytes (see `raw_window`).
     let window = (desc.Format == DXGI_FORMAT_UNKNOWN)
-        .then(|| raw_window(offset, buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride))
+        .then(|| {
+            raw_window(offset, buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride)
+        })
         .flatten();
     if let Some((first, count)) = window {
         buffer.FirstElement = first;
@@ -4644,7 +4779,8 @@ fn buffer_uav(
         buffer.FirstElement += offset / element;
     }
     buffer.CounterOffsetInBytes = 0;
-    let (first, count, stride) = (buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride);
+    let (first, count, stride) =
+        (buffer.FirstElement, buffer.NumElements, buffer.StructureByteStride);
     let raw = buffer.Flags.0 & D3D12_BUFFER_UAV_FLAG_RAW.0 != 0;
     if window.is_some() {
         // (Left out at first: every structured unordered access view was then
@@ -4669,8 +4805,12 @@ fn buffer_uav(
     let host = host()?;
     // SAFETY: a live buffer and a slot of our heap.
     unsafe {
-        host.device
-            .CreateUnorderedAccessView(&shadow.buffer, None::<&ID3D12Resource>, Some(&desc), at)
+        host.device.CreateUnorderedAccessView(
+            &shadow.buffer,
+            None::<&ID3D12Resource>,
+            Some(&desc),
+            at,
+        )
     };
     if let Some(twin) = twin {
         let window = twin_window(desc.Format, first, count, stride, raw, width);
@@ -4685,11 +4825,18 @@ fn buffer_uav(
             };
             // SAFETY: a live buffer and a slot of our heap.
             let start = unsafe {
-                host.device
-                    .CreateUnorderedAccessView(&shadow.buffer, None::<&ID3D12Resource>, Some(&desc), twin);
+                host.device.CreateUnorderedAccessView(
+                    &shadow.buffer,
+                    None::<&ID3D12Resource>,
+                    Some(&desc),
+                    twin,
+                );
                 shadow.buffer.GetGPUVirtualAddress() + first * 4
             };
-            if by > 0 && !(staged(false, 1).is_some_and(|s| s.ptr == twin.ptr) && move_raw(twin, start, count.saturating_mul(4), by)) {
+            if by > 0
+                && !(staged(false, 1).is_some_and(|s| s.ptr == twin.ptr)
+                    && move_raw(twin, start, count.saturating_mul(4), by))
+            {
                 TWINS[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 null_buffer_view(twin);
             }
@@ -4722,21 +4869,15 @@ fn fits(texture: &ID3D12Resource, mut format: Option<&mut DXGI_FORMAT>, unordere
         if unordered {
             crate::resource::DEPTH_UNORDERED[3].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        once!(
-            unordered,
-            format = own,
-            flags = d.Flags.0,
-            "view the host does not allow"
-        );
+        once!(unordered, format = own, flags = d.Flags.0, "view the host does not allow");
         return false;
     }
     // Every family has more than one format, its typeless one first.
     let typeless = family(own) == own && family(own + 1) == own;
     if let Some(format) = format.as_deref_mut()
         && unordered
-        && let Some(&(_, linear)) = crate::resource::SRGB
-            .iter()
-            .find(|&&(s, _)| s == format.0 as u32)
+        && let Some(&(_, linear)) =
+            crate::resource::SRGB.iter().find(|&&(s, _)| s == format.0 as u32)
     {
         format.0 = linear as i32;
     }
@@ -4941,7 +5082,11 @@ fn make_twinned(
                             },
                         },
                     };
-                    crate::tiles::show_from(desc.get_or_insert(whole), first, u32::from(own.MipLevels));
+                    crate::tiles::show_from(
+                        desc.get_or_insert(whole),
+                        first,
+                        u32::from(own.MipLevels),
+                    );
                 }
                 if copy.base > 0
                     && let Some(desc) = &mut desc
@@ -5022,11 +5167,8 @@ fn make_twinned(
         }
         View::Sampler(words) => {
             // SAFETY: 13 words in the host's layout.
-            let desc = unsafe {
-                std::ptr::from_ref(words)
-                    .cast::<D3D12_SAMPLER_DESC>()
-                    .read_unaligned()
-            };
+            let desc =
+                unsafe { std::ptr::from_ref(words).cast::<D3D12_SAMPLER_DESC>().read_unaligned() };
             // SAFETY: a slot of our sampler heap.
             unsafe { device.CreateSampler(&desc, at) };
             Some(None)
@@ -5051,8 +5193,10 @@ fn make_twinned(
                     // Each texture is said once (the first 64), with how many times
                     // such a view was asked for so far: what shaders write through
                     // them is lost.
-                    static SAID: Mutex<std::collections::BTreeSet<u64>> = Mutex::new(std::collections::BTreeSet::new());
-                    static TIMES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                    static SAID: Mutex<std::collections::BTreeSet<u64>> =
+                        Mutex::new(std::collections::BTreeSet::new());
+                    static TIMES: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
                     let times = TIMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                     let mut said = SAID.lock().unwrap_or_else(|e| e.into_inner());
                     if (said.len() < 64 && said.insert(at)) || times.is_power_of_two() {
@@ -5166,7 +5310,11 @@ fn kin(old: &View, new: &View) -> Kin {
     }
     let dimension = |view: &View| match view {
         View::Placed(false, resource, desc) if resource[0] != 1 => desc[1],
-        View::Shader(r, Some(desc)) if crate::resource::buffer_bytes(*r as crate::object::This).is_none() => desc[1],
+        View::Shader(r, Some(desc))
+            if crate::resource::buffer_bytes(*r as crate::object::This).is_none() =>
+        {
+            desc[1]
+        }
         _ => 0,
     };
     match (dimension(old), dimension(new)) {
@@ -5187,13 +5335,16 @@ fn keep_shown() -> u8 {
         return if on { 2 } else { 0 };
     }
     static KEEP: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
-    *KEEP.get_or_init(|| std::env::var("VICTORY_KEEP_SHOWN").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(1))
+    *KEEP.get_or_init(|| {
+        std::env::var("VICTORY_KEEP_SHOWN").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(1)
+    })
 }
 
 /// Slots that showed a texture and were written with a view of another,
 /// since the start, by [`Kin`] (moved, sized, other, none), and those of
 /// them that kept what they showed.
-static REWRITTEN: [std::sync::atomic::AtomicU64; 5] = [const { std::sync::atomic::AtomicU64::new(0) }; 5];
+static REWRITTEN: [std::sync::atomic::AtomicU64; 5] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 5];
 
 fn rewritten(kin: Kin, kept: bool) {
     use std::sync::atomic::Ordering::Relaxed;
@@ -5224,7 +5375,8 @@ fn rewritten(kin: Kin, kept: bool) {
 #[cfg(feature = "diagnostics")]
 fn same_bytes(old: u64, new: u64) {
     use std::sync::atomic::Ordering::Relaxed;
-    static SEEN: [std::sync::atomic::AtomicU64; 6] = [const { std::sync::atomic::AtomicU64::new(0) }; 6];
+    static SEEN: [std::sync::atomic::AtomicU64; 6] =
+        [const { std::sync::atomic::AtomicU64::new(0) }; 6];
     let view = |key: u64| view_at(key as u32, (key >> 32) as u32);
     let (Some(old), Some(new)) = (view(old), view(new)) else {
         return;
@@ -5252,7 +5404,12 @@ fn same_bytes(old: u64, new: u64) {
         let seen: Vec<u64> = SEEN.iter().map(|n| n.load(Relaxed)).collect();
         tracing::info!(
             "slots that went on showing another texture until the new one came, since the start: of one of the same kind elsewhere {} had the new one's bytes, {} others, {} not known; of others {}, {}, {}",
-            seen[0], seen[1], seen[2], seen[3], seen[4], seen[5]
+            seen[0],
+            seen[1],
+            seen[2],
+            seen[3],
+            seen[4],
+            seen[5]
         );
     }
 }
@@ -5316,7 +5473,14 @@ impl Copied<'_> {
     /// # Safety
     /// As [`Copied::changes`]; `title` is title memory (read by a copy that
     /// fails where a page is not there).
-    pub(crate) unsafe fn changes_in_place(&self, first: u32, title: *const u8, count: usize, bits: &mut Vec<u64>, out: &mut Vec<u32>) -> bool {
+    pub(crate) unsafe fn changes_in_place(
+        &self,
+        first: u32,
+        title: *const u8,
+        count: usize,
+        bits: &mut Vec<u64>,
+        out: &mut Vec<u32>,
+    ) -> bool {
         let at = first as usize * self.step;
         let count = count.min(self.len.saturating_sub(at) / 32);
         if self.step != 32 || count == 0 {
@@ -5411,7 +5575,10 @@ fn same_placed_texture(a: &View, b: &View) -> bool {
             // (Words 1 and 13 are the filler of the description's layout, not
             // part of what a texture is: `crate::resource::texture_at`.)
             let same = |from: usize, to: usize| resource[from..to] == other[from..to];
-            resource[0] != 1 && resource[0] == other[0] && same(2, 13) && desc[10..12] == other_desc[10..12]
+            resource[0] != 1
+                && resource[0] == other[0]
+                && same(2, 13)
+                && desc[10..12] == other_desc[10..12]
         }
         _ => false,
     }
@@ -5441,10 +5608,9 @@ fn null_for(view: &View, at: D3D12_CPU_DESCRIPTOR_HANDLE) {
     let is_buffer = |r: &usize| crate::resource::buffer_bytes(*r as crate::object::This).is_some();
     // Unordered views: whether a buffer, and the title's view dimension.
     let (buffer, dimension) = match view {
-        View::Unordered(r, _, desc) => (
-            is_buffer(r) || desc.is_some_and(|d| d[1] == 1),
-            desc.map(|d| d[1]),
-        ),
+        View::Unordered(r, _, desc) => {
+            (is_buffer(r) || desc.is_some_and(|d| d[1] == 1), desc.map(|d| d[1]))
+        }
         View::Placed(true, resource, desc) => (resource[0] == 1, Some(desc[1])),
         // Shader views of buffers read nothing through a null buffer view:
         // a null 2D view where the shader expects a buffer is a mismatch
@@ -5503,24 +5669,17 @@ fn null_uav_desc(dimension: Option<u32>) -> D3D12_UNORDERED_ACCESS_VIEW_DESC {
         }
         Some(D3D12_UAV_DIMENSION_TEXTURE1DARRAY) => {
             desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
-            desc.Anonymous.Texture1DArray = D3D12_TEX1D_ARRAY_UAV {
-                ArraySize: 1,
-                ..Default::default()
-            };
+            desc.Anonymous.Texture1DArray =
+                D3D12_TEX1D_ARRAY_UAV { ArraySize: 1, ..Default::default() };
         }
         Some(D3D12_UAV_DIMENSION_TEXTURE2DARRAY) => {
             desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-            desc.Anonymous.Texture2DArray = D3D12_TEX2D_ARRAY_UAV {
-                ArraySize: 1,
-                ..Default::default()
-            };
+            desc.Anonymous.Texture2DArray =
+                D3D12_TEX2D_ARRAY_UAV { ArraySize: 1, ..Default::default() };
         }
         Some(D3D12_UAV_DIMENSION_TEXTURE3D) => {
             desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
-            desc.Anonymous.Texture3D = D3D12_TEX3D_UAV {
-                WSize: u32::MAX,
-                ..Default::default()
-            };
+            desc.Anonymous.Texture3D = D3D12_TEX3D_UAV { WSize: u32::MAX, ..Default::default() };
         }
         _ => {}
     }
@@ -5544,10 +5703,7 @@ fn null_buffer_view(at: D3D12_CPU_DESCRIPTOR_HANDLE) {
         },
     };
     // SAFETY: a slot of our heap; a null resource is allowed with a desc.
-    unsafe {
-        host.device
-            .CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at)
-    };
+    unsafe { host.device.CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at) };
 }
 
 /// A texture view that reads zeros with the dimension (and mip and array
@@ -5571,10 +5727,7 @@ fn null_like(words: &[u32; 10], at: D3D12_CPU_DESCRIPTOR_HANDLE) {
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     // SAFETY: a slot of our heap; a null resource is allowed with a desc.
-    unsafe {
-        host.device
-            .CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at)
-    };
+    unsafe { host.device.CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at) };
 }
 
 /// A view that reads zeros, for slots whose view the host cannot make.
@@ -5588,17 +5741,11 @@ fn null_view(at: D3D12_CPU_DESCRIPTOR_HANDLE) {
         ViewDimension: D3D12_SRV_DIMENSION_TEXTURE2D,
         Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
         Anonymous: D3D12_SHADER_RESOURCE_VIEW_DESC_0 {
-            Texture2D: D3D12_TEX2D_SRV {
-                MipLevels: 1,
-                ..Default::default()
-            },
+            Texture2D: D3D12_TEX2D_SRV { MipLevels: 1, ..Default::default() },
         },
     };
     // SAFETY: a slot of our heap; a null resource is allowed with a desc.
-    unsafe {
-        host.device
-            .CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at)
-    };
+    unsafe { host.device.CreateShaderResourceView(None::<&ID3D12Resource>, Some(&desc), at) };
 }
 
 #[cfg(test)]
@@ -5749,7 +5896,8 @@ mod tests {
                 })
                 .unwrap();
             let at = heap.GetCPUDescriptorHandleForHeapStart();
-            let view = |dimension| View::Shader(0, Some([98, dimension, 5768, 0, 0, 1, 0, 1, 0, 0]));
+            let view =
+                |dimension| View::Shader(0, Some([98, dimension, 5768, 0, 0, 1, 0, 1, 0, 0]));
             assert!(neutral_for(&view(4), at).is_some());
             assert!(neutral_for(&view(5), at).is_some());
             assert!(neutral_for(&view(9), at).is_none());
@@ -5844,7 +5992,8 @@ mod tests {
         let texture = [3, 0, 0, 0, 512, 0, 512, 0x8_0001, 98, 1, 0, 0x105, 0, 0];
         let view = |resource: [u32; 14], first_mip: u32, address: u32| {
             let mut desc = [0u32; 16];
-            (desc[0], desc[1], desc[4], desc[5], desc[10], desc[11]) = (98, 4, first_mip, 8 - first_mip, address, 0xb);
+            (desc[0], desc[1], desc[4], desc[5], desc[10], desc[11]) =
+                (98, 4, first_mip, 8 - first_mip, address, 0xb);
             View::Placed(false, resource, desc)
         };
         let low = view(texture, 3, 0x1000_0000);
@@ -5878,7 +6027,9 @@ mod tests {
     fn integer_typed_buffer_views_are_marked_in_the_table_of_strides() {
         use victory_shader::emit::{VIEW_INTEGER, VIEW_SIGNED};
         // Format, dimension (buffer), first element, count, stride, counter, flags.
-        let uav = |format, stride, flags| View::Unordered(0, 0, Some([format, 1, 0, 0, 64, stride, 0, 0, flags, 0]));
+        let uav = |format, stride, flags| {
+            View::Unordered(0, 0, Some([format, 1, 0, 0, 64, stride, 0, 0, flags, 0]))
+        };
         assert_eq!(view_kind(&uav(12, 0, 0)), VIEW_INTEGER, "R16G16B16A16_UINT");
         assert_eq!(view_kind(&uav(59, 0, 0)), VIEW_INTEGER | VIEW_SIGNED, "R16_SINT");
         assert_eq!(view_kind(&uav(10, 0, 0)), 0, "R16G16B16A16_FLOAT");
@@ -5913,7 +6064,13 @@ mod tests {
         assert_eq!(kin(&old, &view(twice, 83, 4, 0x2000_0000)), Kin::Other);
         assert_eq!(kin(&old, &view(texture, 98, 9, 0x2000_0000)), Kin::None);
         assert_eq!(kin(&old, &view(buffer, 98, 1, 0x2000_0000)), Kin::None);
-        for (kin, kept) in [(Kin::Same, [true; 3]), (Kin::Moved, [false, true, true]), (Kin::Sized, [false, true, true]), (Kin::Other, [false, false, true]), (Kin::None, [false; 3])] {
+        for (kin, kept) in [
+            (Kin::Same, [true; 3]),
+            (Kin::Moved, [false, true, true]),
+            (Kin::Sized, [false, true, true]),
+            (Kin::Other, [false, false, true]),
+            (Kin::None, [false; 3]),
+        ] {
             assert_eq!([0, 1, 2].map(|keep| kin.kept(keep)), kept, "{kin:?}");
         }
     }
@@ -6012,7 +6169,10 @@ mod tests {
             return;
         };
         assert_ne!(a.ptr, b.ptr);
-        assert_ne!(Some(a.ptr), std::thread::spawn(|| staged(false, 0).map(|h| h.ptr)).join().unwrap());
+        assert_ne!(
+            Some(a.ptr),
+            std::thread::spawn(|| staged(false, 0).map(|h| h.ptr)).join().unwrap()
+        );
         let (buffer, _) = host.shared_buffer(1 << 16).unwrap();
         let index = heap.dynamic(1).unwrap();
         let bytes = |at: D3D12_CPU_DESCRIPTOR_HANDLE| {
@@ -6168,7 +6328,9 @@ mod tests {
         assert_eq!(q.due(9, 2).len(), 2);
         assert_eq!(q.census(9), [9, 9, 0, 0, 8, 0]);
         // Slot 17's memory is not mapped: again next frame, then in 2, 4, 4.
-        let write = |q: &TextureQueue, index: u32| q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1;
+        let write = |q: &TextureQueue, index: u32| {
+            q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1
+        };
         let w17 = write(&q, 17);
         let mut frame = 9;
         for wait in [1, 2, 4, 4] {
@@ -6218,7 +6380,9 @@ mod tests {
         let mut q = TextureQueue::default();
         q.written(1, 1, 0, false);
         q.written(2, 5, 0, false);
-        let write = |q: &TextureQueue, index: u32| q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1;
+        let write = |q: &TextureQueue, index: u32| {
+            q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1
+        };
         let (w1, w2) = (write(&q, 1), write(&q, 2));
         // Slot 1 uploaded whole at frame 10, looked at again from frame 14;
         // slot 2's memory not there at frame 10.
@@ -6389,12 +6553,15 @@ mod tests {
         let Some(heap) = HostHeap::new(false, 8) else {
             return; // no host GPU
         };
-        let slots = |at: u64| -> Vec<u32> { heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect() };
+        let slots = |at: u64| -> Vec<u32> {
+            heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect()
+        };
         // 64x64 BC7, one mip, at an address no test and no title uses.
         let at = 0x7fed_0000_0000u64;
         let mut desc = [0u32; 16];
         (desc[10], desc[11]) = (at as u32, (at >> 32) as u32);
-        let view = View::Placed(false, [3, 0, 0, 0, 64, 0, 64, 0x1_0001, 98, 1, 0, 0x105, 0, 0], desc);
+        let view =
+            View::Placed(false, [3, 0, 0, 0, 64, 0, 64, 0x1_0001, 98, 1, 0, 0x105, 0, 0], desc);
         assert!(heap.note_buffer(1, Some(&view), false).is_empty());
         let written = [(at, at + 0x1000)];
         // Waiting for its first upload: held, not uploaded, nothing done.
@@ -6404,7 +6571,10 @@ mod tests {
         heap.texture_slot_done(1, write, None);
         assert_eq!(slots(u64::MAX), []);
         // Uploaded and out of the queue. Memory elsewhere: nothing.
-        assert_eq!(heap.slots_written_under(&[(at + 0x10_0000, at + 0x10_1000)], 60, true), [0, 0, 0]);
+        assert_eq!(
+            heap.slots_written_under(&[(at + 0x10_0000, at + 0x10_1000)], 60, true),
+            [0, 0, 0]
+        );
         // Under it, counted only: it stays out of the queue.
         assert_eq!(heap.slots_written_under(&written, 60, false), [1, 1, 0]);
         assert_eq!(slots(u64::MAX), []);
@@ -6469,7 +6639,9 @@ mod tests {
         let Some(heap) = HostHeap::new(false, 8) else {
             return; // no host GPU
         };
-        let slots = |at: u64| -> Vec<u32> { heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect() };
+        let slots = |at: u64| -> Vec<u32> {
+            heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect()
+        };
         // 64x64 BC7, one mip, at an address no test and no title uses.
         let at = 0x7fee_0000_0000u64;
         let view = |address: u64, width: u32| {
@@ -6477,7 +6649,10 @@ mod tests {
             (desc[10], desc[11]) = (address as u32, (address >> 32) as u32);
             View::Placed(false, [3, 0, 0, 0, width, 0, 64, 0x1_0001, 98, 1, 0, 0x105, 0, 0], desc)
         };
-        let len = crate::resource::placed_bytes(&[3, 0, 0, 0, 64, 0, 64, 0x1_0001, 98, 1, 0, 0x105, 0, 0]).unwrap();
+        let len = crate::resource::placed_bytes(&[
+            3, 0, 0, 0, 64, 0, 64, 0x1_0001, 98, 1, 0, 0x105, 0, 0,
+        ])
+        .unwrap();
         assert!(heap.note_buffer(1, Some(&view(at, 64)), false).is_empty());
         let (queued, write) = heap.texture_slots_due(u64::MAX, 8).0[0];
         assert_eq!(queued, 1);
@@ -6548,8 +6723,11 @@ mod tests {
             return; // no host GPU
         };
         let frame = 100;
-        let slots = |at: u64| -> Vec<u32> { heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect() };
-        let texture = View::Placed(false, [3, 0, 0, 0, 4, 0, 4, 0x1_0001, 28, 1, 0, 0x105, 0, 0], [0; 16]);
+        let slots = |at: u64| -> Vec<u32> {
+            heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect()
+        };
+        let texture =
+            View::Placed(false, [3, 0, 0, 0, 4, 0, 4, 0x1_0001, 28, 1, 0, 0x105, 0, 0], [0; 16]);
         assert!(is_texture_view(&texture));
         heap.queue_texture(2, true, false, frame);
         heap.queue_texture(3, true, false, frame);
@@ -6579,7 +6757,9 @@ mod tests {
         // hold the slot, made as the queue holds it) leave it as it is,
         // and its marks say what it holds.
         let marks = |heap: &HostHeap| (0..8).map(|i| heap.queued(i)).collect::<Vec<_>>();
-        let held = |queued: &[u32]| (0..8).map(|i| queue_marks().then_some(queued.contains(&i))).collect::<Vec<_>>();
+        let held = |queued: &[u32]| {
+            (0..8).map(|i| queue_marks().then_some(queued.contains(&i))).collect::<Vec<_>>()
+        };
         assert_eq!(marks(&heap), held(&[2]));
         heap.queue_texture(5, false, false, frame + 4 + TABLED_FRAMES);
         heap.queue_texture(2, true, true, frame + 4 + TABLED_FRAMES);
@@ -6603,7 +6783,9 @@ mod tests {
             return;
         }
         let frame = 200;
-        let slots = |at: u64| -> Vec<u32> { heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect() };
+        let slots = |at: u64| -> Vec<u32> {
+            heap.texture_slots_due(at, 8).0.into_iter().map(|d| d.0).collect()
+        };
         heap.tabled_in_as(4, true, frame, true);
         heap.queue_texture(4, true, false, frame);
         assert_eq!(slots(frame + TABLED_GRACE - 1), []);
@@ -6632,7 +6814,9 @@ mod tests {
         for i in 0..4u32 {
             q.written(30 + i, 1, 0, false);
         }
-        let write = |q: &TextureQueue, index: u32| q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1;
+        let write = |q: &TextureQueue, index: u32| {
+            q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1
+        };
         let w31 = write(&q, 31);
         q.recheck(31, w31, 5, (0x2000, 4096), 9, 0, 2);
         let w32 = write(&q, 32);
@@ -6673,7 +6857,8 @@ mod tests {
             // A write the queue does not hold any more: dropped.
             (5, Told::Done(None)),
         ];
-        let mut told: Vec<_> = what.iter().map(|&(i, t)| (i, if i == 5 { 0 } else { w(i) }, 10, t)).collect();
+        let mut told: Vec<_> =
+            what.iter().map(|&(i, t)| (i, if i == 5 { 0 } else { w(i) }, 10, t)).collect();
         a.texture_slots_told(&mut told);
         assert!(told.is_empty());
         b.texture_slot_done(0, w(0), None);
@@ -6688,7 +6873,10 @@ mod tests {
         for i in 0..6 {
             assert_eq!(a.texture_slot_checked(i), b.texture_slot_checked(i));
             assert_eq!(a.texture_slot_mapped(i), b.texture_slot_mapped(i));
-            assert_eq!(a.texture_slot_write(i).map(|w| w != 0), b.texture_slot_write(i).map(|w| w != 0));
+            assert_eq!(
+                a.texture_slot_write(i).map(|w| w != 0),
+                b.texture_slot_write(i).map(|w| w != 0)
+            );
         }
     }
 
@@ -6699,7 +6887,9 @@ mod tests {
     fn the_texture_queue_marks_what_it_holds() {
         let marks = std::sync::Arc::new(QueueMarks::new(32));
         let mut q = TextureQueue::with_marks(marks.clone());
-        let write = |q: &TextureQueue, index: u32| q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1;
+        let write = |q: &TextureQueue, index: u32| {
+            q.due(u64::MAX, 100).iter().find(|d| d.0 == index).unwrap().1
+        };
         q.written(1, 1, 0, false);
         q.written(2, 1, 0, false);
         let w1 = write(&q, 1);
@@ -6902,7 +7092,11 @@ struct ListViews {
     heap: ID3D12DescriptorHeap,
     step: usize,
     start: usize,
-    made: std::collections::HashMap<[u32; 3], ListView, std::hash::BuildHasherDefault<crate::host::AddressHash>>,
+    made: std::collections::HashMap<
+        [u32; 3],
+        ListView,
+        std::hash::BuildHasherDefault<crate::host::AddressHash>,
+    >,
 }
 
 impl ListViews {
@@ -6920,7 +7114,10 @@ impl ListViews {
                     ..Default::default()
                 })
                 .ok()?;
-            let step = host.device.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) as usize;
+            let step = host
+                .device
+                .GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+                as usize;
             let start = heap.GetCPUDescriptorHandleForHeapStart().ptr;
             Some(ListViews { recording: 0, heap, step, start, made: Default::default() })
         }

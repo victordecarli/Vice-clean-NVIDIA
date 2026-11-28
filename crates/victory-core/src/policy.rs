@@ -26,10 +26,7 @@ pub enum PolicyError {
     )]
     InsideRepo { path: PathBuf, root: PathBuf },
     #[error("cannot resolve {path}: {source}")]
-    Io {
-        path: PathBuf,
-        source: std::io::Error,
-    },
+    Io { path: PathBuf, source: std::io::Error },
 }
 
 /// Returns `Ok` only if `path` is outside every VIctory source tree.
@@ -45,10 +42,7 @@ pub fn ensure_outside_repo(path: &Path) -> Result<(), PolicyError> {
         && root.join(ROOT_MARKER).is_file()
         && resolved.starts_with(&root)
     {
-        return Err(PolicyError::InsideRepo {
-            path: path.to_path_buf(),
-            root,
-        });
+        return Err(PolicyError::InsideRepo { path: path.to_path_buf(), root });
     }
 
     for ancestor in resolved.ancestors() {
@@ -69,10 +63,7 @@ fn resolve(path: &Path) -> Result<PathBuf, PolicyError> {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|source| PolicyError::Io {
-                path: path.to_path_buf(),
-                source,
-            })?
+            .map_err(|source| PolicyError::Io { path: path.to_path_buf(), source })?
             .join(path)
     };
 
@@ -98,10 +89,7 @@ fn resolve(path: &Path) -> Result<PathBuf, PolicyError> {
                     existing = parent;
                 }
                 _ => {
-                    return Err(PolicyError::Io {
-                        path: path.to_path_buf(),
-                        source,
-                    });
+                    return Err(PolicyError::Io { path: path.to_path_buf(), source });
                 }
             },
         }
@@ -130,10 +118,7 @@ mod tests {
     #[test]
     fn rejects_paths_inside_this_repo() {
         let inside = compiled_workspace_root().join("cache").join("textures");
-        assert!(matches!(
-            ensure_outside_repo(&inside),
-            Err(PolicyError::InsideRepo { .. })
-        ));
+        assert!(matches!(ensure_outside_repo(&inside), Err(PolicyError::InsideRepo { .. })));
         let sneaky = std::env::temp_dir().join("..").join("x"); // sanity: no panic
         let _ = ensure_outside_repo(&sneaky);
     }
@@ -141,11 +126,7 @@ mod tests {
     #[test]
     fn rejects_dotdot_escapes_back_into_repo() {
         let root = compiled_workspace_root();
-        let path = root
-            .join("crates")
-            .join("..")
-            .join("not-yet-created")
-            .join("out");
+        let path = root.join("crates").join("..").join("not-yet-created").join("out");
         assert!(ensure_outside_repo(&path).is_err());
     }
 

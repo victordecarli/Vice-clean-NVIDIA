@@ -38,14 +38,8 @@ fn build(words: &[u32], srv: (u8, u32)) -> Result<HostShader, ShaderError> {
         wave64: false,
         vgprs: 32,
         layout: vec![param(RootType::Table, 0), param(RootType::ResourceHeap, 1)],
-        used: vec![
-            range(ResourceType::Srv, 0, srv.0, srv.1),
-            range(ResourceType::Uav, 16, 4, 0),
-        ],
-        io: StageIo::Cs(ComputeIo {
-            rsrc2: 2 << 1,
-            threads: [1, 1, 1],
-        }),
+        used: vec![range(ResourceType::Srv, 0, srv.0, srv.1), range(ResourceType::Uav, 16, 4, 0)],
+        io: StageIo::Cs(ComputeIo { rsrc2: 2 << 1, threads: [1, 1, 1] }),
         code: words.iter().flat_map(|w| w.to_le_bytes()).collect(),
     };
     let p = ir::build(&native.code, native.wave64, native.vgprs)?;
@@ -75,8 +69,7 @@ fn build(words: &[u32], srv: (u8, u32)) -> Result<HostShader, ShaderError> {
         root_indexed_views: Vec::new(),
     };
     if let Ok(mut v) = validator::Validator::load(validator::Validator::default_path().as_deref()) {
-        v.validate(&mut shader.dxil.clone())
-            .expect("DXIL validation failed");
+        v.validate(&mut shader.dxil.clone()).expect("DXIL validation failed");
     } else {
         eprintln!("no dxil.dll; validation skipped");
     }
@@ -145,11 +138,7 @@ fn the_size_of_a_heap_texture_nothing_reads() {
     let words = [TABLE, FROM_HEAP, SIZES, STORE].concat();
     let shader = build(&words, (8, 0)).expect("translates");
     let (one, texels) = ([[0.0; 4]; 1], [[0.0; 4]; 15]);
-    let views = [
-        View::Texture(1, 1, &one),
-        View::Texture(5, 3, &texels),
-        View::RawUav(2),
-    ];
+    let views = [View::Texture(1, 1, &one), View::Texture(5, 3, &texels), View::RawUav(2)];
     for (label, got) in run(&shader, &views) {
         assert_eq!(got[..2], [5, 3], "{label}");
     }
@@ -183,10 +172,7 @@ fn the_record_count_of_a_structured_buffer_nothing_reads() {
     let (data, texel) = ([0u32; 12], [[0.0; 4]; 1]);
     // The runtime makes structured views raw.
     let views = [
-        View::Buffer {
-            data: &data,
-            stride: Stride::Raw,
-        },
+        View::Buffer { data: &data, stride: Stride::Raw },
         View::Texture(1, 1, &texel),
         View::RawUav(2),
     ];
@@ -213,10 +199,7 @@ fn the_record_count_of_a_structured_buffer_read_by_index() {
     let (mut data, texel) = ([0u32; 12], [[0.0; 4]; 1]);
     data[0] = 77;
     let views = [
-        View::Buffer {
-            data: &data,
-            stride: Stride::Raw,
-        },
+        View::Buffer { data: &data, stride: Stride::Raw },
         View::Texture(1, 1, &texel),
         View::RawUav(2),
     ];
@@ -253,11 +236,7 @@ fn a_counter_texture_is_set_by_a_store_of_one_channel() {
     for store in [[0xF020_1108, 0x0002_0300], [0xF020_1108, 0x8002_0300]] {
         let shader = program(store, 0x7E06_0289).expect("translates"); // v3 = 9
         let texel = [[0.0; 4]; 1];
-        let views = [
-            View::UintTextureUav(1, 1),
-            View::Texture(1, 1, &texel),
-            View::RawUav(2),
-        ];
+        let views = [View::UintTextureUav(1, 1), View::Texture(1, 1, &texel), View::RawUav(2)];
         for (label, got) in run(&shader, &views) {
             assert_eq!(got[0], 10, "{label}");
         }
@@ -288,11 +267,7 @@ fn a_buffer_loaded_past_the_cache_is_coherent() {
     // the annotations of the store's and the load's handles
     assert_ne!(plain.dxil, coherent.dxil);
     let texel = [[0.0; 4]; 1];
-    let views = [
-        View::Texture(1, 1, &texel),
-        View::Texture(1, 1, &texel),
-        View::RawUav(3),
-    ];
+    let views = [View::Texture(1, 1, &texel), View::Texture(1, 1, &texel), View::RawUav(3)];
     for shader in [&plain, &coherent] {
         for (label, got) in run(shader, &views) {
             assert_eq!(got[..3], [11, 0, 11], "{label}");
@@ -320,7 +295,8 @@ fn a_picked_buffer_is_read_at_its_raw_twin() {
         ];
         [TABLE, &words, STORE].concat()
     };
-    let (title, twin, last, texel) = ([1u32, 2, 3, 4], [5u32, 6, 7, 8], [9u32, 10, 11, 12], [[0.0; 4]; 1]);
+    let (title, twin, last, texel) =
+        ([1u32, 2, 3, 4], [5u32, 6, 7, 8], [9u32, 10, 11, 12], [[0.0; 4]; 1]);
     let raw = |data| View::Buffer { data, stride: Stride::Raw };
     // (The store goes through the table's third entry: its twin, too.)
     let views = |twins: bool| {

@@ -26,7 +26,13 @@ fn folder() -> Result<PathBuf> {
     Ok(cfg.cache_subdir("shaders")?.with_file_name("pipelines"))
 }
 
-pub fn run(jobs: Option<usize>, limit: Option<usize>, again: bool, used: bool, these: Option<String>) -> Result<()> {
+pub fn run(
+    jobs: Option<usize>,
+    limit: Option<usize>,
+    again: bool,
+    used: bool,
+    these: Option<String>,
+) -> Result<()> {
     let dir = folder()?;
     if let Some(these) = these {
         return make(&dir, &these);
@@ -38,7 +44,8 @@ pub fn run(jobs: Option<usize>, limit: Option<usize>, again: bool, used: bool, t
     // The driver keeps what is made here by program path: made by another copy of
     // this program, a pipeline is not made for this one.
     let fingerprint = {
-        let program = std::env::current_exe().map(|p| p.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let program =
+            std::env::current_exe().map(|p| p.to_string_lossy().to_lowercase()).unwrap_or_default();
         let mut h = blake3::Hasher::new();
         h.update(known::fingerprint().as_bytes());
         h.update(program.as_bytes());
@@ -81,10 +88,17 @@ pub fn run(jobs: Option<usize>, limit: Option<usize>, again: bool, used: bool, t
     let chunks: Vec<&[usize]> = all.chunks(AT_ONCE).collect();
     let next = AtomicUsize::new(0);
     let state = Mutex::new((Vec::<f64>::new(), 0usize, 0usize));
-    let done_out = Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(&done_file)?);
+    let done_out =
+        Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(&done_file)?);
     // (Read back by the runs: these are made beside the others, not before.)
-    let slow_out = Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(dir.join("slow-pipelines.txt"))?);
-    let bad_out = Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(&bad_file)?);
+    let slow_out = Mutex::new(
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("slow-pipelines.txt"))?,
+    );
+    let bad_out =
+        Mutex::new(std::fs::OpenOptions::new().create(true).append(true).open(&bad_file)?);
     std::thread::scope(|s| {
         for _ in 0..jobs.min(chunks.len()) {
             s.spawn(|| {
@@ -99,8 +113,12 @@ pub fn run(jobs: Option<usize>, limit: Option<usize>, again: bool, used: bool, t
                             state.0.push(ms);
                             state.1 += usize::from(!there);
                             let count = state.0.len();
-                            if count % 1000 == 0 {
-                                println!("{count} of {}, {:.0} s", all.len(), began.elapsed().as_secs_f64());
+                            if count.is_multiple_of(1000) {
+                                println!(
+                                    "{count} of {}, {:.0} s",
+                                    all.len(),
+                                    began.elapsed().as_secs_f64()
+                                );
                             }
                             drop(state);
                             let _ = writeln!(lock(&done_out), "{fingerprint} {}", keys[n]);
@@ -150,10 +168,12 @@ pub fn into_library(jobs: Option<usize>) -> Result<()> {
     known::use_library(cfg.cache_subdir("shaders")?);
     let keys = known::keys(&dir);
     let read = |file: &str| std::fs::read_to_string(dir.join(file)).unwrap_or_default();
-    let (bad, early, slow) = (read("warm-bad.txt"), read("early-pipelines.txt"), read("slow-pipelines.txt"));
+    let (bad, early, slow) =
+        (read("warm-bad.txt"), read("early-pipelines.txt"), read("slow-pipelines.txt"));
     let bad: HashSet<&str> = bad.lines().filter_map(|l| l.split(' ').next()).collect();
     let early: HashSet<&str> = early.lines().collect();
-    let slow: HashSet<&str> = slow.lines().filter_map(|l| l.split(' ').next()).filter(|k| !k.is_empty()).collect();
+    let slow: HashSet<&str> =
+        slow.lines().filter_map(|l| l.split(' ').next()).filter(|k| !k.is_empty()).collect();
     let mut all: Vec<usize> = (0..keys.len())
         .filter(|&n| {
             let key = keys[n].as_str();
@@ -161,8 +181,13 @@ pub fn into_library(jobs: Option<usize>) -> Result<()> {
         })
         .collect();
     all.sort_by_key(|&n| (!early.contains(keys[n].as_str()), &keys[n]));
-    let threads = jobs.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()) * 2 / 3).max(1);
-    println!("into the pipeline library: {} pipelines (loading and slow ones), {threads} threads", all.len());
+    let threads = jobs
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()) * 2 / 3)
+        .max(1);
+    println!(
+        "into the pipeline library: {} pipelines (loading and slow ones), {threads} threads",
+        all.len()
+    );
     let began = Instant::now();
     let (count, made) = (AtomicUsize::new(0), AtomicUsize::new(0));
     std::thread::scope(|s| {
@@ -175,7 +200,10 @@ pub fn into_library(jobs: Option<usize>) -> Result<()> {
                     made.fetch_add(usize::from(there), Ordering::Relaxed);
                     let n = count.fetch_add(1, Ordering::Relaxed) + 1;
                     if n.is_multiple_of(500) {
-                        println!("{n} of {total} in the library, {:.0} s", began.elapsed().as_secs_f64());
+                        println!(
+                            "{n} of {total} in the library, {:.0} s",
+                            began.elapsed().as_secs_f64()
+                        );
                     }
                 });
             });
@@ -254,7 +282,8 @@ fn child(these: &[usize], mut each: impl FnMut(usize, f64, bool)) -> (usize, Opt
 
 /// What such a process does.
 fn make(dir: &Path, these: &str) -> Result<()> {
-    let these: Vec<usize> = these.split(',').map(|n| n.parse().context("--these")).collect::<Result<_>>()?;
+    let these: Vec<usize> =
+        these.split(',').map(|n| n.parse().context("--these")).collect::<Result<_>>()?;
     let cfg = victory_core::Config::load()?;
     victory_hle::known_pipelines::use_translations(cfg.cache_subdir("shaders")?);
     let mut out = std::io::stdout();
@@ -265,10 +294,15 @@ fn make(dir: &Path, these: &str) -> Result<()> {
         };
         if told.and_then(|()| out.flush()).is_err() {
             // Whoever asked is gone.
+            #[allow(clippy::exit, reason = "the caller reads our stdout and is gone")]
             std::process::exit(1);
         }
     });
     // Without what a run's end does (nothing to save, the host's threads).
     let _ = out.flush();
-    std::process::exit(0)
+    #[allow(
+        clippy::exit,
+        reason = "leaves before the host's threads and a run's end, which have nothing to do"
+    )]
+    std::process::exit(0);
 }

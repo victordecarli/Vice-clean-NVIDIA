@@ -56,11 +56,7 @@ pub fn packet(data: &[u8], index: usize) -> Option<Packet> {
     let start = index.checked_mul(PACKET_BYTES)?;
     let b = data.get(start..)?.get(..4)?;
     let h = u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
-    Some(Packet {
-        frames: h >> 26,
-        first_frame_bit: (h >> 11) & 0x7fff,
-        skip: h & 0xff,
-    })
+    Some(Packet { frames: h >> 26, first_frame_bit: (h >> 11) & 0x7fff, skip: h & 0xff })
 }
 
 /// One frame's bits gathered out of its packets.
@@ -142,12 +138,7 @@ pub fn read_frame(data: &[u8], start: usize) -> Option<Frame> {
     }
     let end = cursor.pos;
     let next = next_frame(data, start, end);
-    Some(Frame {
-        data: out,
-        bits,
-        start,
-        next,
-    })
+    Some(Frame { data: out, bits, start, next })
 }
 
 /// Where the frame after the one at `start`..`end` begins: right after it,
@@ -175,12 +166,17 @@ fn next_frame(data: &[u8], start: usize, end: usize) -> Option<usize> {
     // A frame that ends in a packet where no frame begins (the tail of a frame
     // that crossed packets, then padding) is the last one before the next
     // packet that has frames.
-    let ends_in_packet_without_frames =
-        end / PACKET_BITS != index && !end.is_multiple_of(PACKET_BITS) && packet(data, end / PACKET_BITS)?.frames == 0;
-    if end.is_multiple_of(PACKET_BITS) || (last && end / PACKET_BITS == index) || ends_in_packet_without_frames {
+    let ends_in_packet_without_frames = end / PACKET_BITS != index
+        && !end.is_multiple_of(PACKET_BITS)
+        && packet(data, end / PACKET_BITS)?.frames == 0;
+    if end.is_multiple_of(PACKET_BITS)
+        || (last && end / PACKET_BITS == index)
+        || ends_in_packet_without_frames
+    {
         // The next frame begins in the next packet of this stream that has one;
         // a packet with none (a frame spans all of it) holds no start.
-        let mut next = (end - 1) / PACKET_BITS + 1 + packet(data, (end - 1) / PACKET_BITS)?.skip as usize;
+        let mut next =
+            (end - 1) / PACKET_BITS + 1 + packet(data, (end - 1) / PACKET_BITS)?.skip as usize;
         let mut header = packet(data, next)?;
         while header.frames == 0 {
             next += 1 + header.skip as usize;
@@ -341,11 +337,7 @@ fn imdct_half(input: &[f32], out: &mut [f32], scale: f32) {
     let im = &mut im[..m];
     // Pre-rotation, each point stored at its bit-reversed place, which is
     // where the FFT's input permutation would move it.
-    let pre = rotations
-        .pre_re
-        .iter()
-        .zip(&rotations.pre_im)
-        .zip(&rotations.reversed);
+    let pre = rotations.pre_re.iter().zip(&rotations.pre_im).zip(&rotations.reversed);
     for (k, ((&c, &s), &to)) in pre.enumerate() {
         let (a, b) = (input[2 * k] as f64, input[n - 1 - 2 * k] as f64);
         re[to as usize] = a * c - b * s;
@@ -423,15 +415,7 @@ impl Rotations {
             }
             len <<= 1;
         }
-        Rotations {
-            pre_re,
-            pre_im,
-            post_re,
-            post_im,
-            reversed,
-            twiddle_re,
-            twiddle_im,
-        }
+        Rotations { pre_re, pre_im, post_re, post_im, reversed, twiddle_re, twiddle_im }
     }
 
     /// The butterfly stages of an in-place radix-2 forward DFT
@@ -443,9 +427,7 @@ impl Rotations {
             let half = len / 2;
             let wr = &self.twiddle_re[half - 1..][..half];
             let wi = &self.twiddle_im[half - 1..][..half];
-            let blocks = re[..m]
-                .chunks_exact_mut(len)
-                .zip(im[..m].chunks_exact_mut(len));
+            let blocks = re[..m].chunks_exact_mut(len).zip(im[..m].chunks_exact_mut(len));
             for (re, im) in blocks {
                 let (are, bre) = re.split_at_mut(half);
                 let (aim, bim) = im.split_at_mut(half);
@@ -466,11 +448,7 @@ fn butterfly_block(
     wr: &[f64],
     wi: &[f64],
 ) {
-    let lanes = are
-        .iter_mut()
-        .zip(aim)
-        .zip(bre.iter_mut().zip(bim))
-        .zip(wr.iter().zip(wi));
+    let lanes = are.iter_mut().zip(aim).zip(bre.iter_mut().zip(bim)).zip(wr.iter().zip(wi));
     for (((ar, ai), (br, bi)), (&cr, &ci)) in lanes {
         let (tr, ti) = (*br * cr - *bi * ci, *br * ci + *bi * cr);
         (*br, *bi) = (*ar - tr, *ai - ti);
@@ -481,13 +459,7 @@ fn butterfly_block(
 /// [`Rotations`] for subframes of 128, 256 and 512 samples.
 fn rotations() -> &'static [Rotations; 3] {
     static ROTATIONS: OnceLock<[Rotations; 3]> = OnceLock::new();
-    ROTATIONS.get_or_init(|| {
-        [
-            Rotations::new(128),
-            Rotations::new(256),
-            Rotations::new(512),
-        ]
-    })
+    ROTATIONS.get_or_init(|| [Rotations::new(128), Rotations::new(256), Rotations::new(512)])
 }
 
 /// `ff_sine_windows`: the rising half of a sine window of length `n`.
@@ -811,11 +783,8 @@ impl Decoder {
     fn coefficients(&mut self, b: &mut Bits, c: usize) -> Result<(), Error> {
         let codes = codes();
         let table = b.bit() as usize;
-        let (run, level): (&[u16], &[f32]) = if table == 1 {
-            (&COEF1_RUN, &COEF1_LEVEL)
-        } else {
-            (&COEF0_RUN, &COEF0_LEVEL)
-        };
+        let (run, level): (&[u16], &[f32]) =
+            if table == 1 { (&COEF1_RUN, &COEF1_LEVEL) } else { (&COEF0_RUN, &COEF0_LEVEL) };
         let subframe_len = self.subframe_len;
         let ch = &mut self.ch[c];
         let mut rl_mode = false;
@@ -914,7 +883,9 @@ impl Decoder {
             ch.scale_factors = target;
             if ch.reuse_sf {
                 let from = ch.saved_scale_factors[ch.scale_factor_idx];
-                for (sf, &offset) in ch.saved_scale_factors[target].iter_mut().zip(&sf_offsets).take(self.num_bands) {
+                for (sf, &offset) in
+                    ch.saved_scale_factors[target].iter_mut().zip(&sf_offsets).take(self.num_bands)
+                {
                     *sf = from[offset];
                 }
             }
@@ -1057,11 +1028,8 @@ impl Decoder {
                     let c = self.channel_indexes[i];
                     self.ch[c].quant_step = quant_step;
                     if b.bit() {
-                        self.ch[c].quant_step += if modifier_len > 0 {
-                            b.read(modifier_len) as i32 + 1
-                        } else {
-                            1
-                        };
+                        self.ch[c].quant_step +=
+                            if modifier_len > 0 { b.read(modifier_len) as i32 + 1 } else { 1 };
                     }
                 }
             }
@@ -1090,7 +1058,8 @@ impl Decoder {
                 let sf = ch.saved_scale_factors[ch.scale_factors];
                 for band in 0..self.num_bands {
                     let end = sfb[band + 1].min(subframe_len);
-                    let exp = ch.quant_step - (ch.max_scale_factor - sf[band]) * ch.scale_factor_step;
+                    let exp =
+                        ch.quant_step - (ch.max_scale_factor - sf[band]) * ch.scale_factor_step;
                     let quant = 10f32.powf(exp as f32 / 20.0);
                     for (t, &c) in tmp[sfb[band]..end].iter_mut().zip(&ch.coeffs[sfb[band]..end]) {
                         *t = c * quant;
@@ -1113,7 +1082,10 @@ impl Decoder {
                 start += (winlen - subframe_len) / 2;
                 winlen = subframe_len;
             }
-            window_overlap(&mut ch.out[start..start + winlen], &windows()[log2(winlen) as usize - 7]);
+            window_overlap(
+                &mut ch.out[start..start + winlen],
+                &windows()[log2(winlen) as usize - 7],
+            );
             ch.prev_block_len = subframe_len;
         }
 
@@ -1243,7 +1215,9 @@ mod tests {
                 -(input
                     .iter()
                     .enumerate()
-                    .map(|(k, &x)| x as f64 * (std::f64::consts::PI / n as f64 * t * (k as f64 + 0.5)).cos())
+                    .map(|(k, &x)| {
+                        x as f64 * (std::f64::consts::PI / n as f64 * t * (k as f64 + 0.5)).cos()
+                    })
                     .sum::<f64>() as f32)
             })
             .collect()
@@ -1355,10 +1329,7 @@ mod tests {
             assert_eq!((&r.pre_re, &r.pre_im), (&fresh.pre_re, &fresh.pre_im));
             assert_eq!((&r.post_re, &r.post_im), (&fresh.post_re, &fresh.post_im));
             assert_eq!(r.reversed, fresh.reversed);
-            assert_eq!(
-                (&r.twiddle_re, &r.twiddle_im),
-                (&fresh.twiddle_re, &fresh.twiddle_im)
-            );
+            assert_eq!((&r.twiddle_re, &r.twiddle_im), (&fresh.twiddle_re, &fresh.twiddle_im));
             assert_eq!(r.pre_re.len(), n / 2);
             assert_eq!(r.twiddle_re.len(), n / 2 - 1);
             // The order is a permutation that undoes itself.
@@ -1383,11 +1354,7 @@ mod tests {
                 for _ in 0..3 {
                     let started = std::time::Instant::now();
                     for i in 0..rounds {
-                        f(
-                            std::hint::black_box(&inputs[i % inputs.len()]),
-                            &mut out,
-                            1.0,
-                        );
+                        f(std::hint::black_box(&inputs[i % inputs.len()]), &mut out, 1.0);
                         std::hint::black_box(&out);
                     }
                     best = best.min(started.elapsed().as_secs_f64() * 1e9 / rounds as f64);
@@ -1750,9 +1717,8 @@ mod tests {
             }
             streams += 1;
             let data = std::fs::read(&path).unwrap();
-            let counted: u32 = (0..data.len() / PACKET_BYTES)
-                .map(|i| packet(&data, i).unwrap().frames)
-                .sum();
+            let counted: u32 =
+                (0..data.len() / PACKET_BYTES).map(|i| packet(&data, i).unwrap().frames).sum();
             // Context word 1: sample rate in bits 27-28, stereo in bit 29.
             let ctx = std::fs::read(path.with_extension("ctx")).unwrap();
             let word = u32::from_le_bytes(ctx[4..8].try_into().unwrap());

@@ -123,7 +123,8 @@ impl Book {
 
     /// Whether something alive holds `at`.
     fn alive(&self, at: u64) -> bool {
-        let holds = |id: &u64| self.live.get(id).is_some_and(|e| at >= e.start && at - e.start < e.size);
+        let holds =
+            |id: &u64| self.live.get(id).is_some_and(|e| at >= e.start && at - e.start < e.size);
         self.by_start
             .range((at.saturating_sub(LONG), 0)..=(at, u64::MAX))
             .rev()
@@ -152,7 +153,12 @@ impl Book {
 
     /// What held `at` and is gone, newest first.
     fn gone_at(&self, at: u64, most: usize) -> Vec<&(Entry, u64)> {
-        self.gone.iter().rev().filter(|(e, _)| at >= e.start && at - e.start < e.size).take(most).collect()
+        self.gone
+            .iter()
+            .rev()
+            .filter(|(e, _)| at >= e.start && at - e.start < e.size)
+            .take(most)
+            .collect()
     }
 }
 
@@ -169,7 +175,11 @@ struct Methods([*const (); 3]);
 unsafe impl Sync for Methods {}
 static NOTICE: Methods = Methods([query as *const (), add_ref as *const (), release as *const ()]);
 
-unsafe extern "system" fn query(this: *mut c_void, iid: *const GUID, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn query(
+    this: *mut c_void,
+    iid: *const GUID,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: COM's arguments.
     unsafe {
         if out.is_null() {
@@ -207,13 +217,18 @@ unsafe extern "system" fn release(this: *mut c_void) -> u32 {
 fn watch(object: &ID3D12Object, id: u64) {
     const KEY: GUID = GUID::from_u128(0x2c7d1a55_9e0b_46f2_8c11_5b8e70a4d913);
     let raw = object.as_raw() as usize;
-    let notice = Box::into_raw(Box::new(Notice { methods: &NOTICE.0, references: AtomicU32::new(1), id, object: raw }));
+    let notice = Box::into_raw(Box::new(Notice {
+        methods: &NOTICE.0,
+        references: AtomicU32::new(1),
+        id,
+        object: raw,
+    }));
     // SAFETY: a COM object of ours with one reference, which this drops; the
     // object takes its own.
     unsafe {
         let notice = IUnknown::from_raw(notice.cast());
         if object.SetPrivateDataInterface(&KEY, &notice).is_err() {
-            std::mem::forget(notice);
+            let _ = std::mem::ManuallyDrop::new(notice);
         }
     }
 }
@@ -255,6 +270,8 @@ pub(crate) fn address(texture: &ID3D12Resource) -> Option<u64> {
 
 /// The address of a texture: the base its descriptor has.
 fn texture_address(texture: &ID3D12Resource, desc: &D3D12_RESOURCE_DESC) -> Option<u64> {
+    // The heap is held so the slot's descriptor stays valid; only the index is read.
+    #[allow(dead_code, reason = "field 0 keeps the descriptor heap alive")]
     struct Slot(ID3D12DescriptorHeap, usize);
     // SAFETY: a descriptor heap, used under the lock.
     unsafe impl Send for Slot {}
@@ -302,8 +319,11 @@ fn texture_address(texture: &ID3D12Resource, desc: &D3D12_RESOURCE_DESC) -> Opti
     // SAFETY: a slot of ours, a live texture; the handle is the descriptor's
     // memory or the read fails.
     unsafe {
-        host.device
-            .CreateShaderResourceView(texture, Some(&view), D3D12_CPU_DESCRIPTOR_HANDLE { ptr: at });
+        host.device.CreateShaderResourceView(
+            texture,
+            Some(&view),
+            D3D12_CPU_DESCRIPTOR_HANDLE { ptr: at },
+        );
     }
     if !crate::host::read_into(at as *const u8, &mut words) {
         return None;
@@ -336,7 +356,11 @@ pub(crate) fn made(resource: &ID3D12Resource, what: impl FnOnce() -> String) {
         (texture_address(resource, &desc), if size == u64::MAX { 0 } else { size })
     };
     let Some(start) = start.filter(|&s| s != 0) else {
-        return with(|b| *b.unknown.entry(format!("f{} flags {:#x}", desc.Format.0, desc.Flags.0)).or_default() += 1);
+        return with(|b| {
+            *b.unknown
+                .entry(format!("f{} flags {:#x}", desc.Format.0, desc.Flags.0))
+                .or_default() += 1
+        });
     };
     let what = what();
     let now = crate::host::now_ms();
@@ -349,7 +373,8 @@ pub(crate) fn block(heap: &ID3D12Heap, resource: &ID3D12Resource, offset: u64, b
     if !on() {
         return;
     }
-    let (Ok(heap), Ok(object)) = (heap.cast::<ID3D12Object>(), resource.cast::<ID3D12Object>()) else {
+    let (Ok(heap), Ok(object)) = (heap.cast::<ID3D12Object>(), resource.cast::<ID3D12Object>())
+    else {
         return;
     };
     let raw = heap.as_raw() as usize;
@@ -423,7 +448,9 @@ pub(crate) enum Names {
 
 /// The descriptor `bytes` hold, as AMD's cards have them since RDNA 2.
 pub(crate) fn decode(bytes: &[u8; 32]) -> Names {
-    let w = |i: usize| u32::from_le_bytes([bytes[4 * i], bytes[4 * i + 1], bytes[4 * i + 2], bytes[4 * i + 3]]);
+    let w = |i: usize| {
+        u32::from_le_bytes([bytes[4 * i], bytes[4 * i + 1], bytes[4 * i + 2], bytes[4 * i + 3]])
+    };
     let kind = w(3) >> 28;
     if kind >= 8 {
         let base = (u64::from(w(0)) | u64::from(w(1) & 0xff) << 32) << 8;
@@ -431,7 +458,8 @@ pub(crate) fn decode(bytes: &[u8; 32]) -> Names {
             return Names::Nothing;
         }
         // Compressed (dword 6, bit 21): where the metadata lies.
-        let meta = (w(6) >> 21 & 1 != 0 && w(7) != 0).then(|| u64::from(w(7)) << 16 | u64::from(w(6) >> 24) << 8);
+        let meta = (w(6) >> 21 & 1 != 0 && w(7) != 0)
+            .then(|| u64::from(w(7)) << 16 | u64::from(w(6) >> 24) << 8);
         let width = ((w(1) >> 30) | (w(2) & 0xfff) << 2) + 1;
         let height = (w(2) >> 14 & 0x3fff) + 1;
         return Names::Texture { base, meta, kind, width, height };
@@ -439,11 +467,7 @@ pub(crate) fn decode(bytes: &[u8; 32]) -> Names {
     let base = u64::from(w(0)) | u64::from(w(1) & 0xffff) << 32;
     let stride = w(1) >> 16 & 0x3fff;
     let bytes = u64::from(w(2)) * u64::from(stride.max(1));
-    if base == 0 || bytes == 0 {
-        Names::Nothing
-    } else {
-        Names::Buffer { base, stride, bytes }
-    }
+    if base == 0 || bytes == 0 { Names::Nothing } else { Names::Buffer { base, stride, bytes } }
 }
 
 /// What the book says of an address: alive, gone or never there.
@@ -481,7 +505,9 @@ fn bases(names: Names) -> Vec<(&'static str, u64)> {
             out.extend(meta.map(|m| ("metadata", m)));
             out
         }
-        Names::Buffer { base, bytes, .. } => vec![("buffer", base), ("buffer's end", base + bytes - 1)],
+        Names::Buffer { base, bytes, .. } => {
+            vec![("buffer", base), ("buffer's end", base + bytes - 1)]
+        }
     }
 }
 
@@ -516,8 +542,8 @@ fn walk() {
             std::thread::sleep(std::time::Duration::from_millis(500));
             continue;
         };
-        for (i, d) in bytes.chunks_exact(32).enumerate() {
-            let d: [u8; 32] = d.try_into().unwrap_or([0; 32]);
+        for (i, d) in bytes.as_chunks::<32>().0.iter().enumerate() {
+            let d: [u8; 32] = *d;
             let names = decode(&d);
             FOUND[0].fetch_add(1, Relaxed);
             FOUND[match names {
@@ -538,7 +564,9 @@ fn walk() {
             due
         };
         for (slot, was, since) in due {
-            let Some((_, again, _)) = crate::descriptor::host::shown_bytes(slot, 1) else { continue };
+            let Some((_, again, _)) = crate::descriptor::host::shown_bytes(slot, 1) else {
+                continue;
+            };
             if again != was {
                 continue;
             }
@@ -572,7 +600,12 @@ fn walk() {
             tracing::info!(
                 "slot check: a round of the view heap in {:.1} s: {} slots, {} null, {} textures, {} buffers; {} name what is gone, {} what the book never had; the book has {live} things alive and {gone} gone; textures without an address {unknown:?}",
                 round.elapsed().as_secs_f64(),
-                f[0], f[1], f[2], f[3], f[4], f[5]
+                f[0],
+                f[1],
+                f[2],
+                f[3],
+                f[4],
+                f[5]
             );
             round = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -587,8 +620,16 @@ pub(crate) fn at_loss(va: u64) -> String {
         return String::new();
     }
     let mut text = with(|b| {
-        let one =
-            |e: &Entry| format!("{} {:#x}+{:#x} made at {:.3} s{}", e.what, e.start, e.size, e.made as f64 / 1e3, e.notes);
+        let one = |e: &Entry| {
+            format!(
+                "{} {:#x}+{:#x} made at {:.3} s{}",
+                e.what,
+                e.start,
+                e.size,
+                e.made as f64 / 1e3,
+                e.notes
+            )
+        };
         let mut text = String::from("; BOOK: alive there:");
         for e in b.holders(va) {
             text.push_str(&format!(" [{}]", one(e)));
@@ -602,16 +643,27 @@ pub(crate) fn at_loss(va: u64) -> String {
         for (e, gone) in b.gone_at(va, 12) {
             text.push_str(&format!(" [{} gone at {:.3} s]", one(e), *gone as f64 / 1e3));
         }
-        text.push_str(&format!("; now {:.3} s, submissions (begun, finished) {:?}, {} alive, {} gone", crate::host::now_ms() as f64 / 1e3, crate::host::submissions(), b.live.len(), b.gone.len()));
+        text.push_str(&format!(
+            "; now {:.3} s, submissions (begun, finished) {:?}, {} alive, {} gone",
+            crate::host::now_ms() as f64 / 1e3,
+            crate::host::submissions(),
+            b.live.len(),
+            b.gone.len()
+        ));
         text
     });
     {
         let roots = ROOTS.lock().unwrap_or_else(|e| e.into_inner());
-        let mut near: Vec<(u64, u64, u64)> = roots.iter().filter(|r| r.1 <= va && va - r.1 < 4 << 30).copied().collect();
+        let mut near: Vec<(u64, u64, u64)> =
+            roots.iter().filter(|r| r.1 <= va && va - r.1 < 4 << 30).copied().collect();
         near.sort_by_key(|r| va - r.1);
         near.dedup_by_key(|r| r.1);
         for (at, gpu, bytes) in near.into_iter().take(4) {
-            text.push_str(&format!("; root descriptor {gpu:#x}+{bytes:#x} ({:#x} below) at {:.1} s", va - gpu, at as f64 / 1e3));
+            text.push_str(&format!(
+                "; root descriptor {gpu:#x}+{bytes:#x} ({:#x} below) at {:.1} s",
+                va - gpu,
+                at as f64 / 1e3
+            ));
         }
     }
     // Every slot that reaches the address, and the nearest below it.
@@ -620,9 +672,9 @@ pub(crate) fn at_loss(va: u64) -> String {
     let mut at = 0;
     let began = std::time::Instant::now();
     while let Some((first, bytes, end)) = crate::descriptor::host::shown_bytes(at, 16_384) {
-        for (i, d) in bytes.chunks_exact(32).enumerate() {
+        for (i, d) in bytes.as_chunks::<32>().0.iter().enumerate() {
             let slot = first + i as u32;
-            let names = decode(&d.try_into().unwrap_or([0; 32]));
+            let names = decode(d);
             let (base, len) = match names {
                 Names::Nothing => continue,
                 Names::Texture { base, meta, .. } => {
@@ -630,11 +682,9 @@ pub(crate) fn at_loss(va: u64) -> String {
                         reach.push((slot, names));
                     }
                     let len = with(|b| {
-                        b.holders(base)
-                            .iter()
-                            .map(|e| e.start + e.size - base)
-                            .min()
-                            .or_else(|| b.gone_at(base, 1).first().map(|(e, _)| e.start + e.size - base))
+                        b.holders(base).iter().map(|e| e.start + e.size - base).min().or_else(
+                            || b.gone_at(base, 1).first().map(|(e, _)| e.start + e.size - base),
+                        )
                     });
                     (base, len.unwrap_or(64 << 20) + (64 << 10))
                 }
@@ -655,7 +705,11 @@ pub(crate) fn at_loss(va: u64) -> String {
             break;
         }
     }
-    text.push_str(&format!("; {} slots reach it (heap read in {:.1} s)", reach.len(), began.elapsed().as_secs_f64()));
+    text.push_str(&format!(
+        "; {} slots reach it (heap read in {:.1} s)",
+        reach.len(),
+        began.elapsed().as_secs_f64()
+    ));
     for (slot, names) in reach.iter().take(24) {
         let (Names::Texture { base, .. } | Names::Buffer { base, .. }) = *names else { continue };
         let fate = match fate(base) {
@@ -663,11 +717,17 @@ pub(crate) fn at_loss(va: u64) -> String {
             Fate::Gone(text) => format!("GONE: {text}"),
             Fate::Never => "never in the book".to_owned(),
         };
-        text.push_str(&format!("; slot {slot} {names:?} {fate} {}", crate::descriptor::host::slot_story(*slot)));
+        text.push_str(&format!(
+            "; slot {slot} {names:?} {fate} {}",
+            crate::descriptor::host::slot_story(*slot)
+        ));
     }
     near.sort_by_key(|n| n.0);
     for (away, slot, names) in near.iter().take(8) {
-        text.push_str(&format!("; near: slot {slot} {names:?} {away:#x} below {}", crate::descriptor::host::slot_story(*slot)));
+        text.push_str(&format!(
+            "; near: slot {slot} {names:?} {away:#x} below {}",
+            crate::descriptor::host::slot_story(*slot)
+        ));
     }
     text
 }
@@ -681,10 +741,20 @@ mod tests {
     #[test]
     fn descriptors_are_read_as_the_card_has_them() {
         let mut d = [0u8; 32];
-        d[..16].copy_from_slice(&[0, 0xb4, 0, 2, 0, 0, 0xa0, 0xc2, 0x0f, 0xc0, 0x0f, 0, 0xac, 0x0f, 0x60, 0x91]);
-        assert_eq!(decode(&d), Names::Texture { base: 0x2_00b4_0000, meta: None, kind: 9, width: 64, height: 64 });
-        d[..16].copy_from_slice(&[0, 0xb4, 2, 2, 0, 0, 0xa0, 0xc2, 0xff, 0xc1, 0xff, 1, 0xac, 0x0f, 0xb0, 0x91]);
-        assert_eq!(decode(&d), Names::Texture { base: 0x2_02b4_0000, meta: None, kind: 9, width: 2048, height: 2048 });
+        d[..16].copy_from_slice(&[
+            0, 0xb4, 0, 2, 0, 0, 0xa0, 0xc2, 0x0f, 0xc0, 0x0f, 0, 0xac, 0x0f, 0x60, 0x91,
+        ]);
+        assert_eq!(
+            decode(&d),
+            Names::Texture { base: 0x2_00b4_0000, meta: None, kind: 9, width: 64, height: 64 }
+        );
+        d[..16].copy_from_slice(&[
+            0, 0xb4, 2, 2, 0, 0, 0xa0, 0xc2, 0xff, 0xc1, 0xff, 1, 0xac, 0x0f, 0xb0, 0x91,
+        ]);
+        assert_eq!(
+            decode(&d),
+            Names::Texture { base: 0x2_02b4_0000, meta: None, kind: 9, width: 2048, height: 2048 }
+        );
         d = [0; 32];
         assert_eq!(decode(&d), Names::Nothing);
         d[..8].copy_from_slice(&0x1_2345_6780u64.to_le_bytes());
@@ -708,16 +778,21 @@ mod tests {
             DepthOrArraySize: 1,
             MipLevels: 1,
             Format: DXGI_FORMAT(83),
-            SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
             ..Default::default()
         };
         // SAFETY: a valid description.
-        let texture = unsafe { crate::pool::texture(&host.device, &desc, D3D12_RESOURCE_STATE_COMMON) };
+        let texture =
+            unsafe { crate::pool::texture(&host.device, &desc, D3D12_RESOURCE_STATE_COMMON) };
         if let Some(texture) = texture {
             let at = texture_address(&texture, &desc);
             println!("address {at:x?}");
             if let Some(at) = at {
-                let names = || with(|b| b.holders(at).iter().map(|e| e.what.clone()).collect::<Vec<_>>());
+                let names =
+                    || with(|b| b.holders(at).iter().map(|e| e.what.clone()).collect::<Vec<_>>());
                 let found = names();
                 println!("held by {found:?}");
                 assert!(found.iter().any(|n| n.contains("a texture in a block")), "{found:?}");
@@ -743,7 +818,8 @@ mod tests {
         b.remove(one, 2, 10);
         b.remove(block, 1, 12);
         assert!(names(&b, 0x1000_0100).is_empty());
-        let gone: Vec<(String, u64)> = b.gone_at(0x1000_0100, 9).iter().map(|(e, at)| (e.what.clone(), *at)).collect();
+        let gone: Vec<(String, u64)> =
+            b.gone_at(0x1000_0100, 9).iter().map(|(e, at)| (e.what.clone(), *at)).collect();
         assert_eq!(gone, [("a block".to_owned(), 12), ("one".to_owned(), 10)]);
         assert_eq!(b.neighbours(0x1000_0100)[1].map(|e| e.what.as_str()), Some("two"));
         b.remove(two, 3, 13);

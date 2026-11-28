@@ -6,6 +6,12 @@
 //! picture and buffer must be the same.
 //!
 //! `VICTORY_TEST_D3D_DEBUG=1` runs it under the debug layer.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    reason = "test code: a failure panics, and what a test measured is printed"
+)]
 #![cfg(all(windows, feature = "diagnostics"))]
 
 use std::mem::ManuallyDrop;
@@ -84,11 +90,7 @@ float4 ps(V v) : SV_Target {
 /// Compiles with the Windows SDK's dxc, if there is one.
 fn dxc(source: &str, entry: &str, target: &str) -> Option<Vec<u8>> {
     let kits = std::fs::read_dir("C:/Program Files (x86)/Windows Kits/10/bin").ok()?;
-    let exe = kits
-        .flatten()
-        .map(|e| e.path().join("x64/dxc.exe"))
-        .filter(|p| p.exists())
-        .max()?;
+    let exe = kits.flatten().map(|e| e.path().join("x64/dxc.exe")).filter(|p| p.exists()).max()?;
     let dir = tempfile::tempdir().ok()?;
     let (from, to) = (dir.path().join("a.hlsl"), dir.path().join("a.dxil"));
     std::fs::write(&from, source).ok()?;
@@ -98,11 +100,7 @@ fn dxc(source: &str, entry: &str, target: &str) -> Option<Vec<u8>> {
         .arg(&from)
         .output()
         .ok()?;
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     std::fs::read(to).ok()
 }
 
@@ -130,23 +128,15 @@ fn mesh(device: &ID3D12Device, blend: D3D12_BLEND_DESC) -> Option<(Made, ID3D12C
     unsafe {
         let mut o = D3D12_FEATURE_DATA_D3D12_OPTIONS7::default();
         let size = size_of::<D3D12_FEATURE_DATA_D3D12_OPTIONS7>() as u32;
-        device
-            .CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, (&raw mut o).cast(), size)
-            .ok()?;
+        device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, (&raw mut o).cast(), size).ok()?;
         if o.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED {
             return None;
         }
         let root: ID3D12RootSignature = device.CreateRootSignature(0, &ms).unwrap();
-        let mut formats = D3D12_RT_FORMAT_ARRAY {
-            NumRenderTargets: 1,
-            ..Default::default()
-        };
+        let mut formats = D3D12_RT_FORMAT_ARRAY { NumRenderTargets: 1, ..Default::default() };
         formats.RTFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         let mut stream = Stream {
-            root: Sub(
-                D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE,
-                root.as_raw(),
-            ),
+            root: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE, root.as_raw()),
             ms: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS, code(&ms)),
             ps: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS, code(&ps)),
             blend: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND, blend),
@@ -163,20 +153,14 @@ fn mesh(device: &ID3D12Device, blend: D3D12_BLEND_DESC) -> Option<(Made, ID3D12C
                 D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL,
                 D3D12_DEPTH_STENCIL_DESC::default(),
             ),
-            targets: Sub(
-                D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS,
-                formats,
-            ),
+            targets: Sub(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, formats),
             dsv: Sub(
                 D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT,
                 DXGI_FORMAT_D32_FLOAT,
             ),
             samples: Sub(
                 D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC,
-                DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             ),
             topology: Sub(
                 D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY,
@@ -195,11 +179,8 @@ fn mesh(device: &ID3D12Device, blend: D3D12_BLEND_DESC) -> Option<(Made, ID3D12C
             .cast()
             .unwrap();
         {
-            let made: ID3D12PipelineState = device
-                .cast::<ID3D12Device2>()
-                .unwrap()
-                .CreatePipelineState(&desc)
-                .unwrap();
+            let made: ID3D12PipelineState =
+                device.cast::<ID3D12Device2>().unwrap().CreatePipelineState(&desc).unwrap();
             library.StorePipeline(w!("mesh"), &made).unwrap();
         }
         let pso: ID3D12PipelineState = library.LoadPipeline(w!("mesh"), &desc).unwrap();
@@ -215,9 +196,7 @@ fn mesh(device: &ID3D12Device, blend: D3D12_BLEND_DESC) -> Option<(Made, ID3D12C
             pArgumentDescs: &argument,
             NodeMask: 0,
         };
-        device
-            .CreateCommandSignature(&desc, None::<&ID3D12RootSignature>, &mut signature)
-            .unwrap();
+        device.CreateCommandSignature(&desc, None::<&ID3D12RootSignature>, &mut signature).unwrap();
         Some((Made { root, pso }, signature.unwrap()))
     }
 }
@@ -308,10 +287,7 @@ fn compile(source: &str, entry: PCSTR, target: PCSTR) -> Vec<u8> {
 }
 
 fn code(bytes: &[u8]) -> D3D12_SHADER_BYTECODE {
-    D3D12_SHADER_BYTECODE {
-        pShaderBytecode: bytes.as_ptr().cast(),
-        BytecodeLength: bytes.len(),
-    }
+    D3D12_SHADER_BYTECODE { pShaderBytecode: bytes.as_ptr().cast(), BytecodeLength: bytes.len() }
 }
 
 fn compute(device: &ID3D12Device, source: &str) -> Made {
@@ -337,10 +313,7 @@ fn buffer_desc(size: u64, flags: D3D12_RESOURCE_FLAGS) -> D3D12_RESOURCE_DESC {
         Height: 1,
         DepthOrArraySize: 1,
         MipLevels: 1,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
         Flags: flags,
         ..Default::default()
@@ -359,10 +332,7 @@ fn texture_desc(
         DepthOrArraySize: 1,
         MipLevels: 1,
         Format: format,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
         Flags: flags,
         ..Default::default()
     }
@@ -384,18 +354,9 @@ fn committed(
     state: D3D12_RESOURCE_STATES,
 ) -> (ID3D12Resource, *mut u8) {
     let heap = match place {
-        In::Card => D3D12_HEAP_PROPERTIES {
-            Type: D3D12_HEAP_TYPE_DEFAULT,
-            ..Default::default()
-        },
-        In::Upload => D3D12_HEAP_PROPERTIES {
-            Type: D3D12_HEAP_TYPE_UPLOAD,
-            ..Default::default()
-        },
-        In::Back => D3D12_HEAP_PROPERTIES {
-            Type: D3D12_HEAP_TYPE_READBACK,
-            ..Default::default()
-        },
+        In::Card => D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_DEFAULT, ..Default::default() },
+        In::Upload => D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_UPLOAD, ..Default::default() },
+        In::Back => D3D12_HEAP_PROPERTIES { Type: D3D12_HEAP_TYPE_READBACK, ..Default::default() },
         In::Shared => D3D12_HEAP_PROPERTIES {
             Type: D3D12_HEAP_TYPE_CUSTOM,
             CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_WRITE_BACK,
@@ -504,11 +465,7 @@ struct Scene {
     vertices: (ID3D12Resource, *mut u8),
     samplers: ID3D12DescriptorHeap,
     still: Vec<(&'static str, ID3D12Resource, D3D12_RESOURCE_STATES)>,
-    copies: (
-        ID3D12CommandQueue,
-        ID3D12CommandAllocator,
-        ID3D12GraphicsCommandList,
-    ),
+    copies: (ID3D12CommandQueue, ID3D12CommandAllocator, ID3D12GraphicsCommandList),
     args: Made,
     clamp: Made,
     add: Made,
@@ -548,9 +505,8 @@ impl Scene {
             let fence: ID3D12Fence = device.CreateFence(0, D3D12_FENCE_FLAG_NONE).unwrap();
             let lists = (0..3)
                 .map(|_| {
-                    let allocator: ID3D12CommandAllocator = device
-                        .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                        .unwrap();
+                    let allocator: ID3D12CommandAllocator =
+                        device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
                     let list: ID3D12GraphicsCommandList = device
                         .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None)
                         .unwrap();
@@ -558,10 +514,8 @@ impl Scene {
                     (allocator, list)
                 })
                 .collect();
-            let (vs, ps) = (
-                compile(DRAW, s!("vs"), s!("vs_5_1")),
-                compile(DRAW, s!("ps"), s!("ps_5_1")),
-            );
+            let (vs, ps) =
+                (compile(DRAW, s!("vs"), s!("vs_5_1")), compile(DRAW, s!("ps"), s!("ps_5_1")));
             let root: ID3D12RootSignature = device.CreateRootSignature(0, &vs).unwrap();
             let mut blend = D3D12_BLEND_DESC::default();
             blend.RenderTarget[0].RenderTargetWriteMask = 15;
@@ -586,20 +540,15 @@ impl Scene {
                 PrimitiveTopologyType: D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
                 NumRenderTargets: 1,
                 DSVFormat: DXGI_FORMAT_D32_FLOAT,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
                 ..Default::default()
             };
             desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
             let pso: ID3D12PipelineState = device.CreateGraphicsPipelineState(&desc).unwrap();
             record::name(&pso, "a drawing pipeline");
             let draw = Made { root, pso };
-            let (vs, ps) = (
-                compile(PLAIN, s!("vs"), s!("vs_5_1")),
-                compile(PLAIN, s!("ps"), s!("ps_5_1")),
-            );
+            let (vs, ps) =
+                (compile(PLAIN, s!("vs"), s!("vs_5_1")), compile(PLAIN, s!("ps"), s!("ps_5_1")));
             let root: ID3D12RootSignature = device.CreateRootSignature(0, &vs).unwrap();
             let element = |name, index, format, at| D3D12_INPUT_ELEMENT_DESC {
                 SemanticName: name,
@@ -616,10 +565,8 @@ impl Scene {
             ];
             desc.pRootSignature = std::mem::transmute_copy(&root);
             (desc.VS, desc.PS) = (code(&vs), code(&ps));
-            desc.InputLayout = D3D12_INPUT_LAYOUT_DESC {
-                pInputElementDescs: elements.as_ptr(),
-                NumElements: 2,
-            };
+            desc.InputLayout =
+                D3D12_INPUT_LAYOUT_DESC { pInputElementDescs: elements.as_ptr(), NumElements: 2 };
             let pso: ID3D12PipelineState = device.CreateGraphicsPipelineState(&desc).unwrap();
             let plain = Made { root, pso };
             let clamp = compute(device, CLAMP);
@@ -671,16 +618,8 @@ impl Scene {
                 5000,
                 D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
             );
-            let rtvs = heap(
-                D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-                1,
-                D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-            );
-            let dsvs = heap(
-                D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
-                1,
-                D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-            );
+            let rtvs = heap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+            let dsvs = heap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
             let rgba = DXGI_FORMAT_R8G8B8A8_UNORM;
             let (target, _) = committed(
                 device,
@@ -691,19 +630,11 @@ impl Scene {
             let (depth, _) = committed(
                 device,
                 In::Card,
-                &texture_desc(
-                    SIZE,
-                    DXGI_FORMAT_D32_FLOAT,
-                    D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
-                ),
+                &texture_desc(SIZE, DXGI_FORMAT_D32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
                 D3D12_RESOURCE_STATE_DEPTH_WRITE,
             );
-            let (fixed, _) = committed(
-                device,
-                In::Card,
-                &texture_desc(16, rgba, D3D12_RESOURCE_FLAG_NONE),
-                TO,
-            );
+            let (fixed, _) =
+                committed(device, In::Card, &texture_desc(16, rgba, D3D12_RESOURCE_FLAG_NONE), TO);
             let (image, _) = committed(
                 device,
                 In::Card,
@@ -725,9 +656,7 @@ impl Scene {
             let placed = || {
                 let mut made: Option<ID3D12Resource> = None;
                 let d = texture_desc(16, rgba, D3D12_RESOURCE_FLAG_NONE);
-                device
-                    .CreatePlacedResource(&memory, 65536, &d, TO, None, &mut made)
-                    .unwrap();
+                device.CreatePlacedResource(&memory, 65536, &d, TO, None, &mut made).unwrap();
                 made.unwrap()
             };
             // Two textures in one place.
@@ -748,12 +677,8 @@ impl Scene {
                 &buffer_desc(65536, D3D12_RESOURCE_FLAG_NONE),
                 D3D12_RESOURCE_STATE_GENERIC_READ,
             );
-            let back = committed(
-                device,
-                In::Back,
-                &buffer_desc(1 << 20, D3D12_RESOURCE_FLAG_NONE),
-                TO,
-            );
+            let back =
+                committed(device, In::Back, &buffer_desc(1 << 20, D3D12_RESOURCE_FLAG_NONE), TO);
             let vertices = committed(
                 device,
                 In::Upload,
@@ -792,20 +717,15 @@ impl Scene {
                     (name, t, ends)
                 })
             };
-            let copies: (
-                ID3D12CommandQueue,
-                ID3D12CommandAllocator,
-                ID3D12GraphicsCommandList,
-            ) = {
+            let copies: (ID3D12CommandQueue, ID3D12CommandAllocator, ID3D12GraphicsCommandList) = {
                 let queue = device
                     .CreateCommandQueue(&D3D12_COMMAND_QUEUE_DESC {
                         Type: D3D12_COMMAND_LIST_TYPE_COPY,
                         ..Default::default()
                     })
                     .unwrap();
-                let allocator: ID3D12CommandAllocator = device
-                    .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY)
-                    .unwrap();
+                let allocator: ID3D12CommandAllocator =
+                    device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY).unwrap();
                 let list: ID3D12GraphicsCommandList = device
                     .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, &allocator, None)
                     .unwrap();
@@ -868,27 +788,19 @@ impl Scene {
                 swap,
             };
             // Null views everywhere, by copies of a slot made elsewhere.
-            let block = heap(
-                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                16,
-                D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-            );
+            let block =
+                heap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
             let null = D3D12_SHADER_RESOURCE_VIEW_DESC {
                 Format: rgba,
                 ViewDimension: D3D12_SRV_DIMENSION_TEXTURE2D,
                 Shader4ComponentMapping: D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
                 Anonymous: D3D12_SHADER_RESOURCE_VIEW_DESC_0 {
-                    Texture2D: D3D12_TEX2D_SRV {
-                        MipLevels: 1,
-                        ..Default::default()
-                    },
+                    Texture2D: D3D12_TEX2D_SRV { MipLevels: 1, ..Default::default() },
                 },
             };
             let from = block.GetCPUDescriptorHandleForHeapStart();
             for i in 0..16 {
-                let at = D3D12_CPU_DESCRIPTOR_HANDLE {
-                    ptr: from.ptr + i * step,
-                };
+                let at = D3D12_CPU_DESCRIPTOR_HANDLE { ptr: from.ptr + i * step };
                 device.CreateShaderResourceView(None::<&ID3D12Resource>, Some(&null), at);
             }
             for i in (0..4992).step_by(16) {
@@ -901,12 +813,7 @@ impl Scene {
             }
             // The rest with the other copying method, in unlike pieces.
             let to = [scene.cpu(4992), scene.cpu(4994)];
-            let sources = [
-                from,
-                D3D12_CPU_DESCRIPTOR_HANDLE {
-                    ptr: from.ptr + 4 * step,
-                },
-            ];
+            let sources = [from, D3D12_CPU_DESCRIPTOR_HANDLE { ptr: from.ptr + 4 * step }];
             device.CopyDescriptors(
                 2,
                 to.as_ptr(),
@@ -931,18 +838,13 @@ impl Scene {
     fn cpu(&self, i: usize) -> D3D12_CPU_DESCRIPTOR_HANDLE {
         // SAFETY: a slot of the heap.
         let start = unsafe { self.views.GetCPUDescriptorHandleForHeapStart() };
-        D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr: start.ptr + i * self.step,
-        }
+        D3D12_CPU_DESCRIPTOR_HANDLE { ptr: start.ptr + i * self.step }
     }
 
     /// Slot `i` shows `texture`.
     fn show(&self, i: usize, texture: &ID3D12Resource) {
         // SAFETY: a slot of the heap and a live texture.
-        unsafe {
-            self.device
-                .CreateShaderResourceView(texture, None, self.cpu(i))
-        };
+        unsafe { self.device.CreateShaderResourceView(texture, None, self.cpu(i)) };
     }
 
     fn wait(&mut self) {
@@ -950,9 +852,7 @@ impl Scene {
         // SAFETY: our queue, fence and event.
         unsafe {
             self.queue.Signal(&self.fence, self.value).unwrap();
-            self.fence
-                .SetEventOnCompletion(self.value, self.event)
-                .unwrap();
+            self.fence.SetEventOnCompletion(self.value, self.event).unwrap();
             WaitForSingleObject(self.event, INFINITE);
             self.device.GetDeviceRemovedReason().unwrap();
         }
@@ -982,13 +882,7 @@ impl Scene {
                 let mut c = color;
                 c[1] = c[1].wrapping_add((x * 8 + y) as u8);
                 // SAFETY: inside the mapping (16 rows of 256 bytes).
-                unsafe {
-                    self.texels
-                        .1
-                        .add(at + y * 256 + x * 4)
-                        .cast::<[u8; 4]>()
-                        .write(c)
-                };
+                unsafe { self.texels.1.add(at + y * 256 + x * 4).cast::<[u8; 4]>().write(c) };
             }
         }
     }
@@ -998,17 +892,13 @@ impl Scene {
             // SAFETY: a borrowed pointer never released.
             pResource: unsafe { std::mem::transmute_copy(&self.texels.0) },
             Type: D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                PlacedFootprint: footprint(at, 16),
-            },
+            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { PlacedFootprint: footprint(at, 16) },
         };
         let to = D3D12_TEXTURE_COPY_LOCATION {
             // SAFETY: as above.
             pResource: unsafe { std::mem::transmute_copy(texture) },
             Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                SubresourceIndex: 0,
-            },
+            Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
         };
         // SAFETY: an open list; live resources.
         unsafe { l.CopyTextureRegion(&to, 0, 0, 0, &from, None) };
@@ -1024,15 +914,12 @@ impl Scene {
             l.SetGraphicsRoot32BitConstant(0, pick, 0);
             l.SetGraphicsRootConstantBufferView(1, self.constants.0.GetGPUVirtualAddress() + at);
             l.SetGraphicsRootDescriptorTable(2, self.views.GetGPUDescriptorHandleForHeapStart());
-            let step = self
-                .device
-                .GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            let step =
+                self.device.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
             let first = self.samplers.GetGPUDescriptorHandleForHeapStart().ptr;
             l.SetGraphicsRootDescriptorTable(
                 3,
-                D3D12_GPU_DESCRIPTOR_HANDLE {
-                    ptr: first + 2 * u64::from(step),
-                },
+                D3D12_GPU_DESCRIPTOR_HANDLE { ptr: first + 2 * u64::from(step) },
             );
             l.ExecuteIndirect(
                 &self.signature,
@@ -1056,11 +943,7 @@ impl Scene {
             l.Dispatch(1, 1, 1);
             l.ResourceBarrier(&[
                 uav_barrier(),
-                moved(
-                    &self.arguments,
-                    UAV,
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-                ),
+                moved(&self.arguments, UAV, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
             ]);
             l.ResourceBarrier(&[uav_barrier(), moved(&self.scratch, before, UAV)]);
             l.SetComputeRootSignature(&self.clamp.root);
@@ -1128,11 +1011,7 @@ impl Scene {
                 [x, 0.9, 0.0, 0.0, 1.0f32],
             ];
             self.vertices.1.cast::<[[f32; 5]; 3]>().write(vertices);
-            self.vertices
-                .1
-                .add(1024)
-                .cast::<[u16; 4]>()
-                .write([9, 2, 0, 1]);
+            self.vertices.1.add(1024).cast::<[u16; 4]>().write([9, 2, 0, 1]);
             let at = self.vertices.0.GetGPUVirtualAddress();
             l.SetGraphicsRootSignature(&self.plain.root);
             l.SetPipelineState(&self.plain.pso);
@@ -1190,12 +1069,7 @@ impl Scene {
                     self.device.CreateDepthStencilView(t, Some(&view), dsv);
                     let both = D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL;
                     l.ClearDepthStencilView(dsv, both, 0.75, 3, None);
-                    let part = RECT {
-                        left: 5,
-                        top: 6,
-                        right: 20,
-                        bottom: 17,
-                    };
+                    let part = RECT { left: 5, top: 6, right: 20, bottom: 17 };
                     l.ClearDepthStencilView(dsv, both, 0.25, 200, Some(&[part]));
                     continue;
                 }
@@ -1334,11 +1208,7 @@ impl Scene {
             // places, and the second texture in the memory of the first.
             self.show(4000, &self.other);
             // Arguments of a mesh draw.
-            self.constants
-                .1
-                .add(1024)
-                .cast::<[u32; 3]>()
-                .write([1, 1, 1]);
+            self.constants.1.add(1024).cast::<[u32; 3]>().write([1, 1, 1]);
             self.place(0, [-0.9, 0.3, 0.6, 0.6]);
             self.place(256, [0.3, -0.8, 0.6, 0.5]);
             self.give(40, 100 + n);
@@ -1410,9 +1280,7 @@ impl Scene {
             queue.ExecuteCommandLists(&[Some(list.cast().unwrap())]);
             self.value += 1;
             queue.Signal(&self.fence, self.value).unwrap();
-            self.fence
-                .SetEventOnCompletion(self.value, self.event)
-                .unwrap();
+            self.fence.SetEventOnCompletion(self.value, self.event).unwrap();
             WaitForSingleObject(self.event, INFINITE);
             if let Some((swap, _)) = &self.swap {
                 swap.Present(0, DXGI_PRESENT(0)).unwrap();
@@ -1431,16 +1299,12 @@ impl Scene {
             let to = |at: u64, size| D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(&self.back.0),
                 Type: D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    PlacedFootprint: footprint(at, size),
-                },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { PlacedFootprint: footprint(at, size) },
             };
             let of = |t: &ID3D12Resource| D3D12_TEXTURE_COPY_LOCATION {
                 pResource: std::mem::transmute_copy(t),
                 Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-                    SubresourceIndex: 0,
-                },
+                Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: 0 },
             };
             l.ResourceBarrier(&[moved(&self.image, UAV, FROM)]);
             l.CopyTextureRegion(&to(0, SIZE), 0, 0, 0, &of(&self.target), None);
@@ -1469,9 +1333,7 @@ fn sub_of(t: &ID3D12Resource, sub: u32) -> D3D12_TEXTURE_COPY_LOCATION {
         // SAFETY: a borrowed pointer never released.
         pResource: unsafe { std::mem::transmute_copy(t) },
         Type: D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-        Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 {
-            SubresourceIndex: sub,
-        },
+        Anonymous: D3D12_TEXTURE_COPY_LOCATION_0 { SubresourceIndex: sub },
     }
 }
 
@@ -1517,20 +1379,14 @@ fn swap_chain(queue: &ID3D12CommandQueue) -> (IDXGISwapChain3, HWND) {
             Width: 64,
             Height: 64,
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
             BufferCount: 2,
             SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
             ..Default::default()
         };
-        let chain = factory
-            .CreateSwapChainForHwnd(queue, hwnd, &desc, None, None)
-            .unwrap()
-            .cast()
-            .unwrap();
+        let chain =
+            factory.CreateSwapChainForHwnd(queue, hwnd, &desc, None, None).unwrap().cast().unwrap();
         (chain, hwnd)
     }
 }
@@ -1546,10 +1402,7 @@ fn check(player: &mut Player, options: &Options, expected: &Outcome, what: &str)
     assert_eq!(report.frame_ms.len(), options.loops as usize);
     assert!(report.median_ms() > 0.0);
     let (db, same) = report.picture.unwrap();
-    assert!(
-        same && db.is_infinite(),
-        "{what}: the picture differs ({db} dB)"
-    );
+    assert!(same && db.is_infinite(), "{what}: the picture differs ({db} dB)");
     let mut get = |name: &str| {
         let id = player.named(name).unwrap();
         player.contents(id).unwrap().unwrap()
@@ -1557,10 +1410,7 @@ fn check(player: &mut Player, options: &Options, expected: &Outcome, what: &str)
     assert_eq!(get("sum"), expected.sum, "{what}: sum");
     assert_eq!(rows(&get("image")), expected.image, "{what}: image");
     assert_eq!(get("target"), expected.picture, "{what}: target");
-    assert!(
-        get("shared") == expected.shared,
-        "{what}: memory the CPU sees"
-    );
+    assert!(get("shared") == expected.shared, "{what}: memory the CPU sees");
     for still in &expected.still {
         let id = player.named(still.name).unwrap();
         for (sub, (pitch, rows)) in still.subs.iter().enumerate() {
@@ -1576,11 +1426,7 @@ fn check(player: &mut Player, options: &Options, expected: &Outcome, what: &str)
         }
     }
     // Nothing was left out but what another queue ran.
-    let known = [
-        "submissions,",
-        "waits of the drawing queue",
-        "lists sent to a queue other than",
-    ];
+    let known = ["submissions,", "waits of the drawing queue", "lists sent to a queue other than"];
     assert!(
         !report
             .notes
@@ -1622,49 +1468,28 @@ fn a_frame_is_recorded_and_replayed() {
     assert!(without.sum.iter().any(|&b| b != 0));
     for s in &without.still {
         assert!(
-            s.subs
-                .iter()
-                .all(|(_, rows)| rows.iter().flatten().any(|&b| b != 0)),
+            s.subs.iter().all(|(_, rows)| rows.iter().flatten().any(|&b| b != 0)),
             "{}",
             s.name
         );
     }
-    assert_eq!(
-        without
-            .still
-            .iter()
-            .map(|s| s.subs.len())
-            .collect::<Vec<_>>(),
-        [15, 3, 2]
-    );
-    let colors: std::collections::HashSet<[u8; 4]> = without
-        .picture
-        .chunks_exact(4)
-        .map(|c| [c[0], c[1], c[2], c[3]])
-        .collect();
+    assert_eq!(without.still.iter().map(|s| s.subs.len()).collect::<Vec<_>>(), [15, 3, 2]);
+    let colors: std::collections::HashSet<[u8; 4]> =
+        without.picture.as_chunks::<4>().0.iter().map(|c| [c[0], c[1], c[2], c[3]]).collect();
     assert!(colors.len() > 30, "{}", colors.len());
 
     // With it: armed at the first present, the fourth frame is captured (a
     // frame whose lists are all recorded comes first).
     assert!(!record::on());
     let dir = tempfile::tempdir().unwrap();
-    let settings = Settings {
-        folder: dir.path().to_owned(),
-        at: At::Frame(1),
-        frames: 1,
-        always: false,
-    };
+    let settings =
+        Settings { folder: dir.path().to_owned(), at: At::Frame(1), frames: 1, always: false };
     let folder = record::start(settings, &device).unwrap();
     assert!(record::on());
     assert_ne!(table_of(&device), own, "the device is hooked");
     assert!(
         record::start(
-            Settings {
-                folder: dir.path().to_owned(),
-                at: At::Trigger,
-                frames: 1,
-                always: false
-            },
+            Settings { folder: dir.path().to_owned(), at: At::Trigger, frames: 1, always: false },
             &device
         )
         .is_err(),
@@ -1674,20 +1499,12 @@ fn a_frame_is_recorded_and_replayed() {
     let mut scene = Scene::new(&device, true);
     eprintln!("scene made");
     (0..4).for_each(|n| scene.frame(n));
-    assert_eq!(
-        record::finished(),
-        Some(folder.clone()),
-        "see {}",
-        folder.display()
-    );
+    assert_eq!(record::finished(), Some(folder.clone()), "see {}", folder.display());
     let expected = scene.outcome();
     // It goes on as it did without the recorder.
     scene.frame(4);
     let after = scene.outcome();
-    assert!(
-        after == without,
-        "the recorder changed what the program makes"
-    );
+    assert!(after == without, "the recorder changed what the program makes");
     drop(scene);
     record::unhook(&device);
     assert_eq!(table_of(&device), own, "the device is as it was");
@@ -1702,29 +1519,14 @@ fn a_frame_is_recorded_and_replayed() {
     ] {
         assert!(folder.join(name).exists(), "{name}");
     }
-    println!(
-        "{}",
-        std::fs::read_to_string(folder.join("notes.txt")).unwrap()
-    );
+    println!("{}", std::fs::read_to_string(folder.join("notes.txt")).unwrap());
 
-    let plain = Options {
-        loops: 3,
-        ..Default::default()
-    };
+    let plain = Options { loops: 3, ..Default::default() };
     let mut player = Player::load(dir.path(), &plain).unwrap();
     check(&mut player, &plain, &expected, "unchanged");
-    let detailed = Options {
-        detailed: true,
-        ..plain.clone()
-    };
+    let detailed = Options { detailed: true, ..plain.clone() };
     let report = check(&mut player, &detailed, &expected, "detailed");
-    let count = |kind: &str| {
-        report
-            .categories
-            .iter()
-            .find(|c| c.0 == kind)
-            .map_or(0, |c| c.2)
-    };
+    let count = |kind: &str| report.categories.iter().find(|c| c.0 == kind).map_or(0, |c| c.2);
     assert_eq!(count("argument clamps (ours)"), 3);
     assert_eq!(count("indirect draws"), 5);
     assert_eq!(count("draws"), 1);
@@ -1732,10 +1534,7 @@ fn a_frame_is_recorded_and_replayed() {
     println!("{meshes} mesh draws");
     if meshes > 0 {
         assert!(
-            report
-                .shaders
-                .iter()
-                .any(|s| s.2.starts_with("a mesh pipeline (DXIL ")),
+            report.shaders.iter().any(|s| s.2.starts_with("a mesh pipeline (DXIL ")),
             "{:?}",
             report.shaders
         );
@@ -1743,91 +1542,41 @@ fn a_frame_is_recorded_and_replayed() {
     assert_eq!(count("dispatches"), 6);
     assert_eq!(count("clears"), 2);
     assert!(
-        report
-            .shaders
-            .iter()
-            .any(|s| s.2.starts_with("a drawing pipeline (DXIL ")),
+        report.shaders.iter().any(|s| s.2.starts_with("a drawing pipeline (DXIL ")),
         "{:?}",
         report.shaders
     );
-    let merged = Options {
-        merge_barriers: true,
-        ..plain.clone()
-    };
+    let merged = Options { merge_barriers: true, ..plain.clone() };
     check(&mut player, &merged, &expected, "merged barriers");
-    let clamps = Options {
-        skip_clamps: true,
-        ..plain.clone()
-    };
+    let clamps = Options { skip_clamps: true, ..plain.clone() };
     let report = check(&mut player, &clamps, &expected, "without clamps");
-    assert!(
-        report.notes.iter().any(|n| n.contains("3 clamp passes")),
-        "{:?}",
-        report.notes
-    );
-    let one = Options {
-        one_submit: true,
-        ..plain.clone()
-    };
+    assert!(report.notes.iter().any(|n| n.contains("3 clamp passes")), "{:?}", report.notes);
+    let one = Options { one_submit: true, ..plain.clone() };
     check(&mut player, &one, &expected, "one submission");
-    let hash = Options {
-        skip_hash_passes: true,
-        ..plain.clone()
-    };
-    check(
-        &mut player,
-        &hash,
-        &expected,
-        "without hash passes (there are none)",
-    );
+    let hash = Options { skip_hash_passes: true, ..plain.clone() };
+    check(&mut player, &hash, &expected, "without hash passes (there are none)");
     // These change what is drawn: they run, and then the frame is as before.
-    let no_barriers = Options {
-        no_barriers: true,
-        ..plain.clone()
-    };
+    let no_barriers = Options { no_barriers: true, ..plain.clone() };
     player.run(&no_barriers).unwrap();
-    let some = Options {
-        only: Some((0, 1)),
-        ..plain.clone()
-    };
+    let some = Options { only: Some((0, 1)), ..plain.clone() };
     player.run(&some).unwrap();
-    let skip = Options {
-        skip_shaders: vec!["a drawing".into()],
-        ..plain.clone()
-    };
+    let skip = Options { skip_shaders: vec!["a drawing".into()], ..plain.clone() };
     let report = player.run(&skip).unwrap();
-    assert!(
-        !report.picture.unwrap().1,
-        "without its draws the picture is another"
-    );
+    assert!(!report.picture.unwrap().1, "without its draws the picture is another");
     assert!(
         report.notes.iter().any(|n| n.contains("1 pipelines match"))
-            && report
-                .notes
-                .iter()
-                .any(|n| n.contains("left out 5 commands"))
+            && report.notes.iter().any(|n| n.contains("left out 5 commands"))
     );
-    let kept = Options {
-        restore: false,
-        ..plain.clone()
-    };
+    let kept = Options { restore: false, ..plain.clone() };
     player.run(&kept).unwrap();
     check(&mut player, &plain, &expected, "unchanged again");
     drop(player);
     for buffers in [Buffers::Card, Buffers::Pc] {
-        let o = Options {
-            buffers,
-            ..plain.clone()
-        };
+        let o = Options { buffers, ..plain.clone() };
         let mut player = Player::load(dir.path(), &o).unwrap();
         check(&mut player, &o, &expected, &format!("buffers {buffers:?}"));
     }
-    let o = Options {
-        compare: true,
-        merge_barriers: true,
-        loops: 2,
-        ..Default::default()
-    };
+    let o = Options { compare: true, merge_barriers: true, loops: 2, ..Default::default() };
     let both = play::replay(dir.path(), &o).unwrap();
     assert_eq!(both.len(), 2);
     assert!(both.iter().all(|(_, r)| r.picture.unwrap().1));

@@ -1,6 +1,8 @@
 use super::*;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
-use windows_sys::Win32::System::Memory::{CreateFileMappingW, FILE_MAP_WRITE, MapViewOfFile, PAGE_READWRITE};
+use windows_sys::Win32::System::Memory::{
+    CreateFileMappingW, FILE_MAP_WRITE, MapViewOfFile, PAGE_READWRITE,
+};
 
 struct Random(u64);
 
@@ -25,8 +27,14 @@ impl Title {
     fn new(len: usize) -> Title {
         // SAFETY: a pagefile section of our own and a view of it.
         unsafe {
-            let section =
-                CreateFileMappingW(-1isize as _, std::ptr::null(), PAGE_READWRITE, 0, len as u32, std::ptr::null());
+            let section = CreateFileMappingW(
+                -1isize as _,
+                std::ptr::null(),
+                PAGE_READWRITE,
+                0,
+                len as u32,
+                std::ptr::null(),
+            );
             assert!(!section.is_null());
             let at = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, len).Value as usize;
             assert_ne!(at, 0);
@@ -43,6 +51,10 @@ impl Title {
     }
 }
 
+/// One piece landed: its start, and the addresses of the card's bytes and of
+/// what the CPU's side held ([`crate::shadow::land_as_before`]).
+type Landing = (usize, usize, usize);
+
 /// Every number once, whatever the count and the threads, batch after batch
 /// and from several callers.
 #[test]
@@ -54,7 +66,8 @@ fn the_pool_calls_every_number_once() {
                 s.spawn(|| {
                     for round in 0..300usize {
                         let count = round * 7 % 50;
-                        let calls: Vec<AtomicUsize> = (0..count).map(|_| AtomicUsize::new(0)).collect();
+                        let calls: Vec<AtomicUsize> =
+                            (0..count).map(|_| AtomicUsize::new(0)).collect();
                         pool.each(count, &|i| {
                             calls[i].fetch_add(1, Ordering::Relaxed);
                         });
@@ -100,7 +113,9 @@ fn ordered_pieces_hold_the_same_bytes() {
             })
             .collect();
         let out = ordered(&pieces);
-        let bytes = |copy: u64, at: usize, all: &[Piece]| all.iter().any(|p| p.0 == copy && p.1 <= at && at < p.1 + p.2);
+        let bytes = |copy: u64, at: usize, all: &[Piece]| {
+            all.iter().any(|p| p.0 == copy && p.1 <= at && at < p.1 + p.2)
+        };
         let landed: Vec<Piece> = out.iter().map(|&(i, at, len)| (pieces[i].0, at, len)).collect();
         for copy in 0..3 {
             for at in (0..12 * BLOCK).step_by(1024 * 4) {
@@ -110,8 +125,10 @@ fn ordered_pieces_hold_the_same_bytes() {
         assert!(out.iter().all(|&(_, at, len)| len > 0 && at / BLOCK == (at + len - 1) / BLOCK));
         assert!(out.windows(2).all(|w| w[0].1 / BLOCK <= w[1].1 / BLOCK));
         for block in 0..12 {
-            let given: Vec<Piece> = pieces.iter().copied().filter(|p| p.1 / BLOCK == block).collect();
-            let here: Vec<Piece> = landed.iter().copied().filter(|p| p.1 / BLOCK == block).collect();
+            let given: Vec<Piece> =
+                pieces.iter().copied().filter(|p| p.1 / BLOCK == block).collect();
+            let here: Vec<Piece> =
+                landed.iter().copied().filter(|p| p.1 / BLOCK == block).collect();
             if given.iter().any(|p| p.0 != given[0].0) {
                 assert_eq!(here, given);
             } else {
@@ -120,7 +137,10 @@ fn ordered_pieces_hold_the_same_bytes() {
         }
         let cut: Vec<(usize, usize)> = out.iter().map(|&(_, at, len)| (at, len)).collect();
         let jobs = jobs(&cut);
-        assert_eq!(jobs.iter().cloned().flatten().collect::<Vec<_>>(), (0..cut.len()).collect::<Vec<_>>());
+        assert_eq!(
+            jobs.iter().cloned().flatten().collect::<Vec<_>>(),
+            (0..cut.len()).collect::<Vec<_>>()
+        );
         for w in jobs.windows(2) {
             assert_ne!(cut[w[0].end - 1].0 / BLOCK, cut[w[1].start].0 / BLOCK);
         }
@@ -136,7 +156,11 @@ fn only_what_a_fetch_behind_the_flight_brought_is_left_out() {
     assert!(had.holds(6, (1, BLOCK, BLOCK)) && had.holds(7, (1, BLOCK + 64, 128)));
     assert!(!had.holds(8, (1, BLOCK, BLOCK)), "the fetch ran ahead of flight 8");
     assert!(!had.holds(7, (3, BLOCK, BLOCK)) && !had.holds(7, (1, 0, 64)));
-    assert!(had.holds(7, (2, 0x100, 0x200)) && !had.holds(7, (2, 0x100, 0x204)) && !had.holds(7, (2, 0xfc, 8)));
+    assert!(
+        had.holds(7, (2, 0x100, 0x200))
+            && !had.holds(7, (2, 0x100, 0x204))
+            && !had.holds(7, (2, 0xfc, 8))
+    );
     had.landing(7);
     assert!(had.holds(7, (1, BLOCK, BLOCK)));
     had.landing(8);
@@ -187,12 +211,25 @@ fn a_piece_lands_what_the_card_wrote_in_its_parts() {
         // Guarded, as after a refresh, in two rounds of three.
         if round % 3 != 0 {
             assert!(crate::watch::writes(title.at, title.at + 2 * BLOCK, true).is_some());
-            assert_eq!(crate::watch::writes(title.at, title.at + 2 * BLOCK, true).map(|w| w.1.len() > 2), Some(false));
+            assert_eq!(
+                crate::watch::writes(title.at, title.at + 2 * BLOCK, true).map(|w| w.1.len() > 2),
+                Some(false)
+            );
         }
         let asked = crate::watch::writes(title.at, title.at + BLOCK, true).expect("a view").0;
         let mut notes = Notes::default();
         // SAFETY: vectors of `len` bytes.
-        let put = unsafe { piece(title.at + from, now.as_ptr(), held.as_mut_ptr(), &parts, true, &mut notes, std::ptr::null()) };
+        let put = unsafe {
+            piece(
+                title.at + from,
+                now.as_ptr(),
+                held.as_mut_ptr(),
+                &parts,
+                true,
+                &mut notes,
+                std::ptr::null(),
+            )
+        };
         notes.flush();
         let mut expect_held = base.clone();
         let mut expect = there.clone();
@@ -218,7 +255,9 @@ fn a_piece_lands_what_the_card_wrote_in_its_parts() {
 /// takes the card's bytes (`take`) or not.
 #[test]
 fn a_piece_waits_for_a_change_of_mapping() {
-    use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc, VirtualFree};
+    use windows_sys::Win32::System::Memory::{
+        MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc, VirtualFree,
+    };
     assert!(crate::safecopy::on());
     // SAFETY: a reservation of ours, nothing of it committed.
     let at = unsafe { VirtualAlloc(std::ptr::null(), BLOCK, MEM_RESERVE, PAGE_NOACCESS) } as usize;
@@ -227,7 +266,17 @@ fn a_piece_waits_for_a_change_of_mapping() {
     for take in [true, false] {
         let mut held = [0u8; 100];
         // SAFETY: arrays of 100 bytes.
-        let put = unsafe { piece(at, now.as_ptr(), held.as_mut_ptr(), &[(0, 100)], take, &mut Notes::default(), std::ptr::null()) };
+        let put = unsafe {
+            piece(
+                at,
+                now.as_ptr(),
+                held.as_mut_ptr(),
+                &[(0, 100)],
+                take,
+                &mut Notes::default(),
+                std::ptr::null(),
+            )
+        };
         assert_eq!((put, held), (0, [if take { 9 } else { 0 }; 100]));
     }
     let (began, wait) = std::sync::mpsc::channel();
@@ -241,7 +290,17 @@ fn a_piece_waits_for_a_change_of_mapping() {
     wait.recv().unwrap();
     let mut held = [0u8; 100];
     // SAFETY: as above.
-    let put = unsafe { piece(at, now.as_ptr(), held.as_mut_ptr(), &[(0, 100)], true, &mut Notes::default(), std::ptr::null()) };
+    let put = unsafe {
+        piece(
+            at,
+            now.as_ptr(),
+            held.as_mut_ptr(),
+            &[(0, 100)],
+            true,
+            &mut Notes::default(),
+            std::ptr::null(),
+        )
+    };
     change.join().unwrap();
     assert_eq!((put, held), (100, now));
     // SAFETY: committed by now.
@@ -279,7 +338,13 @@ fn landings_beside_the_title_and_its_refreshes_lose_nothing() {
                 let part = &mut bytes[block * BLOCK..(block + 1) * BLOCK];
                 // SAFETY: inside the view; whoever writes it meanwhile is
                 // noted, and the block taken again.
-                assert!(unsafe { crate::safecopy::copy(part.as_mut_ptr(), (at + block * BLOCK) as *const u8, BLOCK) });
+                assert!(unsafe {
+                    crate::safecopy::copy(
+                        part.as_mut_ptr(),
+                        (at + block * BLOCK) as *const u8,
+                        BLOCK,
+                    )
+                });
             }
         }
     };
@@ -293,8 +358,15 @@ fn landings_beside_the_title_and_its_refreshes_lose_nothing() {
                     while !stop.load(Ordering::Relaxed) {
                         // Its own dwords, in every other block (in the rest
                         // only landings change anything).
-                        for i in (w..LEN / 4).step_by(4 * 97).filter(|i| i * 4 / BLOCK % 2 == 0) {
-                            assert_eq!(dword(i).swap(value, Ordering::Relaxed), value - 1, "dword {i}: undone");
+                        for i in (w..LEN / 4)
+                            .step_by(4 * 97)
+                            .filter(|i| (i * 4 / BLOCK).is_multiple_of(2))
+                        {
+                            assert_eq!(
+                                dword(i).swap(value, Ordering::Relaxed),
+                                value - 1,
+                                "dword {i}: undone"
+                            );
                         }
                         value += 1;
                     }
@@ -329,7 +401,15 @@ fn landings_beside_the_title_and_its_refreshes_lose_nothing() {
                     let offset = address - at;
                     // SAFETY: each job its own pieces of the two vectors.
                     unsafe {
-                        piece(address, now.as_ptr().add(offset), (into + offset) as *mut u8, &[(0, len)], true, &mut notes, std::ptr::null());
+                        piece(
+                            address,
+                            now.as_ptr().add(offset),
+                            (into + offset) as *mut u8,
+                            &[(0, len)],
+                            true,
+                            &mut notes,
+                            std::ptr::null(),
+                        );
                     }
                 }
                 notes.flush();
@@ -343,7 +423,7 @@ fn landings_beside_the_title_and_its_refreshes_lose_nothing() {
         stop.store(true, Ordering::Relaxed);
         for (w, writer) in writers.into_iter().enumerate() {
             let last = writer.join().expect("nothing undone");
-            for i in (w..LEN / 4).step_by(4 * 97).filter(|i| i * 4 / BLOCK % 2 == 0) {
+            for i in (w..LEN / 4).step_by(4 * 97).filter(|i| (i * 4 / BLOCK).is_multiple_of(2)) {
                 assert_eq!(dword(i).load(Ordering::Relaxed), last);
             }
         }
@@ -369,7 +449,8 @@ fn what_landing_costs() {
     let mut card = vec![0u8; COUNT * BLOCK];
     let busy = AtomicBool::new(true);
     // The pieces: runs of eight blocks, scattered.
-    let pieces: Vec<usize> = (0..COUNT).map(|i| (i / 8 * 1021 % (HEAP / BLOCK / 8)) * 8 + i % 8).collect();
+    let pieces: Vec<usize> =
+        (0..COUNT).map(|i| (i / 8 * 1021 % (HEAP / BLOCK / 8)) * 8 + i % 8).collect();
     std::thread::scope(|s| {
         // Other threads of the process at work (what a protection change
         // has to reach).
@@ -386,7 +467,7 @@ fn what_landing_costs() {
         let mut round = 0u32;
         // `guarded`: 2 as a refresh leaves them, 1 opened again before (that
         // is timed beside), 0 not at all, as they were after the last.
-        let mut frame = |label: &str, dense: bool, guarded: u8, land: &dyn Fn(&[(usize, usize, usize)])| {
+        let mut frame = |label: &str, dense: bool, guarded: u8, land: &dyn Fn(&[Landing])| {
             let mut best = f64::MAX;
             let (mut guards, mut opening) = (f64::MAX, f64::MAX);
             for _ in 0..5 {
@@ -418,14 +499,20 @@ fn what_landing_costs() {
                 guards = guards.min(t.elapsed().as_secs_f64() * 1e3);
                 let t = std::time::Instant::now();
                 if guarded == 1 {
-                    pieces.iter().for_each(|block| crate::watch::landing(title.at + block * BLOCK, BLOCK));
+                    pieces
+                        .iter()
+                        .for_each(|block| crate::watch::landing(title.at + block * BLOCK, BLOCK));
                 }
                 opening = opening.min(t.elapsed().as_secs_f64() * 1e3);
                 let all: Vec<(usize, usize, usize)> = pieces
                     .iter()
                     .enumerate()
                     .map(|(k, &block)| {
-                        (title.at + block * BLOCK, card.as_ptr() as usize + k * BLOCK, held.as_mut_ptr() as usize + block * BLOCK)
+                        (
+                            title.at + block * BLOCK,
+                            card.as_ptr() as usize + k * BLOCK,
+                            held.as_mut_ptr() as usize + block * BLOCK,
+                        )
                     })
                     .collect();
                 let t = std::time::Instant::now();
@@ -434,11 +521,20 @@ fn what_landing_costs() {
                 }
                 best = best.min(t.elapsed().as_secs_f64() * 1e3);
             }
-            println!("{label}: {best:.1} ms a frame to land; the guards before it {guards:.1} ms, opening them {opening:.1} ms");
+            println!(
+                "{label}: {best:.1} ms a frame to land; the guards before it {guards:.1} ms, opening them {opening:.1} ms"
+            );
         };
         for dense in [true, false] {
-            println!("{}", if dense { "every dword of three pages in four new" } else { "every sixteenth dword of them new" });
-            let before: &dyn Fn(&[(usize, usize, usize)]) = &|landing| {
+            println!(
+                "{}",
+                if dense {
+                    "every dword of three pages in four new"
+                } else {
+                    "every sixteenth dword of them new"
+                }
+            );
+            let before: &dyn Fn(&[Landing]) = &|landing| {
                 let mut scratch: Vec<u8> = Vec::new();
                 for &(at, now, held) in landing {
                     crate::shadow::land_as_before(at, now, held, BLOCK, &mut scratch);
@@ -451,13 +547,25 @@ fn what_landing_costs() {
                 let pool = Pool::new("victory-land", threads);
                 for beside in [false, true] {
                     frame(&format!("{threads} threads, beside {beside}"), dense, 2, &|landing| {
-                        let cut: Vec<(usize, usize)> = landing.iter().map(|p| (p.0, BLOCK)).collect();
+                        let cut: Vec<(usize, usize)> =
+                            landing.iter().map(|p| (p.0, BLOCK)).collect();
                         let jobs = jobs(&cut);
                         pool.each(jobs.len(), &|j| {
                             let mut notes = Notes::default();
                             for &(at, now, held) in &landing[jobs[j].clone()] {
                                 // SAFETY: each its own bytes.
-                                unsafe { piece_at(at, now as *const u8, held as *mut u8, &[(0, BLOCK)], true, &mut notes, beside, std::ptr::null()) };
+                                unsafe {
+                                    piece_at(
+                                        at,
+                                        now as *const u8,
+                                        held as *mut u8,
+                                        &[(0, BLOCK)],
+                                        true,
+                                        &mut notes,
+                                        beside,
+                                        std::ptr::null(),
+                                    )
+                                };
                             }
                             notes.flush();
                         });

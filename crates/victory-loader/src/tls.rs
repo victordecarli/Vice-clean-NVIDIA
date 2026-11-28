@@ -43,20 +43,13 @@ pub(crate) unsafe fn redirect(base: usize, info: &ImageInfo) -> Result<usize> {
     }
     let thunks = thunks(near(base, info.size_of_image as usize)?, index)?;
     let mut patched = 0;
-    for section in info
-        .sections
-        .iter()
-        .filter(|s| s.characteristics & SCN_MEM_EXECUTE != 0)
-    {
+    for section in info.sections.iter().filter(|s| s.characteristics & SCN_MEM_EXECUTE != 0) {
         let start = base + section.rva as usize;
         let len = section.virtual_size as usize;
         let mut old = 0;
         // SAFETY: the section is part of the mapped image.
         if unsafe { VirtualProtect(start as _, len, PAGE_EXECUTE_READWRITE, &mut old) } == 0 {
-            bail!(
-                "VirtualProtect(code) failed: {}",
-                std::io::Error::last_os_error()
-            );
+            bail!("VirtualProtect(code) failed: {}", std::io::Error::last_os_error());
         }
         // SAFETY: writable now, and no title code runs yet.
         let code = unsafe { std::slice::from_raw_parts_mut(start as *mut u8, len) };
@@ -130,10 +123,7 @@ fn thunks(block: *mut u8, index: u32) -> Result<usize> {
     let mut old = 0;
     // SAFETY: `block` is our allocation of one page.
     if unsafe { VirtualProtect(block as _, 4096, PAGE_EXECUTE_READ, &mut old) } == 0 {
-        bail!(
-            "VirtualProtect(TLS thunks) failed: {}",
-            std::io::Error::last_os_error()
-        );
+        bail!("VirtualProtect(TLS thunks) failed: {}", std::io::Error::last_os_error());
     }
     Ok(block as usize)
 }
@@ -148,19 +138,11 @@ fn near(base: usize, size: usize) -> Result<*mut u8> {
     }
     let above = (base + size).next_multiple_of(GRANULE);
     for k in 0..(1usize << 14) {
-        for hint in [
-            base.checked_sub((k + 1) * GRANULE),
-            Some(above + k * GRANULE),
-        ] {
+        for hint in [base.checked_sub((k + 1) * GRANULE), Some(above + k * GRANULE)] {
             let Some(hint) = hint else { continue };
             // SAFETY: a fresh allocation at a free address, or null.
             let p = unsafe {
-                VirtualAlloc(
-                    hint as *const c_void,
-                    4096,
-                    MEM_COMMIT | MEM_RESERVE,
-                    PAGE_READWRITE,
-                )
+                VirtualAlloc(hint as *const c_void, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
             };
             if !p.is_null() {
                 return Ok(p.cast());
@@ -189,14 +171,9 @@ mod tests {
         // (before the load, REX, ModRM, after the load): each case returns
         // the loaded register in rax; r12 is saved, being callee-saved.
         let cases: [(&[u8], u8, u8, &[u8]); 3] = [
-            (&[], 0x48, 0x04, &[0xC3]),                   // rax
-            (&[], 0x4C, 0x04, &[0x4C, 0x89, 0xC0, 0xC3]), // r8
-            (
-                &[0x41, 0x54],
-                0x4C,
-                0x24,
-                &[0x4C, 0x89, 0xE0, 0x41, 0x5C, 0xC3],
-            ), // r12
+            (&[], 0x48, 0x04, &[0xC3]),                                         // rax
+            (&[], 0x4C, 0x04, &[0x4C, 0x89, 0xC0, 0xC3]),                       // r8
+            (&[0x41, 0x54], 0x4C, 0x24, &[0x4C, 0x89, 0xE0, 0x41, 0x5C, 0xC3]), // r12
         ];
         for (before, rex, modrm, after) in cases {
             let mut code = before.to_vec();

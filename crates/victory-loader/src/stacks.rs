@@ -97,36 +97,41 @@ pub(crate) fn other_threads() -> Vec<u32> {
     ids
 }
 
-/// Prints every other thread's stack to stderr. Each thread is suspended
+/// Logs every other thread's stack, as one event. Each thread is suspended
 /// only while its context is read and unwound into a buffer allocated
 /// beforehand (it may hold the heap lock).
 pub fn dump_stacks() {
+    use std::fmt::Write as _;
     let ids = other_threads();
-    eprintln!("VIctory: stacks of {} threads", ids.len());
+    let mut text = format!("stacks of {} threads", ids.len());
     for id in ids {
         // SAFETY: opens a thread of our own process.
         let thread = unsafe {
-            OpenThread(
-                THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
-                0,
-                id,
-            )
+            OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, id)
         };
         if thread.is_null() {
             continue;
         }
         let (frames, (priority, base, affinity)) = frames_of(thread);
-        eprintln!(
-            "  thread {id} \"{}\" start {} priority {priority} (base {base}) affinity {affinity:#x}",
+        let _ = write!(
+            text,
+            "
+  thread {id} \"{}\" start {} priority {priority} (base {base}) affinity {affinity:#x}",
             name_of(thread),
             locate(start_of(thread))
         );
         for (i, pc) in frames.into_iter().enumerate() {
-            eprintln!("    #{i:<2} {}", locate(pc as usize));
+            let _ = write!(
+                text,
+                "
+    #{i:<2} {}",
+                locate(pc as usize)
+            );
         }
         // SAFETY: we opened it.
         unsafe { CloseHandle(thread) };
     }
+    tracing::warn!("{text}");
 }
 
 /// The thread's frames and its current and base scheduling priority (0-31).
@@ -219,16 +224,12 @@ mod tests {
         let parked = std::thread::spawn(move || {
             // SAFETY: plain query.
             tx.send(unsafe { GetCurrentThreadId() }).unwrap();
-            stop_rx.recv().ok();
+            let _ = stop_rx.recv();
         });
         let id = rx.recv().unwrap();
         // SAFETY: a thread of this process.
         let thread = unsafe {
-            OpenThread(
-                THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
-                0,
-                id,
-            )
+            OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, id)
         };
         assert!(!thread.is_null());
         let (frames, _) = frames_of(thread);
@@ -246,12 +247,7 @@ mod tests {
     /// thread (`from_secs_f64` panicked on `inf`); the rest come in order.
     #[test]
     fn schedules_skip_times_out_of_range() {
-        let secs = |list| {
-            schedule(list)
-                .iter()
-                .map(|d| d.as_secs_f64())
-                .collect::<Vec<_>>()
-        };
+        let secs = |list| schedule(list).iter().map(|d| d.as_secs_f64()).collect::<Vec<_>>();
         assert_eq!(secs("30, 5,x,-2,inf,NaN,1e20"), [0.0, 5.0, 30.0]);
         assert!(schedule("").is_empty());
     }

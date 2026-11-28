@@ -94,11 +94,7 @@ impl<T: Wire> Wire for Option<T> {
         }
     }
     fn get(from: &mut Dec) -> Result<Self, Bad> {
-        Ok(if bool::get(from)? {
-            Some(T::get(from)?)
-        } else {
-            None
-        })
+        Ok(if bool::get(from)? { Some(T::get(from)?) } else { None })
     }
 }
 
@@ -232,26 +228,15 @@ pub mod slot {
 }
 
 impl Slot {
-    pub const EMPTY: Slot = Slot {
-        kind: slot::EMPTY,
-        described: 0,
-        pad: 0,
-        res: NONE,
-        counter: NONE,
-        desc: [0; 52],
-    };
+    pub const EMPTY: Slot =
+        Slot { kind: slot::EMPTY, described: 0, pad: 0, res: NONE, counter: NONE, desc: [0; 52] };
 
     /// A slot of `kind` with the description at `desc` (`size` bytes), if any.
     ///
     /// # Safety
     /// `desc` is null or points at a description of `size` bytes.
     pub unsafe fn new(kind: u8, res: u32, counter: u32, desc: *const u8, size: usize) -> Slot {
-        let mut s = Slot {
-            kind,
-            res,
-            counter,
-            ..Slot::EMPTY
-        };
+        let mut s = Slot { kind, res, counter, ..Slot::EMPTY };
         if !desc.is_null() {
             s.described = 1;
             // SAFETY: the caller's description, at most 52 bytes of it.
@@ -299,14 +284,7 @@ impl Wire for Slot {
         }
         let mut desc = [0; 52];
         desc[..n].copy_from_slice(from.take(n)?);
-        Ok(Slot {
-            kind,
-            described,
-            pad: 0,
-            res,
-            counter,
-            desc,
-        })
+        Ok(Slot { kind, described, pad: 0, res, counter, desc })
     }
 }
 
@@ -623,55 +601,22 @@ pub(crate) mod tests {
         let mut desc = [0; 52];
         desc[3] = 7;
         desc[51] = 9;
-        Slot {
-            kind: slot::SAMPLER,
-            described: 1,
-            pad: 0,
-            res: 4,
-            counter: 5,
-            desc,
-        }
+        Slot { kind: slot::SAMPLER, described: 1, pad: 0, res: 4, counter: 5, desc }
     }
 
     fn at() -> Va {
-        Va::At {
-            res: 3,
-            offset: 1 << 40,
-        }
+        Va::At { res: 3, offset: 1 << 40 }
     }
 
     pub(crate) fn every_command() -> Vec<Cmd> {
-        let placed = Loc::Placed {
-            res: 5,
-            offset: 512,
-            format: 28,
-            size: [4, 5, 6],
-            pitch: 256,
-        };
+        let placed = Loc::Placed { res: 5, offset: 512, format: 28, size: [4, 5, 6], pitch: 256 };
         let rects = vec![[1, 2, 3, 4]];
         vec![
-            Cmd::Draw {
-                vertices: 1,
-                instances: 2,
-                first: 3,
-                first_instance: 4,
-            },
-            Cmd::DrawIndexed {
-                indices: 1,
-                instances: 2,
-                first: 3,
-                base: -4,
-                first_instance: 5,
-            },
+            Cmd::Draw { vertices: 1, instances: 2, first: 3, first_instance: 4 },
+            Cmd::DrawIndexed { indices: 1, instances: 2, first: 3, base: -4, first_instance: 5 },
             Cmd::Dispatch { groups: [1, 2, 3] },
             Cmd::DispatchMesh { groups: [4, 5, 6] },
-            Cmd::CopyBuffer {
-                dst: 1,
-                dst_at: 2,
-                src: 3,
-                src_at: 4,
-                len: 5,
-            },
+            Cmd::CopyBuffer { dst: 1, dst_at: 2, src: 3, src_at: 4, len: 5 },
             Cmd::CopyTexture {
                 dst: Loc::Sub { res: 1, sub: 2 },
                 at: [3, 4, 5],
@@ -679,13 +624,7 @@ pub(crate) mod tests {
                 part: Some([1, 2, 3, 4, 5, 6]),
             },
             Cmd::CopyResource { dst: 1, src: 2 },
-            Cmd::Resolve {
-                dst: 1,
-                dst_sub: 2,
-                src: 3,
-                src_sub: 4,
-                format: 28,
-            },
+            Cmd::Resolve { dst: 1, dst_sub: 2, src: 3, src_sub: 4, format: 28 },
             Cmd::ResolveRegion {
                 dst: 1,
                 dst_sub: 2,
@@ -697,74 +636,33 @@ pub(crate) mod tests {
                 mode: 1,
             },
             Cmd::Topology { kind: 4 },
-            Cmd::Viewports {
-                all: vec![[0.0, 1.0, 2.0, 3.0, 0.5, 1.0]; 2],
-            },
+            Cmd::Viewports { all: vec![[0.0, 1.0, 2.0, 3.0, 0.5, 1.0]; 2] },
             Cmd::Scissors { all: rects.clone() },
-            Cmd::BlendFactor {
-                factor: Some([0.1, 0.2, 0.3, 0.4]),
-            },
+            Cmd::BlendFactor { factor: Some([0.1, 0.2, 0.3, 0.4]) },
             Cmd::BlendFactor { factor: None },
             Cmd::StencilRef { value: 255 },
             Cmd::Pipeline { pso: 9 },
             Cmd::Barriers {
                 all: vec![
-                    Barrier::Transition {
-                        flags: 1,
-                        res: 2,
-                        sub: ALL,
-                        before: 4,
-                        after: 8,
-                    },
-                    Barrier::Alias {
-                        flags: 0,
-                        before: 1,
-                        after: 2,
-                    },
+                    Barrier::Transition { flags: 1, res: 2, sub: ALL, before: 4, after: 8 },
+                    Barrier::Alias { flags: 0, before: 1, after: 2 },
                     Barrier::Uav { flags: 0, res: 0 },
                 ],
             },
             Cmd::Heaps { heaps: vec![1, 2] },
-            Cmd::RootSignature {
-                graphics: true,
-                root: 3,
-            },
-            Cmd::Table {
-                graphics: false,
-                param: 1,
-                heap: 2,
-                slot: 1 << 20,
-            },
-            Cmd::Constants {
-                graphics: true,
-                param: 1,
-                offset: 2,
-                values: vec![3, 4, 5],
-            },
-            Cmd::RootView {
-                graphics: true,
-                kind: slot::CBV,
-                param: 1,
-                va: at(),
-            },
-            Cmd::IndexBuffer {
-                view: Some((at(), 5, 42)),
-            },
+            Cmd::RootSignature { graphics: true, root: 3 },
+            Cmd::Table { graphics: false, param: 1, heap: 2, slot: 1 << 20 },
+            Cmd::Constants { graphics: true, param: 1, offset: 2, values: vec![3, 4, 5] },
+            Cmd::RootView { graphics: true, kind: slot::CBV, param: 1, va: at() },
+            Cmd::IndexBuffer { view: Some((at(), 5, 42)) },
             Cmd::IndexBuffer { view: None },
             Cmd::VertexBuffers {
                 start: 1,
                 count: 1,
                 views: Some(vec![(Va::Unknown { address: 5 }, 6, 7)]),
             },
-            Cmd::VertexBuffers {
-                start: 1,
-                count: 3,
-                views: None,
-            },
-            Cmd::Targets {
-                colors: vec![view(); 3],
-                depth: Some(view()),
-            },
+            Cmd::VertexBuffers { start: 1, count: 3, views: None },
+            Cmd::Targets { colors: vec![view(); 3], depth: Some(view()) },
             Cmd::ClearDepth {
                 view: view(),
                 flags: 3,
@@ -772,49 +670,14 @@ pub(crate) mod tests {
                 stencil: 7,
                 rects: rects.clone(),
             },
-            Cmd::ClearTarget {
-                view: view(),
-                color: [1.0, 2.0, 3.0, 4.0],
-                rects: Vec::new(),
-            },
-            Cmd::Discard {
-                res: 1,
-                rects,
-                subs: Some([0, 2]),
-            },
-            Cmd::BeginQuery {
-                heap: 1,
-                kind: 0,
-                index: 2,
-            },
-            Cmd::EndQuery {
-                heap: 1,
-                kind: 2,
-                index: 3,
-            },
-            Cmd::ResolveQuery {
-                heap: 1,
-                kind: 2,
-                first: 3,
-                count: 4,
-                dst: 5,
-                at: 6,
-            },
-            Cmd::Indirect {
-                signature: 1,
-                most: 2,
-                args: 3,
-                at: 4,
-                count: 5,
-                count_at: 6,
-            },
-            Cmd::WriteImmediate {
-                all: vec![(at(), 1, 2), (Va::Null {}, 3, 4)],
-            },
-            Cmd::DepthBounds {
-                min: 0.25,
-                max: 0.75,
-            },
+            Cmd::ClearTarget { view: view(), color: [1.0, 2.0, 3.0, 4.0], rects: Vec::new() },
+            Cmd::Discard { res: 1, rects, subs: Some([0, 2]) },
+            Cmd::BeginQuery { heap: 1, kind: 0, index: 2 },
+            Cmd::EndQuery { heap: 1, kind: 2, index: 3 },
+            Cmd::ResolveQuery { heap: 1, kind: 2, first: 3, count: 4, dst: 5, at: 6 },
+            Cmd::Indirect { signature: 1, most: 2, args: 3, at: 4, count: 5, count_at: 6 },
+            Cmd::WriteImmediate { all: vec![(at(), 1, 2), (Va::Null {}, 3, 4)] },
+            Cmd::DepthBounds { min: 0.25, max: 0.75 },
         ]
     }
 
@@ -837,10 +700,7 @@ pub(crate) mod tests {
                 out[0]
             })
             .collect();
-        assert_eq!(
-            kinds.into_iter().collect::<Vec<_>>(),
-            (1..=LAST_CMD).collect::<Vec<u8>>()
-        );
+        assert_eq!(kinds.into_iter().collect::<Vec<_>>(), (1..=LAST_CMD).collect::<Vec<u8>>());
         assert!(
             Cmd::all(&[LAST_CMD + 1]).is_err(),
             "a kind was added: bring LAST_CMD and the list above up to date"
@@ -849,11 +709,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_frame_comes_back() {
-        let props = HeapProps {
-            kind: 4,
-            cpu: 3,
-            pool: 1,
-        };
+        let props = HeapProps { kind: 4, cpu: 3, pool: 1 };
         let desc = Desc {
             dimension: 3,
             alignment: 65536,
@@ -868,10 +724,7 @@ pub(crate) mod tests {
         };
         let resource = Resource {
             id: 2,
-            place: Place::Placed {
-                heap: 1,
-                offset: 65536,
-            },
+            place: Place::Placed { heap: 1, offset: 65536 },
             desc,
             made_in: 4,
             clear: Some([28, 1, 2, 3, 4]),
@@ -894,43 +747,22 @@ pub(crate) mod tests {
             }],
             resources: vec![
                 resource.clone(),
-                Resource {
-                    place: Place::Committed { props, flags: 8 },
-                    ..resource.clone()
-                },
-                Resource {
-                    place: Place::BackBuffer {},
-                    clear: None,
-                    ..resource
-                },
+                Resource { place: Place::Committed { props, flags: 8 }, ..resource.clone() },
+                Resource { place: Place::BackBuffer {}, clear: None, ..resource },
             ],
             roots: vec![(3, Blob(vec![1, 2, 3]))],
-            codes: vec![Code {
-                at: 1,
-                len: 2,
-                hash: [7; 32],
-            }],
+            codes: vec![Code { at: 1, len: 2, hash: [7; 32] }],
             pipelines: vec![Pipeline {
                 id: 4,
                 parts: vec![
                     Part::Root { root: 3 },
                     Part::Code { kind: 25, blob: 0 },
-                    Part::Plain {
-                        kind: 8,
-                        data: Blob(vec![9; 20]),
-                    },
-                    Part::Layout {
-                        elements: vec![("POSITION".into(), [1, 2, 3, 4, 5, 6])],
-                    },
+                    Part::Plain { kind: 8, data: Blob(vec![9; 20]) },
+                    Part::Layout { elements: vec![("POSITION".into(), [1, 2, 3, 4, 5, 6])] },
                 ],
                 name: "a pipeline".into(),
             }],
-            signatures: vec![Signature {
-                id: 5,
-                stride: 12,
-                args: vec![[10, 0, 0, 0]],
-                root: 0,
-            }],
+            signatures: vec![Signature { id: 5, stride: 12, args: vec![[10, 0, 0, 0]], root: 0 }],
             descriptor_heaps: vec![DescriptorHeap {
                 id: 6,
                 kind: 0,
@@ -938,33 +770,15 @@ pub(crate) mod tests {
                 flags: 1,
                 runs: vec![(0, 9, Slot::EMPTY), (9, 1, view())],
             }],
-            query_heaps: vec![QueryHeap {
-                id: 7,
-                kind: 1,
-                count: 8,
-            }],
-            lists: vec![List {
-                kind: 0,
-                commands: Blob(vec![1, 2]),
-            }],
+            query_heaps: vec![QueryHeap { id: 7, kind: 1, count: 8 }],
+            lists: vec![List { kind: 0, commands: Blob(vec![1, 2]) }],
             submits: vec![Submit {
                 frame: 0,
                 lists: vec![0, MISSING],
-                deltas: vec![Delta {
-                    res: 2,
-                    at: 4096,
-                    len: 8192,
-                    file: 0,
-                }],
+                deltas: vec![Delta { res: 2, at: 4096, len: 8192, file: 0 }],
                 views: vec![(6, 3, view())],
             }],
-            contents: vec![Content {
-                res: 2,
-                first: 0,
-                count: 3,
-                len: 100,
-                file: ZERO,
-            }],
+            contents: vec![Content { res: 2, first: 0, count: 3, len: 100, file: ZERO }],
             presents: vec![Present {
                 submits: 1,
                 res: 2,

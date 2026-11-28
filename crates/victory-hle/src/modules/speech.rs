@@ -5,7 +5,10 @@
 // speech synthesis) needs COM bindings this crate has only in diagnostics
 // builds, plus voice enumeration and SSML the title sends (slot 0xa8); the
 // title then plays the empty stream and goes on.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 
@@ -14,19 +17,11 @@ use super::xgameruntime::{
 };
 
 /// Closed captions, high contrast, speech to text and synthesis.
-pub const PROVIDER: Guid = Guid::new(
-    0x3e24_1977,
-    0x6237,
-    0x41e9,
-    [0x85, 0x59, 0x10, 0x2c, 0x2d, 0x99, 0x83, 0xf1],
-);
+pub const PROVIDER: Guid =
+    Guid::new(0x3e24_1977, 0x6237, 0x41e9, [0x85, 0x59, 0x10, 0x2c, 0x2d, 0x99, 0x83, 0xf1]);
 /// Unchanged since 2020.
-pub const IID: Guid = Guid::new(
-    0xd722_b373,
-    0x8c4d,
-    0x4692,
-    [0x9e, 0x51, 0xd6, 0xad, 0x9b, 0x37, 0xaa, 0x7d],
-);
+pub const IID: Guid =
+    Guid::new(0xd722_b373, 0x8c4d, 0x4692, [0x9e, 0x51, 0xd6, 0xad, 0x9b, 0x37, 0xaa, 0x7d]);
 
 pub static OBJECT: Object = Object::new("accessibility", &VTABLE);
 pub const INTERFACES: &[Interface] = &[(PROVIDER, IID, &OBJECT)];

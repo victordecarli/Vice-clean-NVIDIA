@@ -12,6 +12,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::Media::Audio::{
     AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_LOOPBACK,
@@ -23,7 +24,6 @@ use windows::Win32::Media::Audio::{
     VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, WAVE_FORMAT_PCM, WAVEFORMATEX,
 };
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
-use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_SYNCHRONIZE, Sleep, WaitForSingleObject,
 };
@@ -53,24 +53,20 @@ const TARGET: &str = "VICTORY_AUDIO_CAPTURE_OF";
 /// this process (the title's millisecond waits get the same).
 pub fn start() {
     if tracing::enabled!(tracing::Level::DEBUG) {
-        let _ = std::thread::Builder::new()
-            .name("victory timing probe".into())
-            .spawn(|| {
-                loop {
-                    std::thread::sleep(Duration::from_secs(1));
-                    let at = Instant::now();
-                    // SAFETY: plain wait.
-                    unsafe { Sleep(1) };
-                    let ms = at.elapsed().as_secs_f32() * 1000.0;
-                    tracing::debug!(ms, "Sleep(1) took");
-                }
-            });
+        let _ = std::thread::Builder::new().name("victory timing probe".into()).spawn(|| {
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let at = Instant::now();
+                // SAFETY: plain wait.
+                unsafe { Sleep(1) };
+                let ms = at.elapsed().as_secs_f32() * 1000.0;
+                tracing::debug!(ms, "Sleep(1) took");
+            }
+        });
     }
     if std::env::var_os("VICTORY_AUDIO_CAPTURE").is_some()
         && let Err(e) = std::env::current_exe().and_then(|exe| {
-            std::process::Command::new(exe)
-                .env(TARGET, std::process::id().to_string())
-                .spawn()
+            std::process::Command::new(exe).env(TARGET, std::process::id().to_string()).spawn()
         })
     {
         tracing::warn!("audio capture not started: {e}");
@@ -138,12 +134,8 @@ fn record(pid: u32, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             size: u32,
             data: *const AUDIOCLIENT_ACTIVATION_PARAMS,
         }
-        let blob = Blob {
-            vt: 0x41,
-            reserved: [0; 3],
-            size: size_of_val(&params) as u32,
-            data: &params,
-        };
+        let blob =
+            Blob { vt: 0x41, reserved: [0; 3], size: size_of_val(&params) as u32, data: &params };
         let handler: IActivateAudioInterfaceCompletionHandler = Activated.into();
         let operation = ActivateAudioInterfaceAsync(
             VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,

@@ -44,7 +44,9 @@ pub(super) fn line(frames: f64) {
     let mb = |b: u64| b as f64 / 1e6 / frames.max(1.0);
     let sum = |way: usize| all.iter().map(|(_, m)| m.bytes[way]).sum::<u64>();
     // Copies that only move one way.
-    let only = |way: usize| all.iter().filter(|(_, m)| m.bytes[1 - way] == 0).map(|(_, m)| m.bytes[way]).sum::<u64>();
+    let only = |way: usize| {
+        all.iter().filter(|(_, m)| m.bytes[1 - way] == 0).map(|(_, m)| m.bytes[way]).sum::<u64>()
+    };
     tracing::info!(
         "landings in title memory looked at by refreshes per frame (VICTORY_LAND_ECHO=0: sent up): {:.1} MB held already and left, \
          {:.1} MB the title's too",

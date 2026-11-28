@@ -2,7 +2,10 @@
 //! (titles wait for that before anything else) but reaches nothing, the
 //! connectivity hint never changes, and the title's security allow list,
 //! which comes from the service, cannot be fetched.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::{c_char, c_void};
 
@@ -11,21 +14,13 @@ use super::xgameruntime::{
     Guid, HRESULT, Interface, Methods, Object, add_ref, missing, put, text, token,
 };
 
-pub const PROVIDER: Guid = Guid::new(
-    0x37e5_6907,
-    0x2f10,
-    0x41e8,
-    [0xb7, 0x2f, 0x36, 0xed, 0xb1, 0x85, 0x33, 0x1a],
-);
+pub const PROVIDER: Guid =
+    Guid::new(0x37e5_6907, 0x2f10, 0x41e8, [0xb7, 0x2f, 0x36, 0xed, 0xb1, 0x85, 0x33, 0x1a]);
 
 /// As the title (2026) asks for it; the slots it calls (0x18-0x88)
 /// take the same arguments as under the provider's own id (older titles).
-pub const IID_2026: Guid = Guid::new(
-    0xbf23_46b2,
-    0x39af,
-    0x4658,
-    [0xb5, 0xea, 0x44, 0x71, 0x3c, 0x7e, 0x83, 0xb3],
-);
+pub const IID_2026: Guid =
+    Guid::new(0xbf23_46b2, 0x39af, 0x4658, [0xb5, 0xea, 0x44, 0x71, 0x3c, 0x7e, 0x83, 0xb3]);
 
 pub static OBJECT: Object = Object::new("networking", &VTABLE);
 pub const INTERFACES: &[Interface] =
@@ -93,10 +88,7 @@ extern "system" fn security_info_async(
     url: *const c_char,
     block: *mut AsyncBlock,
 ) -> HRESULT {
-    tracing::debug!(
-        url = text(url).unwrap_or_default(),
-        "security information: offline"
-    );
+    tracing::debug!(url = text(url).unwrap_or_default(), "security information: offline");
     xasync::finished(block, (&raw const SECURITY).cast(), UNREACHABLE)
 }
 extern "system" fn security_info_utf16_async(
@@ -104,10 +96,7 @@ extern "system" fn security_info_utf16_async(
     url: *const u16,
     block: *mut AsyncBlock,
 ) -> HRESULT {
-    tracing::debug!(
-        url = wide(url).unwrap_or_default(),
-        "security information (utf16): offline"
-    );
+    tracing::debug!(url = wide(url).unwrap_or_default(), "security information (utf16): offline");
     xasync::finished(block, (&raw const SECURITY).cast(), UNREACHABLE)
 }
 extern "system" fn security_info_size(_: This, block: *mut AsyncBlock, out: *mut usize) -> HRESULT {
@@ -121,13 +110,7 @@ extern "system" fn security_info_result(
     buffer: *mut u8,
     _info: *mut *const c_void,
 ) -> HRESULT {
-    xasync::XAsyncGetResult(
-        block,
-        (&raw const SECURITY).cast(),
-        size,
-        buffer.cast(),
-        used,
-    )
+    xasync::XAsyncGetResult(block, (&raw const SECURITY).cast(), size, buffer.cast(), used)
 }
 
 /// No security information can exist offline, so no certificate passes.
@@ -237,30 +220,18 @@ mod tests {
         type Size = extern "system" fn(This, *mut AsyncBlock, *mut usize) -> HRESULT;
         let mut b = block();
         let url = c"https://example.invalid/";
-        assert_eq!(
-            method::<Url>(&OBJECT, 0x40)(this, url.as_ptr(), &mut b),
-            S_OK
-        );
+        assert_eq!(method::<Url>(&OBJECT, 0x40)(this, url.as_ptr(), &mut b), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), UNREACHABLE);
         let mut size = 0;
-        assert_eq!(
-            method::<Size>(&OBJECT, 0x48)(this, &mut b, &mut size),
-            UNREACHABLE
-        );
+        assert_eq!(method::<Size>(&OBJECT, 0x48)(this, &mut b, &mut size), UNREACHABLE);
 
         type UrlUtf16 = extern "system" fn(This, *const u16, *mut AsyncBlock) -> HRESULT;
         let mut b = block();
         let url_utf16: Vec<u16> = "https://example.invalid/\0".encode_utf16().collect();
-        assert_eq!(
-            method::<UrlUtf16>(&OBJECT, 0x58)(this, url_utf16.as_ptr(), &mut b),
-            S_OK
-        );
+        assert_eq!(method::<UrlUtf16>(&OBJECT, 0x58)(this, url_utf16.as_ptr(), &mut b), S_OK);
         assert_eq!(xasync::XAsyncGetStatus(&mut b, true), UNREACHABLE);
         let mut size = 0;
-        assert_eq!(
-            method::<Size>(&OBJECT, 0x60)(this, &mut b, &mut size),
-            UNREACHABLE
-        );
+        assert_eq!(method::<Size>(&OBJECT, 0x60)(this, &mut b, &mut size), UNREACHABLE);
 
         token = 0;
         assert_eq!(

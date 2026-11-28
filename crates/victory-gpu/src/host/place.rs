@@ -48,7 +48,8 @@ const MOST: usize = 8 << 20;
 
 /// Since the last frame-rate line: copies at their place, their bytes, those
 /// out of a host copy, and texture copies out of one.
-pub(super) static STATS: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
+pub(super) static STATS: [std::sync::atomic::AtomicU64; 4] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 4];
 
 /// What the CPU does at submission for a copy at its place in a list.
 pub(super) struct Placed {
@@ -114,7 +115,9 @@ pub(super) fn read_by(runs: &[&HostList], mut ranges: Vec<(usize, usize)>) -> bo
     join_ranges(&mut ranges, []);
     runs.iter().any(|list| {
         list.deferred().copies.iter().any(|step| match step {
-            &Step::Copy(_, src, len) | &Step::Fill(_, src, len, _) => touches(&ranges, src, src + len),
+            &Step::Copy(_, src, len) | &Step::Fill(_, src, len, _) => {
+                touches(&ranges, src, src + len)
+            }
             Step::Texture(staging) => {
                 let (at, len) = staging.memory();
                 touches(&ranges, at, at + len)
@@ -157,9 +160,7 @@ unsafe fn wait_for_all(host: &Host, list: &ID3D12GraphicsCommandList) {
             list.Barrier(&[D3D12_BARRIER_GROUP {
                 Type: D3D12_BARRIER_TYPE_GLOBAL,
                 NumBarriers: 1,
-                Anonymous: D3D12_BARRIER_GROUP_0 {
-                    pGlobalBarriers: all.as_ptr(),
-                },
+                Anonymous: D3D12_BARRIER_GROUP_0 { pGlobalBarriers: all.as_ptr() },
             }]);
             return;
         }
@@ -217,7 +218,7 @@ impl HostList {
         let at = to.offset(dst as u64);
         // What the title's CPU wrote around and under it so far goes first.
         to.refresh(self, dst as u64, len as u64);
-        // SAFETY (both): an open list; live buffers (the list holds the
+        // SAFETY: an open list; live buffers (the list holds the
         // copies and its scratch memory), ranges inside them.
         unsafe { wait_for_all(host, &self.list) };
         match (&own, &scratch) {
@@ -228,22 +229,36 @@ impl HostList {
                     let Some(between) = self.between(host, len as u64) else {
                         return false;
                     };
+                    // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+                    // memory), ranges inside them.
                     unsafe {
                         self.list.CopyBufferRegion(&between, 0, &from.buffer, offset, len as u64);
-                        self.list.ResourceBarrier(&[transition(&between, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE)]);
+                        self.list.ResourceBarrier(&[transition(
+                            &between,
+                            D3D12_RESOURCE_STATE_COPY_DEST,
+                            D3D12_RESOURCE_STATE_COPY_SOURCE,
+                        )]);
                         wait_for_all(host, &self.list);
                         self.list.CopyBufferRegion(&to.buffer, at, &between, 0, len as u64);
                     }
                 } else {
-                    unsafe { self.list.CopyBufferRegion(&to.buffer, at, &from.buffer, offset, len as u64) };
+                    // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+                    // memory), ranges inside them.
+                    unsafe {
+                        self.list.CopyBufferRegion(&to.buffer, at, &from.buffer, offset, len as u64)
+                    };
                 }
                 STATS[2].fetch_add(1, Ordering::Relaxed);
             }
+            // SAFETY: an open list; live buffers (the list holds the copies and its scratch
+            // memory), ranges inside them.
             (None, Some((from, offset, _))) => unsafe {
                 self.list.CopyBufferRegion(&to.buffer, at, from, *offset, len as u64);
             },
             (None, None) => return false,
         }
+        // SAFETY: an open list; live buffers (the list holds the copies and its scratch memory),
+        // ranges inside them.
         unsafe { wait_for_all(host, &self.list) };
         STATS[0].fetch_add(1, Ordering::Relaxed);
         STATS[1].fetch_add(len as u64, Ordering::Relaxed);
@@ -276,8 +291,18 @@ impl HostList {
         // SAFETY: an open list; live buffers, ranges inside them.
         unsafe {
             wait_for_all(host, &self.list);
-            self.list.CopyBufferRegion(&between, 0, &from.buffer, from.offset(src as u64), len as u64);
-            self.list.ResourceBarrier(&[transition(&between, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE)]);
+            self.list.CopyBufferRegion(
+                &between,
+                0,
+                &from.buffer,
+                from.offset(src as u64),
+                len as u64,
+            );
+            self.list.ResourceBarrier(&[transition(
+                &between,
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                D3D12_RESOURCE_STATE_COPY_SOURCE,
+            )]);
             wait_for_all(host, &self.list);
         }
         Some(between)

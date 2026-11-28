@@ -5,7 +5,10 @@
 //! it is written: functions, then constants (all at module level), then the
 //! instructions of `main` in block order.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+
+use crate::ShaderError;
 
 pub mod census;
 pub mod opt;
@@ -121,7 +124,7 @@ pub(crate) mod pred {
     pub const OLE: u8 = 5;
     // Not emitted: the AMD D3D12 driver treats it as UNE, so `v_cmp_lg`
     // lowers as OLT | OGT instead.
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "the predicate table is kept complete; see the comment above")]
     pub const ONE: u8 = 6;
     pub const ORD: u8 = 7;
     pub const UNO: u8 = 8;
@@ -226,6 +229,9 @@ pub(crate) struct Module {
     named: Vec<(String, Vec<Md>)>,
     /// See [`Tag`]: by instruction.
     tags: HashMap<u32, Tag>,
+    /// The first broken builder invariant (an emitter bug). Building goes on
+    /// with a stand-in; [`Module::write`] reports it.
+    broken: RefCell<Option<String>>,
 }
 
 impl Module {
@@ -339,12 +345,7 @@ impl Module {
             return V::Func(i);
         }
         let i = self.funcs.len() as u32;
-        self.funcs.push(Func {
-            name: name.into(),
-            ty,
-            attr,
-            body,
-        });
+        self.funcs.push(Func { name: name.into(), ty, attr, body });
         self.func_ids.insert(name.into(), i);
         V::Func(i)
     }
@@ -353,21 +354,13 @@ impl Module {
     /// declares thread-group shared memory this way).
     pub fn global(&mut self, name: &str, ty: Ty, space: u32) -> V {
         let ptr = self.ptr_in(ty, space);
-        self.globals.push(Global {
-            name: name.into(),
-            ty,
-            ptr,
-            space,
-            init: None,
-        });
+        self.globals.push(Global { name: name.into(), ty, ptr, space, init: None });
         V::Global(self.globals.len() as u32 - 1)
     }
 
     /// An internal constant global initialised with the constant `init`.
     pub fn constant_global(&mut self, name: &str, init: V) -> V {
-        let V::Const(i) = init else {
-            panic!("a global initialised with a non-constant")
-        };
+        let V::Const(i) = init else { panic!("a global initialised with a non-constant") };
         let ty = self.consts[i as usize].0;
         let g = self.global(name, ty, 0);
         if let V::Global(n) = g {
@@ -391,6 +384,11 @@ impl Module {
         self.blocks.len() - 1
     }
 
+    /// Records a broken invariant; the first one is kept.
+    fn broke(&self, what: String) {
+        self.broken.borrow_mut().get_or_insert(what);
+    }
+
     pub fn type_of(&self, v: V) -> Ty {
         match v {
             V::Global(i) => self.globals[i as usize].ptr,
@@ -398,12 +396,16 @@ impl Module {
             V::Inst(i) => self.insts[i as usize].ty,
             V::Func(i) => {
                 let t = self.funcs[i as usize].ty;
-                *self
-                    .type_ids
-                    .get(&TypeDef::Ptr(t, 0))
-                    .map(|t| Ty(*t))
-                    .as_ref()
-                    .expect("function pointer type")
+                match self.type_ids.get(&TypeDef::Ptr(t, 0)) {
+                    Some(&p) => Ty(p),
+                    None => {
+                        let name = &self.funcs[i as usize].name;
+                        self.broke(format!(
+                            "function {name} used as a value without its pointer type"
+                        ));
+                        t
+                    }
+                }
             }
         }
     }
@@ -440,9 +442,7 @@ impl Module {
         self.push(block, ty, Op::Extract(agg, index))
     }
     pub fn call(&mut self, block: usize, f: V, args: Vec<V>) -> V {
-        let V::Func(i) = f else {
-            panic!("call of a non-function")
-        };
+        let V::Func(i) = f else { panic!("call of a non-function") };
         let TypeDef::Func(ret, _) = self.types[self.funcs[i as usize].ty.0 as usize] else {
             unreachable!()
         };
@@ -451,10 +451,7 @@ impl Module {
     /// A phi at the top of `block`; incoming values come with [`Module::set_phi`].
     pub fn phi(&mut self, block: usize, ty: Ty) -> V {
         let i = self.insts.len() as u32;
-        self.insts.push(Inst {
-            ty,
-            op: Op::Phi(Vec::new()),
-        });
+        self.insts.push(Inst { ty, op: Op::Phi(Vec::new()) });
         self.blocks[block].phis.push(i);
         V::Inst(i)
     }
@@ -542,14 +539,21 @@ impl Module {
             }
         }
         while let Some(i) = work.pop() {
-            for_each_operand(&self.insts[i as usize].op, |v| {
-                mark(&mut live, &mut work, v)
-            });
+            for_each_operand(&self.insts[i as usize].op, |v| mark(&mut live, &mut work, v));
         }
         live
     }
 
-    pub fn write(&self) -> Vec<u8> {
+    /// The module's bitcode, or the first broken invariant met building it.
+    pub fn write(&self) -> Result<Vec<u8>, ShaderError> {
+        let bytes = self.write_bitcode()?;
+        match self.broken.borrow().clone() {
+            Some(what) => Err(ShaderError::Internal(what)),
+            None => Ok(bytes),
+        }
+    }
+
+    fn write_bitcode(&self) -> Result<Vec<u8>, ShaderError> {
         let mut w = Writer::default();
         w.bytes(b"BC\xC0\xDE");
         w.enter(MODULE_BLOCK, 3);
@@ -557,24 +561,19 @@ impl Module {
 
         // Attribute groups 1-4 and one list per group.
         w.enter(PARAMATTR_GROUP_BLOCK, 3);
-        for (id, kinds) in [
-            (1, &[18u64, 20][..]),
-            (2, &[18]),
-            (3, &[18, 21]),
-            (4, &[12, 18]),
-        ] {
+        for (id, kinds) in [(1, &[18u64, 20][..]), (2, &[18]), (3, &[18, 21]), (4, &[12, 18])] {
             let mut r = vec![id, 0xFFFF_FFFF];
             for &k in kinds {
                 r.extend([0, k]);
             }
             w.record(3, &r);
         }
-        w.exit();
+        w.exit()?;
         w.enter(PARAMATTR_BLOCK, 3);
         for id in 1..=4 {
             w.record(2, &[id]);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(TYPE_BLOCK, 4);
         w.record(1, &[self.types.len() as u64]);
@@ -604,7 +603,7 @@ impl Module {
                 }
             }
         }
-        w.exit();
+        w.exit()?;
 
         w.record(2, &chars("dxil-ms-dx"));
         w.record(
@@ -624,14 +623,7 @@ impl Module {
             };
             w.record(
                 7,
-                &[
-                    u64::from(g.ty.0),
-                    u64::from(g.space) << 2 | 2 | constant,
-                    init,
-                    linkage,
-                    3,
-                    0,
-                ],
+                &[u64::from(g.ty.0), u64::from(g.space) << 2 | 2 | constant, init, linkage, 3, 0],
             );
         }
         for f in &self.funcs {
@@ -640,22 +632,7 @@ impl Module {
             let attr = f.attr.map_or(0, |a| a as u64);
             w.record(
                 8,
-                &[
-                    u64::from(f.ty.0),
-                    0,
-                    u64::from(!f.body),
-                    0,
-                    attr,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ],
+                &[u64::from(f.ty.0), 0, u64::from(!f.body), 0, attr, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             );
         }
 
@@ -680,7 +657,7 @@ impl Module {
                 }
             }
         }
-        w.exit();
+        w.exit()?;
 
         // Phis nothing reads are left out (one register per phi makes many).
         let live = self.live();
@@ -775,10 +752,8 @@ impl Module {
                 MdDef::Str(s) => w.record(1, &chars(s)),
                 MdDef::Value(ty, v) => w.record(2, &[u64::from(ty.0), u64::from(abs(*v))]),
                 MdDef::Node(ops) => {
-                    let r: Vec<u64> = ops
-                        .iter()
-                        .map(|o| o.map_or(0, |m| u64::from(m.0) + 1))
-                        .collect();
+                    let r: Vec<u64> =
+                        ops.iter().map(|o| o.map_or(0, |m| u64::from(m.0) + 1)).collect();
                     w.record(3, &r);
                 }
             }
@@ -788,7 +763,7 @@ impl Module {
             let r: Vec<u64> = nodes.iter().map(|m| u64::from(m.0)).collect();
             w.record(10, &r);
         }
-        w.exit();
+        w.exit()?;
         // The metadata kinds an LLVM 3.7 module declares, as DXC writes them.
         w.enter(METADATA_BLOCK, 3);
         for (id, kind) in [
@@ -814,7 +789,7 @@ impl Module {
             r.extend(chars(kind));
             w.record(6, &r);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(VALUE_SYMTAB_BLOCK, 4);
         let names = self.globals.iter().map(|g| &g.name);
@@ -823,7 +798,7 @@ impl Module {
             r.extend(chars(name));
             w.record(1, &r);
         }
-        w.exit();
+        w.exit()?;
 
         w.enter(FUNCTION_BLOCK, 4);
         w.record(1, &[layout.len() as u64]);
@@ -881,7 +856,10 @@ impl Module {
                     inst_id += 1;
                 }
             }
-            match b.term.expect("unterminated block") {
+            let Some(term) = b.term else {
+                return Err(ShaderError::Internal("a block left unterminated".into()));
+            };
+            match term {
                 Term::Ret => w.record(10, &[]),
                 Term::Br(t) => w.record(11, &[target(t)]),
                 Term::CondBr(c, t, f) => {
@@ -891,9 +869,9 @@ impl Module {
                 }
             }
         }
-        w.exit();
-        w.exit();
-        w.finish()
+        w.exit()?;
+        w.exit()?;
+        Ok(w.finish())
     }
 }
 
@@ -955,11 +933,7 @@ fn chars(s: &str) -> Vec<u64> {
 
 /// LLVM's signed VBR operand: magnitude shifted left, sign in bit 0.
 fn signed(v: i64) -> u64 {
-    if v >= 0 {
-        (v as u64) << 1
-    } else {
-        (v.unsigned_abs() << 1) | 1
-    }
+    if v >= 0 { (v as u64) << 1 } else { (v.unsigned_abs() << 1) | 1 }
 }
 
 /// The bitstream: little-endian 32-bit words filled from bit 0.
@@ -1020,11 +994,14 @@ impl Writer {
         self.stack.push((width, self.words.len()));
     }
 
-    fn exit(&mut self) {
+    fn exit(&mut self) -> Result<(), ShaderError> {
         self.emit(0, self.width()); // END_BLOCK
         self.align();
-        let (_, start) = self.stack.pop().expect("open block");
+        let Some((_, start)) = self.stack.pop() else {
+            return Err(ShaderError::Internal("a bitcode block closed twice".into()));
+        };
         self.words[start - 1] = (self.words.len() - start) as u32;
+        Ok(())
     }
 
     /// An unabbreviated record.
@@ -1056,7 +1033,7 @@ mod tests {
         let mut w = Writer::default();
         w.enter(8, 3);
         w.record(1, &[1]);
-        w.exit();
+        w.exit().unwrap();
         let bytes = w.finish();
         // header word, length word, one record word, end word.
         assert_eq!(bytes.len() % 4, 0);
@@ -1101,10 +1078,7 @@ mod tests {
         m.terminate(b, Term::Br(head));
         let phis: Vec<V> = (0..regs).map(|_| m.phi(head, i32t)).collect();
         let one = m.i32(1);
-        let stepped: Vec<V> = phis
-            .iter()
-            .map(|&p| m.bin(body, Bin::Add, p, one))
-            .collect();
+        let stepped: Vec<V> = phis.iter().map(|&p| m.bin(body, Bin::Add, p, one)).collect();
         let c = m.cmp(body, pred::IULT, stepped[0], cur[0]);
         m.terminate(head, Term::Br(body));
         m.terminate(body, Term::CondBr(c, latch, exit));
@@ -1123,9 +1097,9 @@ mod tests {
 
     /// FNV-1a, to pin a written module's exact bytes.
     fn fnv(bytes: &[u8]) -> u64 {
-        bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
-            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-        })
+        bytes
+            .iter()
+            .fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
     }
 
     /// Liveness as `write` computed it before the worklist: whole passes over
@@ -1208,13 +1182,8 @@ mod tests {
             let f = m.function("sink", fty, Some(Attr::NoUnwind), false);
             let main_ty = m.func_ty(void, vec![]);
             m.function("main", main_ty, None, true);
-            let (entry, head, body, latch, exit) = (
-                m.new_block(),
-                m.new_block(),
-                m.new_block(),
-                m.new_block(),
-                m.new_block(),
-            );
+            let (entry, head, body, latch, exit) =
+                (m.new_block(), m.new_block(), m.new_block(), m.new_block(), m.new_block());
             let (z, one, ten) = (m.i32(0), m.i32(1), m.i32(10));
             m.terminate(entry, Term::Br(head));
             let i = m.phi(head, i32t);
@@ -1230,7 +1199,7 @@ mod tests {
             m.set_phi(i, vec![(z, entry), (next, latch)]);
             let _ = m.call(exit, f, vec![next]);
             m.terminate(exit, Term::Ret);
-            m.write()
+            m.write().unwrap()
         };
         assert_eq!(build(false), build(true));
     }
@@ -1251,7 +1220,7 @@ mod tests {
             ((64, 64, 64), 38_916, 0x9586_730c_f953_4a45),
             ((128, 256, 32), 295_952, 0x89e5_de2d_64f0_8785),
         ] {
-            let bytes = synthetic(regs, stages, read).write();
+            let bytes = synthetic(regs, stages, read).write().unwrap();
             assert_eq!((bytes.len(), fnv(&bytes)), (len, hash), "{regs}x{stages}");
         }
     }
@@ -1261,11 +1230,11 @@ mod tests {
     fn bench_write() {
         for (regs, stages, read) in [(64, 64, 64), (128, 256, 32), (256, 512, 256)] {
             let m = synthetic(regs, stages, read);
-            let bytes = m.write();
+            let bytes = m.write().unwrap();
             let runs = 5;
             let t = std::time::Instant::now();
             for _ in 0..runs {
-                std::hint::black_box(m.write());
+                std::hint::black_box(m.write().unwrap());
             }
             let per = t.elapsed() / runs;
             println!(

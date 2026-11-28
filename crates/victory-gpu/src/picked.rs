@@ -148,7 +148,8 @@ fn stores_picked(program: &victory_shader::NativeProgram) -> bool {
     if !matches!(program.stage, HwStage::Vs | HwStage::Ps | HwStage::Cs | HwStage::Ms) {
         return false;
     }
-    let heap = |param: usize| program.layout.get(param).is_some_and(|p| p.root == RootType::ResourceHeap);
+    let heap =
+        |param: usize| program.layout.get(param).is_some_and(|p| p.root == RootType::ResourceHeap);
     if !(0..program.layout.len()).any(heap) {
         return false;
     }
@@ -167,7 +168,8 @@ fn stores_picked(program: &victory_shader::NativeProgram) -> bool {
     };
     res.descriptors.iter().filter(|d| d.role == Role::Resource).any(|d| {
         let inst = &p.blocks[d.site.0].insts[d.site.1];
-        let stores = matches!(inst.fields, Fields::Buffer { .. }) && (inst.name().contains("store") || inst.name().contains("atomic"));
+        let stores = matches!(inst.fields, Fields::Buffer { .. })
+            && (inst.name().contains("store") || inst.name().contains("atomic"));
         stores
             && d.source.leaves().into_iter().any(|s| match s {
                 Source::Loaded { load, .. } | Source::Fetched { load, .. } => res
@@ -209,7 +211,9 @@ impl State {
         // (The one it begins in may come twice: its end first.)
         for _ in 0..=self.shown.len() {
             let (copy, offset) = self.next;
-            let Some((&id, s)) = self.shown.range(copy..).next().or_else(|| self.shown.iter().next()) else {
+            let Some((&id, s)) =
+                self.shown.range(copy..).next().or_else(|| self.shown.iter().next())
+            else {
                 break;
             };
             let offset = if id == copy { offset } else { 0 };
@@ -277,8 +281,11 @@ pub(crate) fn declare(runs: &[&HostList]) -> Ranges {
         return Ranges::default();
     };
     let frame = crate::frame::current();
-    let written: Vec<(u64, u64, u64)> =
-        state.found.iter().filter_map(|id| state.shown.get(id).map(|s| (*id, s.from, s.to - s.from))).collect();
+    let written: Vec<(u64, u64, u64)> = state
+        .found
+        .iter()
+        .filter_map(|id| state.shown.get(id).map(|s| (*id, s.from, s.to - s.from)))
+        .collect();
     let mut looked = Vec::new();
     if state.frame != frame {
         state.frame = frame;
@@ -288,7 +295,9 @@ pub(crate) fn declare(runs: &[&HostList]) -> Ranges {
         COUNTS[count].fetch_add(ranges.iter().map(|r| r.2).sum(), Relaxed);
         ranges
             .into_iter()
-            .filter_map(|(id, at, len)| Some((state.shown.get(&id)?.copy.upgrade()?, at as usize, len as usize)))
+            .filter_map(|(id, at, len)| {
+                Some((state.shown.get(&id)?.copy.upgrade()?, at as usize, len as usize))
+            })
             .collect()
     };
     Ranges { written: of(written, 0), looked: of(looked, 1) }
@@ -315,7 +324,8 @@ pub(crate) fn log(frames: f64) {
     if !on() {
         return;
     }
-    let [declared, looked] = [0, 1].map(|i| COUNTS[i].swap(0, Relaxed) as f64 / frames / (1 << 20) as f64);
+    let [declared, looked] =
+        [0, 1].map(|i| COUNTS[i].swap(0, Relaxed) as f64 / frames / (1 << 20) as f64);
     let state = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let (shown, found) = state.as_ref().map_or((0, 0), |s| (s.shown.len(), s.found.len()));
     tracing::info!(
@@ -325,7 +335,10 @@ pub(crate) fn log(frames: f64) {
 }
 
 /// Declared writes, per copy, and those of `picked`.
-pub(crate) fn with(mut back: Vec<(Arc<Shadow>, Vec<(usize, usize)>)>, picked: &[Range]) -> Vec<(Arc<Shadow>, Vec<(usize, usize)>)> {
+pub(crate) fn with(
+    mut back: Vec<crate::shadow::Dirty>,
+    picked: &[Range],
+) -> Vec<crate::shadow::Dirty> {
     for (copy, at, len) in picked {
         let range = (*at, *at + *len);
         match back.iter_mut().find(|b| Arc::ptr_eq(&b.0, copy)) {

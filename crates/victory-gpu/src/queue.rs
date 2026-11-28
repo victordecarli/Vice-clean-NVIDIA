@@ -1,6 +1,9 @@
 //! Command queues. Submitted lists run on the host GPU and are waited for,
 //! so fence signals complete at once.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -11,12 +14,7 @@ use crate::resource::PAGEABLE_IIDS;
 mod behind;
 
 const QUEUE_IIDS: [Iid; 4] = [
-    guid(
-        0x0ec870a6,
-        0x5d7e,
-        0x4c22,
-        [0x8c, 0xfc, 0x5b, 0xaa, 0xe0, 0x76, 0x16, 0xed],
-    ),
+    guid(0x0ec870a6, 0x5d7e, 0x4c22, [0x8c, 0xfc, 0x5b, 0xaa, 0xe0, 0x76, 0x16, 0xed]),
     PAGEABLE_IIDS[0],
     PAGEABLE_IIDS[1],
     PAGEABLE_IIDS[2],
@@ -110,7 +108,9 @@ fn split() -> bool {
 #[cfg(windows)]
 pub(crate) fn cuts() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    waits() && split() && *ON.get_or_init(|| std::env::var_os("VICTORY_CUT_WAITS").is_none_or(|v| v != "0"))
+    waits()
+        && split()
+        && *ON.get_or_init(|| std::env::var_os("VICTORY_CUT_WAITS").is_none_or(|v| v != "0"))
 }
 
 /// Whether a present runs what queues still hold (on by default: a wait
@@ -135,10 +135,7 @@ fn submit_cut(this: This, lists: &[This]) {
         return;
     };
     let first = if lock(&queue(this).held).is_empty() {
-        lists
-            .iter()
-            .position(|&l| crate::list::cut_list(l))
-            .unwrap_or(lists.len())
+        lists.iter().position(|&l| crate::list::cut_list(l)).unwrap_or(lists.len())
     } else {
         0
     };
@@ -162,12 +159,12 @@ fn submit_cut(this: This, lists: &[This]) {
         // from the title's lists (which it may reset before they have run)
         // and come back, with their tables' slots, when they are settled.
         let (taken, order) = crate::list::detach(&lists[..first]);
-        crate::host::two_queues::for_title(Some(queue(this).kind), 0, || host.execute_late(taken, order));
+        crate::host::two_queues::for_title(Some(queue(this).kind), 0, || {
+            host.execute_late(taken, order)
+        });
     } else if first > 0 {
-        let now: Vec<_> = lists[..first]
-            .iter()
-            .filter_map(|&l| crate::list::host_list(l))
-            .collect();
+        let now: Vec<_> =
+            lists[..first].iter().filter_map(|&l| crate::list::host_list(l)).collect();
         host.execute(&now);
         // They have run: their descriptor tables' slots are free again, as
         // on the path without cuts ([`execute`]). This path replaced that
@@ -217,9 +214,7 @@ fn submit_split(this: This, lists: &[This]) {
     let by = crate::list::waits_by_list(lists);
     // Behind what the queue already holds, nothing runs now.
     let cut = if lock(&queue(this).held).is_empty() {
-        (0..lists.len())
-            .find(|&i| by[i].iter().any(|w| !w.met()))
-            .unwrap_or(lists.len())
+        (0..lists.len()).find(|&i| by[i].iter().any(|w| !w.met())).unwrap_or(lists.len())
     } else {
         0
     };
@@ -239,10 +234,7 @@ fn submit_split(this: This, lists: &[This]) {
         )
     });
     if cut > 0 {
-        let now: Vec<_> = lists[..cut]
-            .iter()
-            .filter_map(|&l| crate::list::host_list(l))
-            .collect();
+        let now: Vec<_> = lists[..cut].iter().filter_map(|&l| crate::list::host_list(l)).collect();
         host.execute(&now);
     }
     if cut < lists.len() {
@@ -267,9 +259,7 @@ fn submit_split(this: This, lists: &[This]) {
             let to = if twice {
                 lists.len()
             } else {
-                (from + 1..lists.len())
-                    .find(|&i| !by[i].is_empty())
-                    .unwrap_or(lists.len())
+                (from + 1..lists.len()).find(|&i| !by[i].is_empty()).unwrap_or(lists.len())
             };
             let waits: Vec<crate::list::ValueWait> = by[from..to].concat();
             pieces.extend(waits.into_iter().map(Held::Value));
@@ -359,10 +349,7 @@ pub(crate) fn release_held(all: bool) {
                     Held::Run(lists, order) => {
                         #[cfg(feature = "diagnostics")]
                         crate::capture::op(q, || {
-                            format!(
-                                "RUN held submission of {} lists (forced {all})",
-                                order.len()
-                            )
+                            format!("RUN held submission of {} lists (forced {all})", order.len())
                         });
                         // Diagnostics: the part behind this one stands at
                         // waits that are met already, so the two could have
@@ -370,10 +357,13 @@ pub(crate) fn release_held(all: bool) {
                         // each range shaders write compared once).
                         #[cfg(feature = "diagnostics")]
                         {
-                            let waits = held.iter().take_while(|h| matches!(h, Held::Value(_))).count();
+                            let waits =
+                                held.iter().take_while(|h| matches!(h, Held::Value(_))).count();
                             if waits > 0
                                 && matches!(held.get(waits), Some(Held::Run(..)))
-                                && held[..waits].iter().all(|h| matches!(h, Held::Value(w) if w.met()))
+                                && held[..waits]
+                                    .iter()
+                                    .all(|h| matches!(h, Held::Value(w) if w.met()))
                             {
                                 crate::copystat::add(crate::copystat::C::PartsTogether, 1);
                             }
@@ -383,7 +373,9 @@ pub(crate) fn release_held(all: bool) {
                         {
                             // Not waited for: the host keeps the lists
                             // until they are settled.
-                            crate::host::two_queues::for_title(kind_of(q), 0, || host.execute_late(lists, order));
+                            crate::host::two_queues::for_title(kind_of(q), 0, || {
+                                host.execute_late(lists, order)
+                            });
                         } else {
                             let ran = {
                                 let runs: Vec<&crate::host::HostList> =
@@ -561,22 +553,12 @@ pub(crate) extern "system" fn create_x(
         return E_INVALIDARG;
     };
     tracing::debug!(desc = ?x, "console command queue");
-    let desc = QueueDesc {
-        kind: x.kind,
-        priority: 0,
-        flags: x.flags,
-        nodes: 1,
-    };
+    let desc = QueueDesc { kind: x.kind, priority: 0, flags: x.flags, nodes: 1 };
     create(this, &desc, iid, out)
 }
 
 extern "system" fn query(this: This, iid: *const Iid, out: *mut This) -> HRESULT {
-    object::answer(
-        QUEUE,
-        iid,
-        object::is(iid, &QUEUE_IIDS).then_some(this),
-        out,
-    )
+    object::answer(QUEUE, iid, object::is(iid, &QUEUE_IIDS).then_some(this), out)
 }
 extern "system" fn release(this: This) -> u32 {
     let left = object::release_boxed::<Queue>(this);
@@ -588,7 +570,7 @@ extern "system" fn release(this: This) -> u32 {
     left
 }
 
-/// Runs the lists' host lists and waits for them (decision 0007). A queue
+/// Runs the lists' host lists and waits for them. A queue
 /// that waits for a fence keeps them until the fence is reached.
 extern "system" fn execute(this: This, count: u32, lists: *const This) {
     if lists.is_null() {
@@ -620,7 +602,11 @@ extern "system" fn execute(this: This, count: u32, lists: *const This) {
             if !unmet.is_empty() {
                 static SEEN: AtomicU64 = AtomicU64::new(0);
                 if SEEN.fetch_add(1, Ordering::Relaxed) < 8 {
-                    tracing::info!(kind = queue(this).kind, ?unmet, "a submission is held for a memory value");
+                    tracing::info!(
+                        kind = queue(this).kind,
+                        ?unmet,
+                        "a submission is held for a memory value"
+                    );
                 }
                 lock(&queue(this).held).extend(unmet.into_iter().map(Held::Value));
                 let mut waiting = lock(&WAITING);
@@ -651,10 +637,7 @@ extern "system" fn execute(this: This, count: u32, lists: *const This) {
         if kept {
             return;
         }
-        let host_lists: Vec<_> = lists
-            .iter()
-            .filter_map(|&l| crate::list::host_list(l))
-            .collect();
+        let host_lists: Vec<_> = lists.iter().filter_map(|&l| crate::list::host_list(l)).collect();
         host.execute(&host_lists);
         crate::list::tables_done(lists);
         // What the lists wrote at the bottom of the pipe may be a fence
@@ -773,11 +756,21 @@ extern "system" fn wait(this: This, fence: This, value: u64) -> HRESULT {
         {
             static CALLS: AtomicU64 = AtomicU64::new(0);
             if CALLS.fetch_add(1, Ordering::Relaxed) < 8 {
-                tracing::info!(kind = queue(this).kind, now, value, "a queue is told to wait for a fence");
+                tracing::info!(
+                    kind = queue(this).kind,
+                    now,
+                    value,
+                    "a queue is told to wait for a fence"
+                );
             }
         }
         #[cfg(feature = "diagnostics")]
-        crate::capture::op(this as usize, || format!("WAIT queue kind {} for fence {fence:?} value {value} (now {now})", queue(this).kind));
+        crate::capture::op(this as usize, || {
+            format!(
+                "WAIT queue kind {} for fence {fence:?} value {value} (now {now})",
+                queue(this).kind
+            )
+        });
         if behind::on() && waits() {
             behind::wait(this, fence, value);
             return S_OK;
@@ -846,7 +839,8 @@ impl Written {
             Written::GpuTimestamp => {
                 static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
                 let elapsed = START.get_or_init(std::time::Instant::now).elapsed();
-                let now = (elapsed.as_nanos() / (1_000_000_000 / u128::from(TIMESTAMP_FREQUENCY))) as u64;
+                let now =
+                    (elapsed.as_nanos() / (1_000_000_000 / u128::from(TIMESTAMP_FREQUENCY))) as u64;
                 #[cfg(all(windows, feature = "diagnostics"))]
                 crate::host::spans::stamped(at as usize, now);
                 as_loaded(now, at as usize, gpu_load())
@@ -878,7 +872,10 @@ impl Written {
 fn gpu_load() -> u64 {
     static LOAD: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *LOAD.get_or_init(|| {
-        let ms = std::env::var("VICTORY_GPU_LOAD_MS").ok().and_then(|v| v.trim().parse::<u64>().ok()).unwrap_or(0);
+        let ms = std::env::var("VICTORY_GPU_LOAD_MS")
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .unwrap_or(0);
         ms * (TIMESTAMP_FREQUENCY / 1000)
     })
 }
@@ -886,11 +883,7 @@ fn gpu_load() -> u64 {
 /// The timestamp written at `at` when the clock says `now`, if a pair's start
 /// is to lie `load` ticks before its end.
 fn as_loaded(now: u64, at: usize, load: u64) -> u64 {
-    if at & 8 != 0 {
-        now.saturating_sub(load).max(1)
-    } else {
-        now
-    }
+    if at & 8 != 0 { now.saturating_sub(load).max(1) } else { now }
 }
 
 fn system_timestamp() -> u64 {
@@ -958,10 +951,7 @@ extern "system" fn present(
             static DRAWN: AtomicU64 = AtomicU64::new(0);
             static DISPATCHED: AtomicU64 = AtomicU64::new(0);
             let since = |last: &AtomicU64, now: u64| now - last.swap(now, Ordering::Relaxed);
-            (
-                since(&DRAWN, crate::draw::drawn()),
-                since(&DISPATCHED, crate::draw::dispatched()),
-            )
+            (since(&DRAWN, crate::draw::drawn()), since(&DISPATCHED, crate::draw::dispatched()))
         };
         #[cfg(not(windows))]
         let (drawn, dispatched) = (0, 0);
@@ -1014,7 +1004,8 @@ extern "system" fn present(
         };
         let take_copy = |resource: This| {
             crate::resource::host_copy(resource).map(|copy| {
-                let state = crate::resource::host_transition(resource, COPY_SOURCE).map_or(COPY_SOURCE, |(_, before)| before);
+                let state = crate::resource::host_transition(resource, COPY_SOURCE)
+                    .map_or(COPY_SOURCE, |(_, before)| before);
                 crate::resource::host_transition(resource, state);
                 // (Lists not translated yet leave it in no state yet: the
                 // one it is in when its turn in the line comes.)
@@ -1239,7 +1230,9 @@ extern "system" fn copy_page_mappings(
     }
     if !ok {
         static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| tracing::warn!(pool = format_args!("{pool:#x}"), "a page mapping failed"));
+        ONCE.call_once(|| {
+            tracing::warn!(pool = format_args!("{pool:#x}"), "a page mapping failed")
+        });
     }
     S_OK
 }
@@ -1308,38 +1301,23 @@ mod tests {
     fn signal_slot(q: This) -> usize {
         // SAFETY: one of our queues; its first field is the table.
         let table = unsafe { *q.cast::<*const *const ()>() };
-        if table == NEWER_FUNCTIONS.0.as_ptr() {
-            0x80
-        } else {
-            0x70
-        }
+        if table == NEWER_FUNCTIONS.0.as_ptr() { 0x80 } else { 0x70 }
     }
 
     #[test]
     fn queue_signals_complete_at_once() {
         let null = std::ptr::null();
-        let desc = QueueDesc {
-            kind: 0,
-            priority: 0,
-            flags: 0,
-            nodes: 0,
-        };
+        let desc = QueueDesc { kind: 0, priority: 0, flags: 0, nodes: 0 };
         let mut q = null;
         assert_eq!(create(null, &desc, &QUEUE_IIDS[0], &mut q), S_OK);
         // SAFETY: the title reads the type at +0x10.
         assert_eq!(unsafe { q.cast::<u8>().add(0x10).cast::<u32>().read() }, 0);
         let mut fence = null;
         let fence_iid = &crate::fence::FENCE_IIDS[0];
-        assert_eq!(
-            crate::fence::create(null, 0, 0, fence_iid, &mut fence),
-            S_OK
-        );
+        assert_eq!(crate::fence::create(null, 0, 0, fence_iid, &mut fence), S_OK);
         let signal = slot::<extern "system" fn(This, This, u64) -> HRESULT>(q, signal_slot(q));
         assert_eq!(signal(q, fence, 7), S_OK);
-        assert_eq!(
-            slot::<extern "system" fn(This) -> u64>(fence, 0x40)(fence),
-            7
-        );
+        assert_eq!(slot::<extern "system" fn(This) -> u64>(fence, 0x40)(fence), 7);
         assert_eq!(slot::<extern "system" fn(This) -> u32>(q, 0x10)(q), 0);
     }
 
@@ -1347,12 +1325,7 @@ mod tests {
     #[test]
     fn console_queues_are_created_as_on_pc() {
         let null = std::ptr::null();
-        let desc = QueueDescX {
-            kind: 2,
-            flags: 0,
-            engine_or_pipe: 1,
-            queue: 0,
-        };
+        let desc = QueueDescX { kind: 2, flags: 0, engine_or_pipe: 1, queue: 0 };
         let mut q = null;
         assert_eq!(create_x(null, &desc, &QUEUE_IIDS[0], &mut q), S_OK);
         assert_eq!(queue(q).desc.kind, 2);
@@ -1371,8 +1344,11 @@ mod tests {
 
     #[test]
     fn a_pair_of_timestamps_shows_the_load_it_is_given() {
-        let (start, end) = (0xd0419_6698, 0xd0419_6690);
-        assert_eq!(as_loaded(5_000_000, end, 4_000_000) - as_loaded(5_000_000, start, 4_000_000), 4_000_000);
+        let (start, end) = (0xd_0419_6698, 0xd_0419_6690);
+        assert_eq!(
+            as_loaded(5_000_000, end, 4_000_000) - as_loaded(5_000_000, start, 4_000_000),
+            4_000_000
+        );
         assert_eq!(as_loaded(5_000_000, start, 0), 5_000_000);
         assert_eq!(as_loaded(5, start, 100), 1);
     }

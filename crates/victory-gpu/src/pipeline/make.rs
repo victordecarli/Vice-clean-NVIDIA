@@ -4,8 +4,7 @@
 //! biggest compute programs ~0.4 s, some driver compiles 3.4 s), and
 //! the title's first world frame wants over 1,200 new pipelines: made
 //! on its recording threads, that frame took more than 30 s and the
-//! title's GPU watchdog ended the run (decision 0007, "Pipelines made off
-//! the title's threads").
+//! title's GPU watchdog ended the run.
 //!
 //! A first use queues the pipeline and waits for it within a budget per
 //! frame, so the cheap ones (menus, one-off passes such as a colour-grading
@@ -97,7 +96,9 @@ fn left_out(shaders: &[Arc<Shader>]) -> Option<&'static str> {
         return Some("named in VICTORY_LEAVE_OUT, left out");
     }
     if water_light_left_out(shaders) {
-        return Some("the water's tiled light on a host of 32-lane waves (dark blocks; VICTORY_WATER_LIGHT=1 runs it), left out");
+        return Some(
+            "the water's tiled light on a host of 32-lane waves (dark blocks; VICTORY_WATER_LIGHT=1 runs it), left out",
+        );
     }
     static SKIP_RT_RESOLVE: OnceLock<bool> = OnceLock::new();
     let skip_rt = *SKIP_RT_RESOLVE.get_or_init(|| {
@@ -248,7 +249,10 @@ fn wait_budget() -> Duration {
 fn screen_budget() -> Duration {
     static BUDGET: OnceLock<Duration> = OnceLock::new();
     *BUDGET.get_or_init(|| {
-        let millis = std::env::var("VICTORY_SCREEN_WAIT_MS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(10_000);
+        let millis = std::env::var("VICTORY_SCREEN_WAIT_MS")
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(10_000);
         Duration::from_millis(millis)
     })
 }
@@ -339,7 +343,8 @@ fn wait(p: &Pending, frame: u64) {
     }
     // The frame the budget belongs to, and what was waited of it (or is
     // taken by a thread waiting now); of the passes over the screen too.
-    static SPENT: [Mutex<(u64, Duration)>; 2] = [const { Mutex::new((u64::MAX, Duration::ZERO)) }; 2];
+    static SPENT: [Mutex<(u64, Duration)>; 2] =
+        [const { Mutex::new((u64::MAX, Duration::ZERO)) }; 2];
     let spent_of = &SPENT[usize::from(screen)];
     let shared = shared_budget();
     let left = {
@@ -388,10 +393,7 @@ fn wait(p: &Pending, frame: u64) {
         }
     }
     #[cfg(feature = "diagnostics")]
-    crate::copystat::add(
-        crate::copystat::C::PipelineWaitUs,
-        started.elapsed().as_micros() as u64,
-    );
+    crate::copystat::add(crate::copystat::C::PipelineWaitUs, started.elapsed().as_micros() as u64);
 }
 
 const NOT_QUEUED: u8 = 0;
@@ -413,7 +415,8 @@ fn slow_limit() -> usize {
         if std::env::var_os("VICTORY_PIPELINE_SLOW").is_some_and(|v| v == "0") {
             usize::MAX
         } else {
-            (worker_count(None, std::thread::available_parallelism().map_or(2, |n| n.get())) / 4).max(1)
+            (worker_count(None, std::thread::available_parallelism().map_or(2, |n| n.get())) / 4)
+                .max(1)
         }
     })
 }
@@ -468,7 +471,8 @@ impl Queue {
     fn pop(&mut self, screens_only: bool, slow_limit: usize) -> Option<Arc<Pending>> {
         // An early entry can have been promoted and claimed already.
         let unclaimed = |list: &mut VecDeque<Arc<Pending>>| {
-            std::iter::from_fn(|| list.pop_front()).find(|p| p.queue_state.load(Ordering::Relaxed) == EARLY)
+            std::iter::from_fn(|| list.pop_front())
+                .find(|p| p.queue_state.load(Ordering::Relaxed) == EARLY)
         };
         let mut p = self.screen.pop_front();
         if p.is_none() && !screens_only {
@@ -547,9 +551,7 @@ fn workers() -> bool {
     *RUNNING.get_or_init(|| {
         let mut running = false;
         let workers = worker_count_for(
-            std::env::var("VICTORY_PIPELINE_WORKERS")
-                .ok()
-                .and_then(|v| v.trim().parse().ok()),
+            std::env::var("VICTORY_PIPELINE_WORKERS").ok().and_then(|v| v.trim().parse().ok()),
             std::thread::available_parallelism().map_or(2, |n| n.get()),
             crate::residency::limited_host_ram(),
         );
@@ -557,17 +559,21 @@ fn workers() -> bool {
         let screens = if screens_first() { SCREEN_WORKERS } else { 0 };
         for i in 0..workers + screens {
             let screens_only = i >= workers;
-            let spawned = std::thread::Builder::new()
-                .name(format!("victory-pipelines-{i}"))
-                .spawn(move || {
+            let spawned = std::thread::Builder::new().name(format!("victory-pipelines-{i}")).spawn(
+                move || {
                     // Below the title's own threads (loading, recording),
                     // and the streaming one, which is below normal itself
                     // (`VICTORY_PIPELINE_LOWEST=0`: level with it, as before).
-                    let lowest = !screens_only && std::env::var_os("VICTORY_PIPELINE_LOWEST").is_none_or(|v| v != "0");
+                    let lowest = !screens_only
+                        && std::env::var_os("VICTORY_PIPELINE_LOWEST").is_none_or(|v| v != "0");
                     // SAFETY: a plain call on our own thread.
                     unsafe {
                         use windows::Win32::System::Threading::*;
-                        let priority = if lowest { THREAD_PRIORITY_LOWEST } else { THREAD_PRIORITY_BELOW_NORMAL };
+                        let priority = if lowest {
+                            THREAD_PRIORITY_LOWEST
+                        } else {
+                            THREAD_PRIORITY_BELOW_NORMAL
+                        };
                         let _ = SetThreadPriority(GetCurrentThread(), priority);
                     }
                     loop {
@@ -584,7 +590,8 @@ fn workers() -> bool {
                             super::library::save(false);
                         }
                     }
-                });
+                },
+            );
             if let Err(e) = spawned {
                 tracing::warn!(error = %e, "no pipeline worker");
             } else {

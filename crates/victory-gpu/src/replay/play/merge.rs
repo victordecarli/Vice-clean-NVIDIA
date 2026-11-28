@@ -60,14 +60,7 @@ impl Player {
     /// The copy of a piece of a card buffer's CPU side to it: its source's
     /// address, then the buffer, offset, 0 and length.
     pub(super) fn merged_copy(&self, c: &Cmd) -> Option<(u64, (u32, u64, u64, u64))> {
-        let Cmd::CopyBuffer {
-            dst,
-            dst_at,
-            src,
-            src_at,
-            len,
-        } = c
-        else {
+        let Cmd::CopyBuffer { dst, dst_at, src, src_at, len } = c else {
             return None;
         };
         if !self.merging
@@ -88,10 +81,7 @@ impl Player {
         let (Some(a), Some(b)) = (self.objects.get(&src), self.objects.get(&dst)) else {
             return false;
         };
-        let (a, b) = (
-            &self.frame.resources[a.index],
-            &self.frame.resources[b.index],
-        );
+        let (a, b) = (&self.frame.resources[a.index], &self.frame.resources[b.index]);
         let cpu =
             matches!(&a.place, Place::Committed { props, .. } if gpu::seen(props) == Seen::Cached);
         cpu && b.name.ends_with("on the card")
@@ -176,15 +166,14 @@ impl Player {
             );
             let root: ID3D12RootSignature = self.device.CreateRootSignature(0, bytes)?;
             let pso =
-                self.device
-                    .CreateComputePipelineState(&D3D12_COMPUTE_PIPELINE_STATE_DESC {
-                        pRootSignature: std::mem::transmute_copy(&root),
-                        CS: D3D12_SHADER_BYTECODE {
-                            pShaderBytecode: bytes.as_ptr().cast(),
-                            BytecodeLength: bytes.len(),
-                        },
-                        ..Default::default()
-                    })?;
+                self.device.CreateComputePipelineState(&D3D12_COMPUTE_PIPELINE_STATE_DESC {
+                    pRootSignature: std::mem::transmute_copy(&root),
+                    CS: D3D12_SHADER_BYTECODE {
+                        pShaderBytecode: bytes.as_ptr().cast(),
+                        BytecodeLength: bytes.len(),
+                    },
+                    ..Default::default()
+                })?;
             (root, pso)
         };
         let mut ids: HashSet<u32> = HashSet::new();
@@ -210,10 +199,7 @@ impl Player {
             }
             let size = self.frame.resources[self.objects[&id].index].desc.width;
             let flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-            bases.insert(
-                id,
-                gpu::buffer(&self.device, D3D12_HEAP_TYPE_DEFAULT, size, flags)?.0,
-            );
+            bases.insert(id, gpu::buffer(&self.device, D3D12_HEAP_TYPE_DEFAULT, size, flags)?.0);
             total += size;
         }
         let masters: HashMap<u32, ID3D12Resource> = self.masters.iter().cloned().collect();
@@ -223,20 +209,10 @@ impl Player {
                 unsafe { list.CopyResource(base, &masters[id]) };
             }
         })?;
-        tracing::info!(
-            buffers = bases.len(),
-            mb = total >> 20,
-            "bases of merged copies"
-        );
+        tracing::info!(buffers = bases.len(), mb = total >> 20, "bases of merged copies");
         let flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         let counts = gpu::buffer(&self.device, D3D12_HEAP_TYPE_DEFAULT, CALLS * 12, flags)?.0;
-        self.merger = Some(Merger {
-            root,
-            pso,
-            bases,
-            counts,
-            calls: Default::default(),
-        });
+        self.merger = Some(Merger { root, pso, bases, counts, calls: Default::default() });
         Ok(())
     }
 
@@ -259,11 +235,7 @@ impl Player {
         // SAFETY: the mapping; the copy into it has run.
         let all = unsafe { std::slice::from_raw_parts(data.cast::<u32>(), CALLS as usize * 3) };
         let each = |k: usize| {
-            all.iter()
-                .skip(k)
-                .step_by(3)
-                .map(|&n| u64::from(n))
-                .sum::<u64>()
+            all.iter().skip(k).step_by(3).map(|&n| u64::from(n)).sum::<u64>()
                 / u64::from(loops.max(1))
         };
         let mut out = vec![format!(
@@ -273,11 +245,9 @@ impl Player {
             each(1),
             each(2)
         )];
-        let mut worst: Vec<(u32, usize)> = (0..calls.len())
-            .map(|i| (all[i * 3 + 2], i))
-            .filter(|w| w.0 > 0)
-            .collect();
-        worst.sort_by(|a, b| b.0.cmp(&a.0));
+        let mut worst: Vec<(u32, usize)> =
+            (0..calls.len()).map(|i| (all[i * 3 + 2], i)).filter(|w| w.0 > 0).collect();
+        worst.sort_by_key(|a| std::cmp::Reverse(a.0));
         for (n, i) in worst.into_iter().take(8) {
             let (id, at, len) = calls[i];
             out.push(format!(

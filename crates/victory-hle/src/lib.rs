@@ -24,11 +24,11 @@ pub mod runtime;
 pub use host::HostPolicy;
 pub use registry::{HleExport, HleModule, registry};
 pub use victory_gpu::console;
+#[cfg(all(windows, feature = "diagnostics"))]
+pub use victory_gpu::replay;
 /// DLSS and frame generation (`VICTORY_DLSS`, `VICTORY_FRAMEGEN`).
 #[cfg(windows)]
 pub use victory_gpu::streamline;
-#[cfg(all(windows, feature = "diagnostics"))]
-pub use victory_gpu::replay;
 
 #[cfg(windows)]
 pub use victory_gpu::pipeline::known as known_pipelines;
@@ -60,16 +60,10 @@ impl ImportResolver for HleResolver {
     fn resolve(&self, dll: &str, symbol: &ImportSymbol) -> Resolution {
         // Ordinal imports look up `#n`.
         if let Some(address) = registry::lookup(dll, &symbol.to_string()) {
-            return Resolution::Found {
-                address,
-                provenance: Provenance::Hle,
-            };
+            return Resolution::Found { address, provenance: Provenance::Hle };
         }
         match self.host.resolve(dll, symbol) {
-            Some(address) => Resolution::Found {
-                address,
-                provenance: Provenance::Host,
-            },
+            Some(address) => Resolution::Found { address, provenance: Provenance::Host },
             None => Resolution::Missing,
         }
     }
@@ -82,10 +76,7 @@ mod tests {
     use super::*;
 
     fn name(n: &str) -> ImportSymbol {
-        ImportSymbol::Name {
-            hint: 0,
-            name: n.into(),
-        }
+        ImportSymbol::Name { hint: 0, name: n.into() }
     }
 
     #[test]
@@ -100,10 +91,7 @@ mod tests {
     #[test]
     fn strict_policy_reports_missing() {
         let r = HleResolver::new(HostPolicy::none());
-        assert_eq!(
-            r.classify("api-ms-win-core-synch-l1-1-0.dll", &name("Sleep")),
-            None
-        );
+        assert_eq!(r.classify("api-ms-win-core-synch-l1-1-0.dll", &name("Sleep")), None);
     }
 
     #[cfg(windows)]
@@ -115,10 +103,7 @@ mod tests {
             Some(Provenance::Host)
         );
         // Console-only DLLs never pass through.
-        assert_eq!(
-            r.classify("xmem.dll", &name("XMemSetAllocationHooks")),
-            None
-        );
+        assert_eq!(r.classify("xmem.dll", &name("XMemSetAllocationHooks")), None);
     }
 
     #[cfg(windows)]
@@ -126,10 +111,7 @@ mod tests {
     fn overrides_win_over_host() {
         let r = HleResolver::default();
         assert_eq!(
-            r.classify(
-                "api-ms-win-core-libraryloader-l1-2-0.dll",
-                &name("GetModuleHandleW")
-            ),
+            r.classify("api-ms-win-core-libraryloader-l1-2-0.dll", &name("GetModuleHandleW")),
             Some(Provenance::Hle)
         );
     }
@@ -150,11 +132,7 @@ mod tests {
             "RpcStringFreeA",
             "RpcStringFreeW",
         ] {
-            assert_eq!(
-                r.classify("rpcrt4.dll", &name(call)),
-                Some(Provenance::Hle),
-                "{call}"
-            );
+            assert_eq!(r.classify("rpcrt4.dll", &name(call)), Some(Provenance::Hle), "{call}");
         }
         // A call we do not implement is not passed to the host either.
         assert_eq!(r.classify("rpcrt4.dll", &name("RpcServerRegisterIf")), None);

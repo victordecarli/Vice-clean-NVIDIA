@@ -11,11 +11,7 @@ impl Instruction {
     pub fn text(&self, wave64: bool) -> String {
         let name = self.name().unwrap_or("?");
         let ops = operands(self, name, &self.fields(wave64));
-        if ops.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{name} {ops}")
-        }
+        if ops.is_empty() { name.to_owned() } else { format!("{name} {ops}") }
     }
 }
 
@@ -23,14 +19,8 @@ impl Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Operand::Scalar { code, dwords: 1 } => f.write_str(&scalar_name(code)),
-            Operand::Scalar {
-                code: 106,
-                dwords: 2,
-            } => f.write_str("vcc"),
-            Operand::Scalar {
-                code: 126,
-                dwords: 2,
-            } => f.write_str("exec"),
+            Operand::Scalar { code: 106, dwords: 2 } => f.write_str("vcc"),
+            Operand::Scalar { code: 126, dwords: 2 } => f.write_str("exec"),
             Operand::Scalar { code, dwords } if code < 106 => {
                 write!(f, "s[{code}:{}]", code + dwords - 1)
             }
@@ -44,11 +34,9 @@ impl Display for Operand {
             }
             Operand::Const(code) => f.write_str(&const_name(code)),
             Operand::Literal(value) => write!(f, "lit(0x{value:08x})"),
-            Operand::Attr { index, chan, .. } => write!(
-                f,
-                "attr{index}.{}",
-                ['x', 'y', 'z', 'w'][usize::from(chan & 3)]
-            ),
+            Operand::Attr { index, chan, .. } => {
+                write!(f, "attr{index}.{}", ['x', 'y', 'z', 'w'][usize::from(chan & 3)])
+            }
         }
     }
 }
@@ -129,13 +117,7 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
                 _ => format!("0x{imm:04x}"),
             };
         }
-        Fields::Smem {
-            data,
-            base,
-            offset,
-            soffset,
-            cache,
-        } => {
+        Fields::Smem { data, base, offset, soffset, cache } => {
             if let Some(data) = data {
                 let data = match (name, data) {
                     ("s_atc_probe" | "s_atc_probe_buffer", Operand::Literal(imm)) => {
@@ -162,21 +144,14 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
         Fields::Valu(v) => out = valu(name, v, inst.encoding),
         Fields::Vintrp { dst, src, attr } => {
             let src = match (name, src) {
-                ("v_interp_mov_f32", Operand::Const(p)) => ["p10", "p20", "p0"]
-                    .get(usize::from(*p))
-                    .map_or("p?".into(), |p| p.to_string()),
+                ("v_interp_mov_f32", Operand::Const(p)) => {
+                    ["p10", "p20", "p0"].get(usize::from(*p)).map_or("p?".into(), |p| p.to_string())
+                }
                 _ => src.to_string(),
             };
             out = format!("{dst}, {src}, {attr}");
         }
-        Fields::Ds {
-            dst,
-            addr,
-            data,
-            offset0,
-            offset1,
-            gds,
-        } => {
+        Fields::Ds { dst, addr, data, offset0, offset1, gds } => {
             out = join(dst.iter().chain(addr).chain(data).map(|o| o.to_string()));
             if super::fields::ds_pair(name) {
                 if *offset0 != 0 {
@@ -255,10 +230,7 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
                 [one] => one.to_string(),
                 many => format!(
                     "[{}]",
-                    many.iter()
-                        .map(|o| o.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
+                    many.iter().map(|o| o.to_string()).collect::<Vec<_>>().join(",")
                 ),
             };
             out = join(
@@ -269,16 +241,8 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
             if *dmask != 1 {
                 let _ = write!(out, " dmask:0x{dmask:x}");
             }
-            let dims = [
-                "1D",
-                "2D",
-                "3D",
-                "CUBE",
-                "1D_ARRAY",
-                "2D_ARRAY",
-                "2D_MSAA",
-                "2D_MSAA_ARRAY",
-            ];
+            let dims =
+                ["1D", "2D", "3D", "CUBE", "1D_ARRAY", "2D_ARRAY", "2D_MSAA", "2D_MSAA_ARRAY"];
             let _ = write!(out, " dim:SQ_RSRC_IMG_{}", dims[usize::from(*dim & 7)]);
             for (on, text) in [(*r128, "r128"), (*unorm, "unorm")] {
                 if on {
@@ -294,15 +258,7 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
                 }
             }
         }
-        Fields::Flat {
-            dst,
-            addr,
-            data,
-            saddr,
-            offset,
-            lds,
-            cache,
-        } => {
+        Fields::Flat { dst, addr, data, saddr, offset, lds, cache } => {
             let addr = addr.map_or("off".into(), |a| a.to_string());
             out = join(
                 dst.iter()
@@ -322,13 +278,7 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
                 out.push_str(" lds");
             }
         }
-        Fields::Exp {
-            target,
-            src,
-            compr,
-            done,
-            vm,
-        } => {
+        Fields::Exp { target, src, compr, done, vm } => {
             let target = match *target {
                 0..=7 => format!("mrt{target}"),
                 8 => "mrtz".into(),
@@ -339,10 +289,9 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
                 _ => format!("<target {target}>"),
             };
             out = join(
-                [target].into_iter().chain(
-                    src.iter()
-                        .map(|s| s.map_or("off".into(), |o| o.to_string())),
-                ),
+                [target]
+                    .into_iter()
+                    .chain(src.iter().map(|s| s.map_or("off".into(), |o| o.to_string()))),
             );
             for (on, text) in [(*done, " done"), (*compr, " compr"), (*vm, " vm")] {
                 if on {
@@ -356,21 +305,13 @@ fn operands(inst: &Instruction, name: &str, fields: &Fields) -> String {
 
 /// `s_atc_probe` immediate: 0..=64 in decimal, larger values in hex.
 fn atc_immediate(imm: u32) -> String {
-    if imm <= 64 {
-        imm.to_string()
-    } else {
-        format!("0x{imm:x}")
-    }
+    if imm <= 64 { imm.to_string() } else { format!("0x{imm:x}") }
 }
 
 /// Cache flags; images write `dlc` first.
 fn flags(out: &mut String, cache: &Cache, dlc_first: bool) {
     let dlc = (cache.dlc, " dlc");
-    let (first, last) = if dlc_first {
-        (dlc, (false, ""))
-    } else {
-        ((false, ""), dlc)
-    };
+    let (first, last) = if dlc_first { (dlc, (false, "")) } else { ((false, ""), dlc) };
     for (on, text) in [first, (cache.glc, " glc"), (cache.slc, " slc"), last] {
         if on {
             out.push_str(text);
@@ -522,9 +463,7 @@ fn buffer_format(format: u8) -> String {
         "32_32_32_32_SINT",
         "32_32_32_32_FLOAT",
     ];
-    NAMES
-        .get(usize::from(format))
-        .map_or(format!("{format}"), |n| format!("BUF_FMT_{n}"))
+    NAMES.get(usize::from(format)).map_or(format!("{format}"), |n| format!("BUF_FMT_{n}"))
 }
 
 fn valu(name: &str, v: &Valu, encoding: Encoding) -> String {
@@ -574,12 +513,7 @@ fn valu(name: &str, v: &Valu, encoding: Encoding) -> String {
         }
         s
     };
-    let mut ops: Vec<String> = v
-        .dst
-        .iter()
-        .chain(&v.carry)
-        .map(|o| o.to_string())
-        .collect();
+    let mut ops: Vec<String> = v.dst.iter().chain(&v.carry).map(|o| o.to_string()).collect();
     let mut order: Vec<usize> = (0..v.src.len()).collect();
     if name.starts_with("v_interp_") && order.len() > 1 {
         // dst, i/j, attribute, then the p1 result for p2.
@@ -622,18 +556,13 @@ fn valu(name: &str, v: &Valu, encoding: Encoding) -> String {
         if !omod.is_empty() {
             suffix(omod);
         }
-        let sel = [
-            "BYTE_0", "BYTE_1", "BYTE_2", "BYTE_3", "WORD_0", "WORD_1", "DWORD", "?",
-        ];
+        let sel = ["BYTE_0", "BYTE_1", "BYTE_2", "BYTE_3", "WORD_0", "WORD_1", "DWORD", "?"];
         if sdwa.dst_sel != 6 {
             suffix(&format!("dst_sel:{}", sel[usize::from(sdwa.dst_sel & 7)]));
         }
         if sdwa.dst_unused != 0 {
             let unused = ["UNUSED_PAD", "UNUSED_SEXT", "UNUSED_PRESERVE", "?"];
-            suffix(&format!(
-                "dst_unused:{}",
-                unused[usize::from(sdwa.dst_unused & 3)]
-            ));
+            suffix(&format!("dst_unused:{}", unused[usize::from(sdwa.dst_unused & 3)]));
         }
         for (i, s) in sdwa.src_sel.iter().take(v.src.len()).enumerate() {
             if *s != 6 {
@@ -649,13 +578,7 @@ fn valu(name: &str, v: &Valu, encoding: Encoding) -> String {
         }
     }
     match v.dpp {
-        Some(Dpp::Row {
-            ctrl,
-            row_mask,
-            bank_mask,
-            bound_ctrl,
-            fi,
-        }) => {
+        Some(Dpp::Row { ctrl, row_mask, bank_mask, bound_ctrl, fi }) => {
             suffix(&match ctrl {
                 0x000..=0x0FF => format!(
                     "quad_perm:[{},{},{},{}]",
@@ -707,10 +630,7 @@ mod tests {
         let mut code: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         code.extend(0xBF81_0000u32.to_le_bytes()); // s_endpgm
         let insts = decode(&code).unwrap();
-        insts[..insts.len() - 1]
-            .iter()
-            .map(|i| i.text(wave64))
-            .collect()
+        insts[..insts.len() - 1].iter().map(|i| i.text(wave64)).collect()
     }
 
     fn one(words: &[u32], wave64: bool) -> String {
@@ -734,10 +654,7 @@ mod tests {
             one(&[0xF408_0501, 0xFA00_0040], true),
             "s_load_dwordx4 s[20:23], s[2:3], 0x000040"
         );
-        assert_eq!(
-            one(&[0xF420_0144, 0x0400_0000], true),
-            "s_buffer_load_dword s5, s[8:11], s2"
-        );
+        assert_eq!(one(&[0xF420_0144, 0x0400_0000], true), "s_buffer_load_dword s5, s[8:11], s2");
     }
 
     /// `s_atc_probe` / `s_atc_probe_buffer`: SDATA is a 7-bit immediate, the
@@ -758,10 +675,7 @@ mod tests {
                 [0xF498_1FF4, 0x0A00_0001],
                 "s_atc_probe 0x7f, s[104:105], s5 offset:0x000001",
                 Operand::Literal(0x7f),
-                Operand::Scalar {
-                    code: 104,
-                    dwords: 2,
-                },
+                Operand::Scalar { code: 104, dwords: 2 },
             ),
             (
                 [0xF498_0000, 0xFA00_0000],
@@ -788,13 +702,7 @@ mod tests {
             let mut code: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
             code.extend(0xBF81_0000u32.to_le_bytes());
             let inst = &decode(&code).unwrap()[0];
-            let Fields::Smem {
-                data: got,
-                base: got_base,
-                cache,
-                ..
-            } = inst.fields(false)
-            else {
+            let Fields::Smem { data: got, base: got_base, cache, .. } = inst.fields(false) else {
                 panic!("not an SMEM instruction");
             };
             assert_eq!(got, Some(data), "{words:08x?}");
@@ -811,30 +719,18 @@ mod tests {
         let vop3 = [0xD401_0106, 0x0001_E501]; // v_cmp_lt_f32 to s6, |v1| < 1.0
         assert_eq!(one(&vop3, false), "v_cmp_lt_f32 s6, abs(v1), 1.0");
         assert_eq!(one(&vop3, true), "v_cmp_lt_f32 s[6:7], abs(v1), 1.0");
-        assert_eq!(
-            one(&[0x0202_0480], false),
-            "v_cndmask_b32 v1, 0, v2, vcc_lo"
-        );
-        assert_eq!(
-            one(&[0x5006_0801], true),
-            "v_add_co_ci_u32 v3, vcc, s1, v4, vcc"
-        );
+        assert_eq!(one(&[0x0202_0480], false), "v_cndmask_b32 v1, 0, v2, vcc_lo");
+        assert_eq!(one(&[0x5006_0801], true), "v_add_co_ci_u32 v3, vcc, s1, v4, vcc");
     }
 
     #[test]
     fn vector_modifiers() {
-        assert_eq!(
-            one(&[0x1004_0AFF, 0x3F00_0001], true),
-            "v_mul_f32 v2, lit(0x3f000001), v5"
-        );
+        assert_eq!(one(&[0x1004_0AFF, 0x3F00_0001], true), "v_mul_f32 v2, lit(0x3f000001), v5");
         assert_eq!(
             one(&[0xD54B_8004, 0x2BC0_0501], true),
             "v_fma_f32 v4, -v1, s2, 0.5 mul:2 clamp"
         );
-        assert_eq!(
-            one(&[0x7E02_16F9, 0x0605_0602], true),
-            "v_cvt_f32_f16 v1, v2 src0_sel:WORD_1"
-        );
+        assert_eq!(one(&[0x7E02_16F9, 0x0605_0602], true), "v_cvt_f32_f16 v1, v2 src0_sel:WORD_1");
         assert_eq!(
             one(&[0x7E06_02E9, 0x0539_7701], true),
             "v_mov_b32 v3, v1 dpp8:[7,6,5,4,3,2,1,0]"
@@ -916,11 +812,8 @@ mod tests {
             one(&words, true),
             "image_sample_lz v[8:9], [v1,v5], s[16:23], s[4:7] dmask:0x7 dim:SQ_RSRC_IMG_2D d16"
         );
-        let code: Vec<u8> = words
-            .iter()
-            .chain(&[0xBF81_0000])
-            .flat_map(|w| w.to_le_bytes())
-            .collect();
+        let code: Vec<u8> =
+            words.iter().chain(&[0xBF81_0000]).flat_map(|w| w.to_le_bytes()).collect();
         let Fields::Image { data, addr, .. } = decode(&code).unwrap()[0].fields(true) else {
             panic!("not an image instruction");
         };

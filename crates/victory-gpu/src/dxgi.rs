@@ -1,7 +1,10 @@
 //! The DXGI side of the device: one adapter with one output, reached from
 //! the device by interface query. Tables follow the PC interfaces' order
 //! (IUnknown, the object methods, then each interface's methods).
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use crate::object::{
     self, ADAPTER, DXGI_DEVICE, E_INVALIDARG, FACTORY, HRESULT, Iid, MORE_DATA, NOT_FOUND, OUTPUT,
@@ -10,71 +13,22 @@ use crate::object::{
 
 /// The DXGI device interfaces, base first (as on PC).
 pub(crate) const DEVICE_IIDS: [Iid; 3] = [
-    guid(
-        0x54ec77fa,
-        0x1377,
-        0x44e6,
-        [0x8c, 0x32, 0x88, 0xfd, 0x5f, 0x44, 0xc8, 0x4c],
-    ),
-    guid(
-        0x77db970f,
-        0x6276,
-        0x48ba,
-        [0xba, 0x28, 0x07, 0x01, 0x43, 0xb4, 0x39, 0x2c],
-    ),
-    guid(
-        0x05008617,
-        0xfbfd,
-        0x4051,
-        [0xa7, 0x90, 0x14, 0x48, 0x84, 0xb4, 0xf6, 0xa9],
-    ),
+    guid(0x54ec77fa, 0x1377, 0x44e6, [0x8c, 0x32, 0x88, 0xfd, 0x5f, 0x44, 0xc8, 0x4c]),
+    guid(0x77db970f, 0x6276, 0x48ba, [0xba, 0x28, 0x07, 0x01, 0x43, 0xb4, 0x39, 0x2c]),
+    guid(0x05008617, 0xfbfd, 0x4051, [0xa7, 0x90, 0x14, 0x48, 0x84, 0xb4, 0xf6, 0xa9]),
 ];
 const ADAPTER_IIDS: [Iid; 3] = [
-    guid(
-        0x2411e7e1,
-        0x12ac,
-        0x4ccf,
-        [0xbd, 0x14, 0x97, 0x98, 0xe8, 0x53, 0x4d, 0xc0],
-    ),
-    guid(
-        0x29038f61,
-        0x3839,
-        0x4626,
-        [0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05],
-    ),
-    guid(
-        0x0aa1ae0a,
-        0xfa0e,
-        0x4b84,
-        [0x86, 0x44, 0xe0, 0x5f, 0xf8, 0xe5, 0xac, 0xb5],
-    ),
+    guid(0x2411e7e1, 0x12ac, 0x4ccf, [0xbd, 0x14, 0x97, 0x98, 0xe8, 0x53, 0x4d, 0xc0]),
+    guid(0x29038f61, 0x3839, 0x4626, [0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05]),
+    guid(0x0aa1ae0a, 0xfa0e, 0x4b84, [0x86, 0x44, 0xe0, 0x5f, 0xf8, 0xe5, 0xac, 0xb5]),
 ];
 const FACTORY_IIDS: [Iid; 3] = [
-    guid(
-        0x7b7166ec,
-        0x21c7,
-        0x44ae,
-        [0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69],
-    ),
-    guid(
-        0x770aae78,
-        0xf26f,
-        0x4dba,
-        [0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87],
-    ),
-    guid(
-        0x50c83a1c,
-        0xe072,
-        0x4c48,
-        [0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0],
-    ),
+    guid(0x7b7166ec, 0x21c7, 0x44ae, [0xb2, 0x1a, 0xc9, 0xae, 0x32, 0x1a, 0xe3, 0x69]),
+    guid(0x770aae78, 0xf26f, 0x4dba, [0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87]),
+    guid(0x50c83a1c, 0xe072, 0x4c48, [0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0]),
 ];
-const OUTPUT_IIDS: [Iid; 1] = [guid(
-    0xae02eedb,
-    0xc735,
-    0x4690,
-    [0x8d, 0x52, 0x5a, 0x8d, 0xc2, 0x02, 0x13, 0xaa],
-)];
+const OUTPUT_IIDS: [Iid; 1] =
+    [guid(0xae02eedb, 0xc735, 0x4690, [0x8d, 0x52, 0x5a, 0x8d, 0xc2, 0x02, 0x13, 0xaa])];
 
 static DEVICE: Object = Object::new(&DEVICE_FUNCTIONS);
 static ADAPTER_OBJECT: Object = Object::new(&ADAPTER_FUNCTIONS);
@@ -256,7 +210,9 @@ fn refresh_rates() -> &'static [u32] {
     static RATES: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
     RATES.get_or_init(|| {
         let mut rates = vec![60];
-        if let Some(hz) = std::env::var("VICTORY_DISPLAY_REFRESH").ok().and_then(|v| v.trim().parse::<u32>().ok()) {
+        if let Some(hz) =
+            std::env::var("VICTORY_DISPLAY_REFRESH").ok().and_then(|v| v.trim().parse::<u32>().ok())
+        {
             if (61..=240).contains(&hz) {
                 rates.push(hz);
             } else {
@@ -336,12 +292,8 @@ mod tests {
     #[test]
     fn startup_walks_from_device_to_output() {
         let d3d = crate::device::device();
-        let newest_pc = guid(
-            0x6007896c,
-            0x3244,
-            0x4afd,
-            [0xbf, 0x18, 0xa6, 0xd3, 0xbe, 0xda, 0x50, 0x23],
-        );
+        let newest_pc =
+            guid(0x6007896c, 0x3244, 0x4afd, [0xbf, 0x18, 0xa6, 0xd3, 0xbe, 0xda, 0x50, 0x23]);
         let mut dxgi = std::ptr::null();
         let qi = slot::<Query>(d3d, 0);
         assert_eq!(qi(d3d, &newest_pc, &mut dxgi), E_NOINTERFACE);
@@ -352,10 +304,7 @@ mod tests {
         let mut adapter = std::ptr::null();
         assert_eq!(slot::<Get>(dxgi, 0x38)(dxgi, &mut adapter), S_OK);
         let mut description = std::mem::MaybeUninit::<AdapterDescription>::uninit();
-        assert_eq!(
-            slot::<Describe>(adapter, 0x40)(adapter, description.as_mut_ptr()),
-            S_OK
-        );
+        assert_eq!(slot::<Describe>(adapter, 0x40)(adapter, description.as_mut_ptr()), S_OK);
         // SAFETY: written above.
         assert_eq!(unsafe { description.assume_init() }.vendor, AMD);
 

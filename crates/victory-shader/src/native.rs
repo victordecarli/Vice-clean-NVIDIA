@@ -503,12 +503,7 @@ pub fn fspx_program(part: &[u8]) -> Result<NativeProgram, ShaderError> {
     let threads = |i: usize| u16_at(packet, PACKET_THREADS + 2 * i).map(u32::from);
     let mut layout: Vec<RootParam> = Vec::new();
     let mut used = Vec::new();
-    for e in meta
-        .get(FSPX_RECORDS..)
-        .unwrap_or(&[])
-        .as_chunks::<FSPX_RECORD>()
-        .0
-    {
+    for e in meta.get(FSPX_RECORDS..).unwrap_or(&[]).as_chunks::<FSPX_RECORD>().0 {
         match e[0] {
             0x41 => {}
             0x42 => continue,
@@ -601,11 +596,7 @@ fn inflate_zlib_exact(source: &[u8], expected: usize) -> Option<Vec<u8>> {
         if out_pos == expected {
             let mut extra = [0u8; 1];
             let status = state
-                .decompress(
-                    &source[in_pos..],
-                    &mut extra,
-                    zlib_rs::InflateFlush::NoFlush,
-                )
+                .decompress(&source[in_pos..], &mut extra, zlib_rs::InflateFlush::NoFlush)
                 .ok()?;
             return (status == zlib_rs::Status::StreamEnd
                 && state.total_out() as usize == expected)
@@ -620,11 +611,7 @@ fn inflate_zlib_exact(source: &[u8], expected: usize) -> Option<Vec<u8>> {
             out.resize(next_len, 0);
         }
         let status = state
-            .decompress(
-                &source[in_pos..],
-                &mut out[out_pos..],
-                zlib_rs::InflateFlush::NoFlush,
-            )
+            .decompress(&source[in_pos..], &mut out[out_pos..], zlib_rs::InflateFlush::NoFlush)
             .ok()?;
         let next_in = state.total_in() as usize;
         let next_out = state.total_out() as usize;
@@ -747,8 +734,7 @@ fn semantics(data: &[u8], at: usize, size: usize, count_at: usize) -> Result<&[u
     if count > MAX_SEMANTICS {
         return Err(Malformed("implausible semantic count"));
     }
-    data.get(at..at + size * count as usize)
-        .ok_or(Malformed("stage data out of bounds"))
+    data.get(at..at + size * count as usize).ok_or(Malformed("stage data out of bounds"))
 }
 
 fn ps_io(data: &[u8], code_len: usize) -> Result<StageIo, ShaderError> {
@@ -782,14 +768,8 @@ fn ps_io(data: &[u8], code_len: usize) -> Result<StageIo, ShaderError> {
             return Err(Malformed("export patch outside the code"));
         }
         let full = at + 4 + PATCH_FULL * PATCH_SLOT_DWORDS * 4;
-        let code = (0..size)
-            .map(|i| u32_at(data, full + 4 * i))
-            .collect::<Result<_, _>>()?;
-        patches.push(ExportPatch {
-            mrt: mrt as u8,
-            offset,
-            code,
-        });
+        let code = (0..size).map(|i| u32_at(data, full + 4 * i)).collect::<Result<_, _>>()?;
+        patches.push(ExportPatch { mrt: mrt as u8, offset, code });
     }
     Ok(StageIo::Ps {
         inputs,
@@ -819,12 +799,7 @@ fn vs_io(data: &[u8]) -> Result<StageIo, ShaderError> {
         .as_chunks::<5>()
         .0
         .iter()
-        .map(|e| VsInput {
-            usage: Usage::from_raw(e[0]),
-            row: e[1],
-            mask: e[2] & 0xf,
-            vgpr: e[3],
-        })
+        .map(|e| VsInput { usage: Usage::from_raw(e[0]), row: e[1], mask: e[2] & 0xf, vgpr: e[3] })
         .collect();
     let outputs = vs_outputs(data)?;
     Ok(StageIo::Vs { inputs, outputs })
@@ -832,9 +807,7 @@ fn vs_io(data: &[u8]) -> Result<StageIo, ShaderError> {
 
 fn ms_io(data: &[u8], lds_bytes: u32) -> Result<StageIo, ShaderError> {
     let outputs = vs_outputs(data)?;
-    let info = data
-        .get(MS_INFO..MS_INFO + 8)
-        .ok_or(Malformed("stage data out of bounds"))?;
+    let info = data.get(MS_INFO..MS_INFO + 8).ok_or(Malformed("stage data out of bounds"))?;
     let half = |at: usize| u32::from(u16::from_le_bytes([info[at], info[at + 1]]));
     Ok(StageIo::Ms(MeshIo {
         outputs,
@@ -847,9 +820,9 @@ fn ms_io(data: &[u8], lds_bytes: u32) -> Result<StageIo, ShaderError> {
     }))
 }
 
-/// For entries already sized by `as_chunks`.
-fn le32(entry: &[u8], at: usize) -> u32 {
-    u32::from_le_bytes(entry[at..at + 4].try_into().unwrap())
+/// The dword at `at` (0, 4, 8, 12, ...) of a root-table entry.
+fn le32<const N: usize>(entry: &[u8; N], at: usize) -> u32 {
+    u32::from_le_bytes([entry[at], entry[at + 1], entry[at + 2], entry[at + 3]])
 }
 
 /// `data[offset..offset + len]` with untrusted 64-bit bounds.
@@ -964,10 +937,7 @@ mod tests {
                     vgprs: 28,
                     layout: vec![],
                     used: vec![],
-                    io: StageIo::Vs {
-                        inputs: vec![],
-                        outputs: vec![],
-                    },
+                    io: StageIo::Vs { inputs: vec![], outputs: vec![] },
                     code: VS_CODE.to_vec()
                 },
                 NativeProgram {
@@ -1056,15 +1026,7 @@ mod tests {
         blob[full..][..8].copy_from_slice(&[0x1f, 0x18, 0, 0xf8, 0, 1, 2, 3]);
 
         let p = &native_programs(&part(&[(KIND_NATIVE, &xbch(&blob))])).unwrap()[0];
-        let StageIo::Ps {
-            inputs,
-            input_addr,
-            patches,
-            ..
-        } = &p.io
-        else {
-            panic!("{:?}", p.io)
-        };
+        let StageIo::Ps { inputs, input_addr, patches, .. } = &p.io else { panic!("{:?}", p.io) };
         let input = PsInput {
             usage: Usage::Generic,
             row: 1,
@@ -1110,13 +1072,8 @@ mod tests {
         let record = e - RECORD_SIZE as usize;
         blob[record + RECORD_LDS..][..4].copy_from_slice(&16u32.to_le_bytes());
         let p = &native_programs(&part(&[(KIND_NATIVE, &xbch(&blob))])).unwrap()[0];
-        let out = |row, param| VsOutput {
-            usage: Usage::Generic,
-            row,
-            param,
-            fp16: false,
-            pack2: false,
-        };
+        let out =
+            |row, param| VsOutput { usage: Usage::Generic, row, param, fp16: false, pack2: false };
         assert_eq!(
             p.io,
             StageIo::Ms(MeshIo {
@@ -1144,18 +1101,12 @@ mod tests {
     #[test]
     fn compute_dispatch_settings() {
         // 5 user SGPRs, group id x and y, thread ids in v0-v1, 1 KiB LDS.
-        let cs = ComputeIo {
-            rsrc2: 0x1098A,
-            threads: [16, 16, 1],
-        };
+        let cs = ComputeIo { rsrc2: 0x1098A, threads: [16, 16, 1] };
         assert_eq!(cs.user_sgprs(), 5);
         assert_eq!(cs.system_sgprs(), ([Some(5), Some(6), None], None));
         assert_eq!((cs.thread_id_vgprs(), cs.lds_bytes()), (2, 1024));
         // 6 user SGPRs, all three group ids, v0-v2, no LDS.
-        let cs = ComputeIo {
-            rsrc2: 0x138C,
-            threads: [8, 8, 1],
-        };
+        let cs = ComputeIo { rsrc2: 0x138C, threads: [8, 8, 1] };
         assert_eq!(cs.system_sgprs(), ([Some(6), Some(7), Some(8)], None));
         assert_eq!((cs.thread_id_vgprs(), cs.lds_bytes()), (3, 0));
     }
@@ -1163,22 +1114,13 @@ mod tests {
     #[test]
     fn initialized_sgprs_covers_user_system_and_scratch() {
         // 5 user SGPRs, group ids x and y (s5, s6), no scratch: s0..=s6.
-        let cs = ComputeIo {
-            rsrc2: 0x1098A,
-            threads: [16, 16, 1],
-        };
+        let cs = ComputeIo { rsrc2: 0x1098A, threads: [16, 16, 1] };
         assert_eq!(cs.initialized_sgprs(), 7);
         // All three group ids after 6 user SGPRs, plus the info SGPR: s0..=s9.
-        let cs = ComputeIo {
-            rsrc2: 0x78C,
-            threads: [8, 8, 1],
-        };
+        let cs = ComputeIo { rsrc2: 0x78C, threads: [8, 8, 1] };
         assert_eq!(cs.initialized_sgprs(), 10);
         // The same with scratch enabled adds the wave offset: s0..=s10.
-        let cs = ComputeIo {
-            rsrc2: 0x78D,
-            threads: [8, 8, 1],
-        };
+        let cs = ComputeIo { rsrc2: 0x78D, threads: [8, 8, 1] };
         assert_eq!(cs.initialized_sgprs(), 11);
     }
 
@@ -1187,22 +1129,14 @@ mod tests {
         let es = xbch(&fssm(&[(HwStage::Es, &VS_CODE)]));
         let vs = xbch(&fssm(&[(HwStage::Vs, &VS_CODE)]));
         let data = part(&[(0x12, &[0; 16]), (KIND_NATIVE, &es), (KIND_NATIVE, &vs)]);
-        let stages: Vec<_> = native_programs(&data)
-            .unwrap()
-            .iter()
-            .map(|p| p.stage)
-            .collect();
+        let stages: Vec<_> = native_programs(&data).unwrap().iter().map(|p| p.stage).collect();
         assert_eq!(stages, [HwStage::Es, HwStage::Vs]);
     }
 
     #[test]
     fn pc_layout_has_none() {
         assert!(native_programs(&[0u8; 64]).unwrap().is_empty());
-        assert!(
-            native_programs(&part(&[(0x0a, b"xbop")]))
-                .unwrap()
-                .is_empty()
-        );
+        assert!(native_programs(&part(&[(0x0a, b"xbop")])).unwrap().is_empty());
     }
 
     #[test]

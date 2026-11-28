@@ -35,11 +35,8 @@ struct DllStats {
 
 pub fn run(paths: Vec<PathBuf>, strict: bool, list_missing: bool) -> Result<()> {
     let paths = crate::default_paths(paths)?;
-    let resolver = HleResolver::new(if strict {
-        HostPolicy::none()
-    } else {
-        HostPolicy::default()
-    });
+    let resolver =
+        HleResolver::new(if strict { HostPolicy::none() } else { HostPolicy::default() });
 
     let mut images = 0usize;
     let mut seen = BTreeSet::new();
@@ -123,10 +120,7 @@ pub fn run(paths: Vec<PathBuf>, strict: bool, list_missing: bool) -> Result<()> 
 /// packages do not always use .exe/.dll).
 fn looks_like_pe(path: &Path) -> bool {
     let mut magic = [0u8; 2];
-    std::fs::File::open(path)
-        .and_then(|mut f| f.read_exact(&mut magic))
-        .is_ok()
-        && &magic == b"MZ"
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut magic)).is_ok() && &magic == b"MZ"
 }
 
 fn tally_image(
@@ -167,17 +161,11 @@ mod tests {
     use victory_pe::{ImportEntry, ImportModule};
 
     fn entry(symbol: ImportSymbol) -> ImportEntry {
-        ImportEntry {
-            symbol,
-            iat_slot_rva: 0,
-        }
+        ImportEntry { symbol, iat_slot_rva: 0 }
     }
 
     fn named(hint: u16, name: &str) -> ImportEntry {
-        entry(ImportSymbol::Name {
-            hint,
-            name: name.into(),
-        })
+        entry(ImportSymbol::Name { hint, name: name.into() })
     }
 
     fn ordinal(ord: u16) -> ImportEntry {
@@ -225,10 +213,7 @@ mod tests {
             }],
             vec![ImportModule {
                 dll: "XGameRuntime.dll".into(),
-                entries: vec![
-                    named(2, "XGameRuntimeInitialize"),
-                    named(20, "SyntheticMissingApi"),
-                ],
+                entries: vec![named(2, "XGameRuntimeInitialize"), named(20, "SyntheticMissingApi")],
             }],
         );
         let image_b = synthetic_image(
@@ -246,20 +231,8 @@ mod tests {
             }],
         );
 
-        tally_image(
-            Path::new("image_a.exe"),
-            &image_a,
-            &resolver,
-            &mut dlls,
-            &mut missing,
-        );
-        tally_image(
-            Path::new("image_b.dll"),
-            &image_b,
-            &resolver,
-            &mut dlls,
-            &mut missing,
-        );
+        tally_image(Path::new("image_a.exe"), &image_a, &resolver, &mut dlls, &mut missing);
+        tally_image(Path::new("image_b.dll"), &image_b, &resolver, &mut dlls, &mut missing);
 
         assert_eq!(dlls.len(), 1);
         let stats = &dlls["xgameruntime.dll"];
@@ -268,14 +241,8 @@ mod tests {
         assert_eq!(stats.host, 0);
         assert_eq!(stats.missing, 2);
         assert_eq!(stats.images.len(), 2);
-        assert_eq!(
-            dlls.values().map(|s| s.missing).sum::<usize>(),
-            missing.len()
-        );
-        assert_eq!(
-            missing[&("xgameruntime.dll".into(), "SyntheticMissingApi".into())].len(),
-            2
-        );
+        assert_eq!(dlls.values().map(|s| s.missing).sum::<usize>(), missing.len());
+        assert_eq!(missing[&("xgameruntime.dll".into(), "SyntheticMissingApi".into())].len(), 2);
         assert_eq!(missing[&("xgameruntime.dll".into(), "#42".into())].len(), 2);
     }
 
@@ -305,13 +272,7 @@ mod tests {
             Vec::new(),
         );
 
-        tally_image(
-            Path::new("single.exe"),
-            &image,
-            &resolver,
-            &mut dlls,
-            &mut missing,
-        );
+        tally_image(Path::new("single.exe"), &image, &resolver, &mut dlls, &mut missing);
 
         assert_eq!(dlls.len(), 2);
         let xgr = &dlls["xgameruntime.dll"];
@@ -326,9 +287,6 @@ mod tests {
         assert_eq!(extra.missing, 2);
         assert_eq!(extra.images.len(), 1);
 
-        assert_eq!(
-            dlls.values().map(|s| s.missing).sum::<usize>(),
-            missing.len()
-        );
+        assert_eq!(dlls.values().map(|s| s.missing).sum::<usize>(), missing.len());
     }
 }

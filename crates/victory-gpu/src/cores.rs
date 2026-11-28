@@ -5,19 +5,33 @@
 /// The system's processor sets of group 0: each one's id and its efficiency
 /// class (higher is faster).
 fn cpu_sets() -> Vec<(u32, u8)> {
-    use windows_sys::Win32::System::SystemInformation::{GetSystemCpuSetInformation, SYSTEM_CPU_SET_INFORMATION};
+    use windows_sys::Win32::System::SystemInformation::{
+        GetSystemCpuSetInformation, SYSTEM_CPU_SET_INFORMATION,
+    };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     let mut bytes = 0u32;
     // SAFETY: a size query, then the call into a buffer of that size.
-    unsafe { GetSystemCpuSetInformation(std::ptr::null_mut(), 0, &mut bytes, GetCurrentProcess(), 0) };
+    unsafe {
+        GetSystemCpuSetInformation(std::ptr::null_mut(), 0, &mut bytes, GetCurrentProcess(), 0)
+    };
     let mut buffer = vec![0u64; (bytes as usize).div_ceil(8).max(1)];
     // SAFETY: as above; the buffer holds `bytes` bytes, aligned for the records.
-    let ok = unsafe { GetSystemCpuSetInformation(buffer.as_mut_ptr().cast(), bytes, &mut bytes, GetCurrentProcess(), 0) };
+    let ok = unsafe {
+        GetSystemCpuSetInformation(
+            buffer.as_mut_ptr().cast(),
+            bytes,
+            &mut bytes,
+            GetCurrentProcess(),
+            0,
+        )
+    };
     let mut sets = Vec::new();
     let mut at = 0usize;
     while ok != 0 && at + size_of::<SYSTEM_CPU_SET_INFORMATION>() <= bytes as usize {
         // SAFETY: a record inside the buffer; each says its own size.
-        let info = unsafe { &*(buffer.as_ptr().cast::<u8>().add(at).cast::<SYSTEM_CPU_SET_INFORMATION>()) };
+        let info = unsafe {
+            &*(buffer.as_ptr().cast::<u8>().add(at).cast::<SYSTEM_CPU_SET_INFORMATION>())
+        };
         if info.Size == 0 {
             break;
         }
@@ -45,7 +59,9 @@ fn fast_of(sets: &[(u32, u8)]) -> Vec<u32> {
 /// slow ones stood idle.
 fn stage() -> u32 {
     static STAGE: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
-    *STAGE.get_or_init(|| std::env::var("VICTORY_FAST_CORES").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(2))
+    *STAGE.get_or_init(|| {
+        std::env::var("VICTORY_FAST_CORES").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(2)
+    })
 }
 
 /// Asks the system to run the calling thread, which a frame waits for, on
@@ -79,12 +95,17 @@ pub(crate) fn keep_many_on_fast_cores(what: &str) {
 fn helper_priority() -> Option<i32> {
     static PRIORITY: std::sync::OnceLock<Option<i32>> = std::sync::OnceLock::new();
     *PRIORITY.get_or_init(|| {
-        std::env::var("VICTORY_HELPER_PRIORITY").ok().and_then(|v| v.trim().parse::<i32>().ok()).map(|p| p.clamp(-2, 2))
+        std::env::var("VICTORY_HELPER_PRIORITY")
+            .ok()
+            .and_then(|v| v.trim().parse::<i32>().ok())
+            .map(|p| p.clamp(-2, 2))
     })
 }
 
 fn ask(what: &str, from: u32) {
-    use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, SetThreadSelectedCpuSets};
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentThread, SetThreadPriority, SetThreadSelectedCpuSets,
+    };
     if let Some(priority) = helper_priority() {
         // SAFETY: this thread's own priority.
         let set = unsafe { SetThreadPriority(GetCurrentThread(), priority) } != 0;
@@ -103,11 +124,17 @@ fn ask(what: &str, from: u32) {
         return;
     }
     // SAFETY: our own thread and a list of the system's own set ids.
-    let ok = unsafe { SetThreadSelectedCpuSets(GetCurrentThread(), fast.as_ptr(), fast.len() as u32) };
+    let ok =
+        unsafe { SetThreadSelectedCpuSets(GetCurrentThread(), fast.as_ptr(), fast.len() as u32) };
     if ok == 0 {
         tracing::warn!(what, error = %std::io::Error::last_os_error(), "the thread could not be kept on the fast cores");
     } else {
-        tracing::info!(what, fast = fast.len(), of, "the thread is kept on the fast cores (VICTORY_FAST_CORES=0: not)");
+        tracing::info!(
+            what,
+            fast = fast.len(),
+            of,
+            "the thread is kept on the fast cores (VICTORY_FAST_CORES=0: not)"
+        );
     }
 }
 
@@ -146,7 +173,8 @@ impl Priority {
 
     pub(crate) fn keep(&mut self) {
         use windows_sys::Win32::System::Threading::{
-            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
+            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL,
+            THREAD_PRIORITY_NORMAL,
         };
         let on = helpers_raised();
         if self.applied == Some(on) {

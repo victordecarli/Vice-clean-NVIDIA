@@ -74,11 +74,7 @@ pub fn load(prepared: &PreparedImage, dir: &Path) -> Result<LoadedImage> {
             }
         );
     }
-    let loaded = LoadedImage {
-        module,
-        path,
-        info: prepared.info.clone(),
-    };
+    let loaded = LoadedImage { module, path, info: prepared.info.clone() };
     // A DLL indexes its TLS properly; only an exe assumes index 0.
     if !loaded.info.is_dll() {
         // SAFETY: just mapped, and no title code has run.
@@ -233,10 +229,7 @@ impl LoadedImage {
         for module in self.info.imports.iter().chain(&self.info.delay_imports) {
             for entry in &module.entries {
                 match resolver.resolve(&module.dll, &entry.symbol) {
-                    Resolution::Found {
-                        address,
-                        provenance,
-                    } => {
+                    Resolution::Found { address, provenance } => {
                         match provenance {
                             Provenance::Hle => report.hle += 1,
                             Provenance::Host => report.host += 1,
@@ -261,10 +254,9 @@ impl LoadedImage {
                     calls: AtomicU64::new(0),
                 }));
                 slots.push((slot, block.emit(site)?));
-                report.missing.push(MissingImport {
-                    dll: site.dll.clone(),
-                    symbol: site.symbol.clone(),
-                });
+                report
+                    .missing
+                    .push(MissingImport { dll: site.dll.clone(), symbol: site.symbol.clone() });
             }
             block.seal()?;
         }
@@ -390,9 +382,7 @@ impl LoadedImage {
         if self.info.entry_rva == 0 {
             bail!("image has no entry point");
         }
-        let stack = usize::try_from(self.info.stack_reserve)
-            .unwrap_or(usize::MAX)
-            .max(1 << 20);
+        let stack = usize::try_from(self.info.stack_reserve).unwrap_or(usize::MAX).max(1 << 20);
         std::thread::Builder::new()
             .name("title-main".into())
             .stack_size(stack)

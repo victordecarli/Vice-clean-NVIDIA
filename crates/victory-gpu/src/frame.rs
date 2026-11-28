@@ -14,7 +14,10 @@
 //! once); unset, the title's interval as before. The loader gives the title
 //! the matching frame rate too (`victory_loader::frame_rate`), as the title
 //! would otherwise keep to its 30 with a limiter of its own.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -49,7 +52,11 @@ fn asked() -> Option<Duration> {
 /// `16.667` → 16,667 us; 0 → zero; negative, more than a second or not a
 /// number → `None`.
 fn parse_ms(spec: &str) -> Option<Duration> {
-    let ms = spec.trim().parse::<f64>().ok().filter(|ms| ms.is_finite() && (0.0..=1000.0).contains(ms))?;
+    let ms = spec
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|ms| ms.is_finite() && (0.0..=1000.0).contains(ms))?;
     Some(Duration::from_nanos((ms * 1e6).round() as u64))
 }
 
@@ -79,7 +86,9 @@ fn interval_override() -> Option<Duration> {
         let us = std::env::var("VICTORY_FRAME_INTERVAL_US").ok()?.trim().parse::<u64>().ok()?;
         let interval = (1_000..=1_000_000).contains(&us).then(|| Duration::from_micros(us));
         match interval {
-            Some(interval) => tracing::info!(?interval, "VICTORY_FRAME_INTERVAL_US: frame interval overridden"),
+            Some(interval) => {
+                tracing::info!(?interval, "VICTORY_FRAME_INTERVAL_US: frame interval overridden")
+            }
             None => tracing::warn!(us, "VICTORY_FRAME_INTERVAL_US outside 1000..=1000000: ignored"),
         }
         interval
@@ -105,16 +114,8 @@ pub(crate) extern "system" fn set_interval(
     let interval = asked().or_else(interval_override).unwrap_or(asked_by_title);
     tracing::info!(?interval, title = ?asked_by_title, period, flags, "frame interval");
     // A new interval starts from now, after the last tick handed out.
-    let first = LAST
-        .iter()
-        .map(|t| t.load(Ordering::Relaxed))
-        .max()
-        .unwrap_or(0);
-    *clock() = Some(Clock {
-        start: Instant::now(),
-        interval,
-        first,
-    });
+    let first = LAST.iter().map(|t| t.load(Ordering::Relaxed)).max().unwrap_or(0);
+    *clock() = Some(Clock { start: Instant::now(), interval, first });
     S_OK
 }
 
@@ -168,10 +169,7 @@ fn next_tick(kind: u32) -> (u64, Duration) {
     let tick =
         (c.first + (elapsed / interval + 1) as u64).max(last(kind).load(Ordering::Relaxed) + 1);
     let at = u128::from(tick - c.first) * interval;
-    (
-        tick,
-        Duration::from_nanos(at.saturating_sub(elapsed) as u64),
-    )
+    (tick, Duration::from_nanos(at.saturating_sub(elapsed) as u64))
 }
 
 /// Device method: blocks until the next tick (or the time-out); an origin
@@ -365,10 +363,7 @@ mod tests {
         // Tokens count frames, a frame started early on a time-out too.
         let mut early = 0;
         let flags = TOKEN_ON_TIMEOUT;
-        assert_eq!(
-            wait(null, 0, 0, std::ptr::null(), flags, &mut early),
-            TIMEOUT
-        );
+        assert_eq!(wait(null, 0, 0, std::ptr::null(), flags, &mut early), TIMEOUT);
         let mut next = 0;
         assert_eq!(wait(null, 0, 1_000, std::ptr::null(), 0, &mut next), S_OK);
         assert!(early == second + 1 && next == early + 1);
@@ -386,10 +381,7 @@ mod tests {
             (0..4)
                 .map(|_| {
                     let _ = wait(null, 0, 0, std::ptr::null(), TOKEN_ON_TIMEOUT, &mut token);
-                    assert_eq!(
-                        wait(null, FLIP, u32::MAX, std::ptr::null(), 0, &mut token),
-                        S_OK
-                    );
+                    assert_eq!(wait(null, FLIP, u32::MAX, std::ptr::null(), 0, &mut token), S_OK);
                     LAST[2].load(Ordering::Relaxed)
                 })
                 .collect()

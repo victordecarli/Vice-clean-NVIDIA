@@ -3,18 +3,20 @@
 //! carry the rest of the graphics state as subobjects of the standard
 //! types.
 //!
-//! Host pipelines are made on a pipeline's first draw, not at creation:
-//! The title creates some 60,000 pipelines in its first 20
-//! seconds and draws with a few dozen (decision 0007, step 3). Shader
-//! containers are shared by content hash and translated once, on first
-//! use (decision 0003).
+//! Host pipelines are made on a pipeline's first draw, not at creation: The
+//! title creates some 60,000 pipelines in its first 20 seconds and draws with a
+//! few dozen. Shader containers are shared by content hash and translated once,
+//! on first use.
 //!
 //! shortcut: only vertex plus pixel pipelines from streams and compute
 //! pipelines get host pipelines; mesh, tessellation and geometry stages,
 //! and the plain graphics description, keep their containers only. The 32-byte
 //! packet after the header stays zero: titles only copy it inline, which
 //! our null command-list limits keep from running.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::collections::HashMap;
 use std::mem::offset_of;
@@ -24,12 +26,7 @@ use crate::object::{self, E_INVALIDARG, HRESULT, Iid, Object, PIPELINE, Table, T
 use crate::resource::PAGEABLE_IIDS;
 
 const PIPELINE_IIDS: [Iid; 4] = [
-    guid(
-        0x765a30f3,
-        0xf624,
-        0x4c6f,
-        [0xa8, 0x28, 0xac, 0xe9, 0x48, 0x62, 0x24, 0x45],
-    ),
+    guid(0x765a30f3, 0xf624, 0x4c6f, [0xa8, 0x28, 0xac, 0xe9, 0x48, 0x62, 0x24, 0x45]),
     PAGEABLE_IIDS[0],
     PAGEABLE_IIDS[1],
     PAGEABLE_IIDS[2],
@@ -65,7 +62,7 @@ pub(crate) struct Shader {
     #[cfg(windows)]
     pub(crate) ambient: Option<crate::ambient::Role>,
     #[cfg(windows)]
-    translated: OnceLock<Option<Translated>>,
+    translated: OnceLock<Option<Arc<Translated>>>,
 }
 
 impl std::fmt::Debug for Shader {
@@ -79,14 +76,18 @@ static SHADERS: Mutex<Option<HashMap<[u8; 32], Arc<Shader>>>> = Mutex::new(None)
 
 /// For the memory lines: containers kept and their bytes, translations
 /// kept and the bytes of their host code. None of them is ever let go.
-static KEPT: [std::sync::atomic::AtomicU64; 4] = [const { std::sync::atomic::AtomicU64::new(0) }; 4];
+static KEPT: [std::sync::atomic::AtomicU64; 4] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 4];
 
 /// What the shader table and the pipeline library keep in memory:
 /// containers and their bytes, translations and their bytes, the bytes of
 /// the library's file (kept whole while the library lives) and what its
 /// last save wrote.
 #[cfg(windows)]
-#[cfg_attr(not(feature = "diagnostics"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "diagnostics"),
+    allow(dead_code, reason = "only diagnostics builds report the saved pipelines")
+)]
 pub(crate) fn kept() -> [u64; 7] {
     use std::sync::atomic::Ordering::Relaxed;
     [
@@ -146,42 +147,49 @@ impl Shader {
     /// The translation, made on first use; a shader that does not
     /// translate is logged once.
     pub(crate) fn translated(&self) -> Option<&Translated> {
-        self.translated
-            .get_or_init(|| {
-                let done = translate(&self.container);
-                // `VICTORY_SHADER_SAVE=<dir>`: each shader as the title gave it (`.cdxil`) and as
-                // translated (`.dxil`), by the hash crash reports name it with
-                if let Some(dir) = std::env::var_os("VICTORY_SHADER_SAVE") {
-                    let dir = std::path::PathBuf::from(dir);
-                    let _ = std::fs::create_dir_all(&dir);
-                    let stem = format!("{}.{}", self.hash, self.stage);
-                    let _ = std::fs::write(dir.join(format!("{stem}.cdxil")), &self.container);
-                    if let Ok(t) = &done {
-                        let _ = std::fs::write(dir.join(format!("{stem}.dxil")), &t.host.dxil);
-                    }
-                }
+        self.translation().as_deref()
+    }
+
+    /// [`Shader::translated`], shared.
+    pub(crate) fn translated_shared(&self) -> Option<Arc<Translated>> {
+        self.translation().clone()
+    }
+
+    fn translation(&self) -> &Option<Arc<Translated>> {
+        self.translated.get_or_init(|| {
+            let done = translate(&self.container);
+            // `VICTORY_SHADER_SAVE=<dir>`: each shader as the title gave it (`.cdxil`) and as
+            // translated (`.dxil`), by the hash crash reports name it with
+            if let Some(dir) = std::env::var_os("VICTORY_SHADER_SAVE") {
+                let dir = std::path::PathBuf::from(dir);
+                let _ = std::fs::create_dir_all(&dir);
+                let stem = format!("{}.{}", self.hash, self.stage);
+                let _ = std::fs::write(dir.join(format!("{stem}.cdxil")), &self.container);
                 if let Ok(t) = &done {
-                    KEPT[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    KEPT[3].fetch_add(t.host.dxil.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    let _ = std::fs::write(dir.join(format!("{stem}.dxil")), &t.host.dxil);
                 }
-                match &done {
-                    Ok(t) => tracing::info!(
-                        stage = self.stage,
-                        hash = %self.hash,
-                        user_data = t.host.user_data.len(),
-                        samplers = t.host.samplers.len(),
-                        "shader translated"
-                    ),
-                    Err(e) => tracing::warn!(
-                        stage = self.stage,
-                        hash = %self.hash,
-                        error = %e,
-                        "shader does not translate; its pipelines' draws are dropped"
-                    ),
-                }
-                done.ok()
-            })
-            .as_ref()
+            }
+            if let Ok(t) = &done {
+                KEPT[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                KEPT[3].fetch_add(t.host.dxil.len() as u64, std::sync::atomic::Ordering::Relaxed);
+            }
+            match &done {
+                Ok(t) => tracing::info!(
+                    stage = self.stage,
+                    hash = %self.hash,
+                    user_data = t.host.user_data.len(),
+                    samplers = t.host.samplers.len(),
+                    "shader translated"
+                ),
+                Err(e) => tracing::warn!(
+                    stage = self.stage,
+                    hash = %self.hash,
+                    error = %e,
+                    "shader does not translate; its pipelines' draws are dropped"
+                ),
+            }
+            done.ok().map(Arc::new)
+        })
     }
 }
 
@@ -209,18 +217,15 @@ fn translate(container: &[u8]) -> Result<Translated, String> {
     let host = crate::shader_cache::host_shader(container)?;
     let stores = programs.is_empty() || programs.iter().any(stores);
     let threads = programs.iter().find_map(|p| match &p.io {
-        victory_shader::native::StageIo::Cs(cs) if cs.threads.iter().all(|&n| n > 0) => Some(cs.threads),
+        victory_shader::native::StageIo::Cs(cs) if cs.threads.iter().all(|&n| n > 0) => {
+            Some(cs.threads)
+        }
         _ => None,
     });
     let stores_by_address = programs.is_empty() || programs.iter().any(stores_by_address);
     let used = programs
         .into_iter()
-        .find(|p| {
-            matches!(
-                p.stage,
-                HwStage::Vs | HwStage::Ps | HwStage::Ms | HwStage::Cs
-            )
-        })
+        .find(|p| matches!(p.stage, HwStage::Vs | HwStage::Ps | HwStage::Ms | HwStage::Cs))
         .map(|p| p.used)
         .unwrap_or_default();
     let tables = crate::draw::TablePlan::new(&used, &host.root_indexed_views);
@@ -270,12 +275,8 @@ struct Builder {
 }
 
 #[cfg(windows)]
-static BUILDER: Mutex<Builder> = Mutex::new(Builder {
-    pipelines: Vec::new(),
-    whole: false,
-    off: 0,
-    rests: 0,
-});
+static BUILDER: Mutex<Builder> =
+    Mutex::new(Builder { pipelines: Vec::new(), whole: false, off: 0, rests: 0 });
 
 /// Whether `shaders` are a pipeline of the structure builder.
 #[cfg(windows)]
@@ -304,7 +305,8 @@ fn of_builder(shaders: &[Arc<Shader>]) -> bool {
 #[cfg(windows)]
 pub(crate) fn builder_quarantined(this: This) -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
-    is_builder(this) && *ON.get_or_init(|| std::env::var_os("VICTORY_BVH_QUARANTINE").is_some_and(|v| v == "1"))
+    is_builder(this)
+        && *ON.get_or_init(|| std::env::var_os("VICTORY_BVH_QUARANTINE").is_some_and(|v| v == "1"))
 }
 
 /// Whether the title's pipeline `this` is one of the structure builder's.
@@ -321,7 +323,10 @@ pub(crate) fn builder_rests(why: &'static str) {
     b.rests = crate::frame::current() + 2;
     static SAID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if SAID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
-        tracing::warn!(why, "the ray-tracing structure builder rests for this frame and the next: its stages run all or none");
+        tracing::warn!(
+            why,
+            "the ray-tracing structure builder rests for this frame and the next: its stages run all or none"
+        );
     }
 }
 
@@ -340,7 +345,8 @@ pub(crate) fn builder_runs() -> bool {
     if b.whole {
         return true;
     }
-    let missing: Vec<String> = b.pipelines.iter().filter(|p| !make::now(p)).map(|p| make::hashes(p)).collect();
+    let missing: Vec<String> =
+        b.pipelines.iter().filter(|p| !make::now(p)).map(|p| make::hashes(p)).collect();
     if !missing.is_empty() {
         b.off = b.pipelines.len();
         tracing::warn!(
@@ -401,8 +407,9 @@ fn stores_by_address(program: &victory_shader::NativeProgram) -> bool {
     };
     code.iter().any(|i| {
         matches!(i.encoding, Encoding::Flat | Encoding::Global)
-            && i.name()
-                .is_none_or(|n| (n.contains("store") || n.contains("atomic")) && !n.contains("scratch"))
+            && i.name().is_none_or(|n| {
+                (n.contains("store") || n.contains("atomic")) && !n.contains("scratch")
+            })
     })
 }
 
@@ -488,10 +495,7 @@ fn parse_skip_hashes(value: &str) -> Vec<String> {
             if hash.len() == 16 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 Some(hash.to_ascii_lowercase())
             } else {
-                tracing::warn!(
-                    hash,
-                    "VICTORY_SKIP_PIPELINES expects 16-digit shader hashes"
-                );
+                tracing::warn!(hash, "VICTORY_SKIP_PIPELINES expects 16-digit shader hashes");
                 None
             }
         })
@@ -508,10 +512,7 @@ fn skipped_shader(p: &Pipeline) -> Option<&str> {
     if hashes.is_empty() {
         return None;
     }
-    p.shaders
-        .iter()
-        .find(|shader| hashes.contains(&shader.hash))
-        .map(|shader| shader.hash.as_str())
+    p.shaders.iter().find(|shader| hashes.contains(&shader.hash)).map(|shader| shader.hash.as_str())
 }
 
 #[cfg(all(windows, feature = "diagnostics"))]
@@ -561,9 +562,7 @@ fn copy(stage: &'static str, code: &Bytecode) -> Option<Arc<Shader>> {
         return None;
     }
     // SAFETY: the title passes `size` bytes of shader code.
-    Some(shader(stage, unsafe {
-        std::slice::from_raw_parts(code.code, code.size)
-    }))
+    Some(shader(stage, unsafe { std::slice::from_raw_parts(code.code, code.size) }))
 }
 
 fn hand_out(
@@ -717,11 +716,7 @@ pub(crate) extern "system" fn create_stream(
         // SAFETY: inside the stream the title passes.
         let kind = unsafe { desc.stream.add(at).cast::<u32>().read_unaligned() };
         let Some((size, stage)) = subobject(kind) else {
-            tracing::warn!(
-                kind,
-                at,
-                "pipeline subobject of unknown size; the rest is ignored"
-            );
+            tracing::warn!(kind, at, "pipeline subobject of unknown size; the rest is ignored");
             break;
         };
         if let Some(stage) = stage {
@@ -814,52 +809,30 @@ mod tests {
     use crate::object::{S_OK, slot};
 
     fn shaders(p: This) -> Vec<(&'static str, Vec<u8>)> {
-        pipeline(p)
-            .shaders
-            .iter()
-            .map(|s| (s.stage, s.container.clone()))
-            .collect()
+        pipeline(p).shaders.iter().map(|s| (s.stage, s.container.clone())).collect()
     }
 
     #[test]
     fn pipelines_keep_their_shaders() {
         let (vs, ps) = ([1u8, 2, 3], [4u8; 5]);
-        let none = || Bytecode {
-            code: std::ptr::null(),
-            size: 0,
-        };
+        let none = || Bytecode { code: std::ptr::null(), size: 0 };
         let desc = GraphicsHead {
             root: std::ptr::null(),
             stages: [
-                Bytecode {
-                    code: vs.as_ptr(),
-                    size: vs.len(),
-                },
-                Bytecode {
-                    code: ps.as_ptr(),
-                    size: ps.len(),
-                },
+                Bytecode { code: vs.as_ptr(), size: vs.len() },
+                Bytecode { code: ps.as_ptr(), size: ps.len() },
                 none(),
                 none(),
                 none(),
             ],
         };
         let mut p = std::ptr::null();
-        assert_eq!(
-            create_graphics(std::ptr::null(), &desc, &PIPELINE_IIDS[0], &mut p),
-            S_OK
-        );
-        assert_eq!(
-            shaders(p),
-            [("vertex", vs.to_vec()), ("pixel", ps.to_vec())]
-        );
+        assert_eq!(create_graphics(std::ptr::null(), &desc, &PIPELINE_IIDS[0], &mut p), S_OK);
+        assert_eq!(shaders(p), [("vertex", vs.to_vec()), ("pixel", ps.to_vec())]);
         // A second pipeline with the same pixel shader shares its container.
         let mut q = std::ptr::null();
         create_graphics(std::ptr::null(), &desc, &PIPELINE_IIDS[0], &mut q);
-        assert!(Arc::ptr_eq(
-            &pipeline(p).shaders[1],
-            &pipeline(q).shaders[1]
-        ));
+        assert!(Arc::ptr_eq(&pipeline(p).shaders[1], &pipeline(q).shaders[1]));
         assert_eq!(slot::<extern "system" fn(This) -> u32>(p, 0x10)(p), 0);
     }
 
@@ -898,10 +871,7 @@ mod tests {
         put(0x278, 14 | 3 << 32);
         put(0x280, 15 | 28 << 32);
         put(0x2a0, 1 << 32);
-        let desc = StreamDesc {
-            size: stream.len(),
-            stream: stream.as_ptr(),
-        };
+        let desc = StreamDesc { size: stream.len(), stream: stream.as_ptr() };
         let mut p = std::ptr::null();
         let hr = create_stream(std::ptr::null(), &desc, &PIPELINE_IIDS[0], &mut p);
         assert_eq!(hr, S_OK);
@@ -910,10 +880,7 @@ mod tests {
         {
             let g = pipeline(p).host.graphics.as_deref().unwrap();
             assert_eq!(g.topology.0, 3);
-            assert_eq!(
-                (g.targets.NumRenderTargets, g.targets.RTFormats[0].0),
-                (1, 28)
-            );
+            assert_eq!((g.targets.NumRenderTargets, g.targets.RTFormats[0].0), (1, 28));
         }
     }
 }

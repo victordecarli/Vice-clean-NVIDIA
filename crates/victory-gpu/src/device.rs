@@ -4,7 +4,10 @@
 //! device methods in PC order); console additions follow. Methods we have
 //! not written log their table offset and fail, so a run shows what to
 //! write next.
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "title code calls these through its import table, with pointers the real API would trust; to become unsafe fn (AGENTS.md, rule 3)"
+)]
 
 use std::ffi::c_void;
 
@@ -21,71 +24,22 @@ const UNSUPPORTED: HRESULT = 0x887A_0004_u32 as i32;
 
 /// The device interface id (the same as on PC). Titles also import it as
 /// data.
-pub static IID: Iid = guid(
-    0x189819f1,
-    0x1db6,
-    0x4b57,
-    [0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7],
-);
+pub static IID: Iid =
+    guid(0x189819f1, 0x1db6, 0x4b57, [0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7]);
 
 /// The levels the device answers to, as on PC: `ID3D12Device1` to
 /// `ID3D12Device8`, and `ID3D12Device11`, which the title creates
 /// its device as. Each level's table is the one before plus its methods.
 const LEVEL_IIDS: [Iid; 9] = [
-    guid(
-        0x77acce80,
-        0x638e,
-        0x4e65,
-        [0x88, 0x95, 0xc1, 0xf2, 0x33, 0x86, 0x86, 0x3e],
-    ),
-    guid(
-        0x30baa41e,
-        0xb15b,
-        0x475c,
-        [0xa0, 0xbb, 0x1a, 0xf5, 0xc5, 0xb6, 0x43, 0x28],
-    ),
-    guid(
-        0x81dadc15,
-        0x2bad,
-        0x4392,
-        [0x93, 0xc5, 0x10, 0x13, 0x45, 0xc4, 0xaa, 0x98],
-    ),
-    guid(
-        0xe865df17,
-        0xa9ee,
-        0x46f9,
-        [0xa4, 0x63, 0x30, 0x98, 0x31, 0x5a, 0xa2, 0xe5],
-    ),
-    guid(
-        0x8b4f173b,
-        0x2fea,
-        0x4b80,
-        [0x8f, 0x58, 0x43, 0x07, 0x19, 0x1a, 0xb9, 0x5d],
-    ),
-    guid(
-        0xc70b221b,
-        0x40e4,
-        0x4a17,
-        [0x89, 0xaf, 0x02, 0x5a, 0x07, 0x27, 0xa6, 0xdc],
-    ),
-    guid(
-        0x5c014b53,
-        0x68a1,
-        0x4b9b,
-        [0x8b, 0xd1, 0xdd, 0x60, 0x46, 0xb9, 0x35, 0x8b],
-    ),
-    guid(
-        0x728f1fa2,
-        0xea11,
-        0x4a9f,
-        [0x9b, 0x52, 0x9b, 0x42, 0xa4, 0x84, 0xd5, 0xc9],
-    ),
-    guid(
-        0x5405c344,
-        0xd457,
-        0x444e,
-        [0xb4, 0xdd, 0x23, 0x66, 0xe4, 0x5a, 0xee, 0x39],
-    ),
+    guid(0x77acce80, 0x638e, 0x4e65, [0x88, 0x95, 0xc1, 0xf2, 0x33, 0x86, 0x86, 0x3e]),
+    guid(0x30baa41e, 0xb15b, 0x475c, [0xa0, 0xbb, 0x1a, 0xf5, 0xc5, 0xb6, 0x43, 0x28]),
+    guid(0x81dadc15, 0x2bad, 0x4392, [0x93, 0xc5, 0x10, 0x13, 0x45, 0xc4, 0xaa, 0x98]),
+    guid(0xe865df17, 0xa9ee, 0x46f9, [0xa4, 0x63, 0x30, 0x98, 0x31, 0x5a, 0xa2, 0xe5]),
+    guid(0x8b4f173b, 0x2fea, 0x4b80, [0x8f, 0x58, 0x43, 0x07, 0x19, 0x1a, 0xb9, 0x5d]),
+    guid(0xc70b221b, 0x40e4, 0x4a17, [0x89, 0xaf, 0x02, 0x5a, 0x07, 0x27, 0xa6, 0xdc]),
+    guid(0x5c014b53, 0x68a1, 0x4b9b, [0x8b, 0xd1, 0xdd, 0x60, 0x46, 0xb9, 0x35, 0x8b]),
+    guid(0x728f1fa2, 0xea11, 0x4a9f, [0x9b, 0x52, 0x9b, 0x42, 0xa4, 0x84, 0xd5, 0xc9]),
+    guid(0x5405c344, 0xd457, 0x444e, [0xb4, 0xdd, 0x23, 0x66, 0xe4, 0x5a, 0xee, 0x39]),
 ];
 
 /// Whether `iid` names the device: its first interface or a newer level.
@@ -220,10 +174,7 @@ fn user_space() -> (u64, u64) {
         let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
         // SAFETY: a valid out pointer.
         unsafe { GetSystemInfo(&mut info) };
-        (
-            info.lpMinimumApplicationAddress as u64,
-            info.lpMaximumApplicationAddress as u64,
-        )
+        (info.lpMinimumApplicationAddress as u64, info.lpMaximumApplicationAddress as u64)
     }
     #[cfg(not(windows))]
     (0x1_0000, 0x7fff_fffe_ffff)
@@ -332,12 +283,7 @@ fn feature_levels(data: *mut c_void) -> HRESULT {
     }
     // SAFETY: the title passes `count` levels.
     let requested = unsafe { std::slice::from_raw_parts(query.requested, query.count as usize) };
-    match requested
-        .iter()
-        .copied()
-        .filter(|&l| l <= HIGHEST_FEATURE_LEVEL)
-        .max()
-    {
+    match requested.iter().copied().filter(|&l| l <= HIGHEST_FEATURE_LEVEL).max() {
         Some(level) => {
             query.highest = level;
             S_OK
@@ -377,7 +323,9 @@ extern "system" fn unknown_pipeline<const SLOT: usize>(
             let mut bytes = [0u8; 128];
             (at != 0 && crate::host::read_into(at as *const u8, &mut bytes)).then(|| {
                 bytes
-                    .as_chunks::<8>().0.iter()
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
                     .map(|c| c.iter().rev().fold(0u64, |v, &b| v << 8 | u64::from(b)))
                     .collect()
             })
@@ -385,9 +333,7 @@ extern "system" fn unknown_pipeline<const SLOT: usize>(
         #[cfg(not(windows))]
         let words = |_: usize| None::<Vec<u64>>;
         let description = words(desc as usize);
-        let first = description
-            .as_ref()
-            .and_then(|w| words(w[0] as usize));
+        let first = description.as_ref().and_then(|w| words(w[0] as usize));
         tracing::warn!(
             slot = format_args!("{:#x}", SLOT),
             calls,
@@ -494,10 +440,7 @@ mod tests {
         // SAFETY: the device is 0x58 bytes.
         assert_ne!(unsafe { device.cast::<u8>().add(0x18).read() }, 0);
         assert_eq!(create_as(&[0; 16]).0, E_NOINTERFACE);
-        assert_eq!(
-            slot::<extern "system" fn(This) -> u32>(device, 0x38)(device),
-            1
-        );
+        assert_eq!(slot::<extern "system" fn(This) -> u32>(device, 0x38)(device), 1);
         let missing = slot::<extern "system" fn() -> HRESULT>(device, 0xf0);
         assert_eq!(missing(), E_NOTIMPL);
     }
@@ -522,10 +465,7 @@ mod tests {
         type Get = extern "system" fn(This, *const Iid, *mut This) -> HRESULT;
         let fence_iid = &crate::fence::FENCE_IIDS[0];
         let mut fence = std::ptr::null();
-        assert_eq!(
-            crate::fence::create(std::ptr::null(), 0, 0, fence_iid, &mut fence),
-            S_OK
-        );
+        assert_eq!(crate::fence::create(std::ptr::null(), 0, 0, fence_iid, &mut fence), S_OK);
         let get_device = slot::<Get>(fence, 0x38);
         let dxgi = dxgi::device();
         let query = slot::<Get>(dxgi, 0);

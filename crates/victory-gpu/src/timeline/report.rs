@@ -52,10 +52,8 @@ impl Threads {
             if snapshot == INVALID_HANDLE_VALUE {
                 return threads;
             }
-            let mut entry = THREADENTRY32 {
-                dwSize: size_of::<THREADENTRY32>() as u32,
-                ..Default::default()
-            };
+            let mut entry =
+                THREADENTRY32 { dwSize: size_of::<THREADENTRY32>() as u32, ..Default::default() };
             let mut more = Thread32First(snapshot, &mut entry) != 0;
             while more {
                 if entry.th32OwnerProcessID == own {
@@ -63,7 +61,13 @@ impl Threads {
                     if !thread.is_null() {
                         let (mut cycles, mut start, mut name) = (0, 0usize, std::ptr::null_mut());
                         QueryThreadCycleTime(thread, &mut cycles);
-                        NtQueryInformationThread(thread, START, (&raw mut start).cast(), 8, std::ptr::null_mut());
+                        NtQueryInformationThread(
+                            thread,
+                            START,
+                            (&raw mut start).cast(),
+                            8,
+                            std::ptr::null_mut(),
+                        );
                         let mut text = String::new();
                         if GetThreadDescription(thread, &mut name) >= 0 && !name.is_null() {
                             let len = (0..).take_while(|&i| *name.add(i) != 0).count();
@@ -99,31 +103,45 @@ struct Symbols {
 
 impl Symbols {
     fn load() -> Option<Symbols> {
-        use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExA};
+        use windows_sys::Win32::System::LibraryLoader::{
+            GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExA,
+        };
         use windows_sys::Win32::System::Threading::GetCurrentProcess;
         type Initialize = unsafe extern "system" fn(*mut std::ffi::c_void, *const u16, i32) -> i32;
         type Options = unsafe extern "system" fn(u32) -> u32;
         // SAFETY: the system's own library and functions, by their names and
         // signatures.
         unsafe {
-            let module = LoadLibraryExA(c"dbghelp.dll".as_ptr().cast(), std::ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32);
+            let module = LoadLibraryExA(
+                c"dbghelp.dll".as_ptr().cast(),
+                std::ptr::null_mut(),
+                LOAD_LIBRARY_SEARCH_SYSTEM32,
+            );
             if module.is_null() {
                 return None;
             }
-            let options: Options = std::mem::transmute(GetProcAddress(module, c"SymSetOptions".as_ptr().cast())?);
-            let initialize: Initialize = std::mem::transmute(GetProcAddress(module, c"SymInitializeW".as_ptr().cast())?);
-            let from_address = std::mem::transmute::<
-                unsafe extern "system" fn() -> isize,
-                unsafe extern "system" fn(*mut std::ffi::c_void, u64, *mut u64, *mut u8) -> i32,
-            >(GetProcAddress(module, c"SymFromAddr".as_ptr().cast())?);
+            let options: Options =
+                std::mem::transmute(GetProcAddress(module, c"SymSetOptions".as_ptr().cast())?);
+            let initialize: Initialize =
+                std::mem::transmute(GetProcAddress(module, c"SymInitializeW".as_ptr().cast())?);
+            let from_address =
+                std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    unsafe extern "system" fn(*mut std::ffi::c_void, u64, *mut u64, *mut u8) -> i32,
+                >(GetProcAddress(module, c"SymFromAddr".as_ptr().cast())?);
             let process = GetCurrentProcess();
             // Undecorated names, loaded when asked for, no dialogs.
             options(0x2 | 0x4 | 0x200);
             // Our symbols lie beside the program, which names them by their
             // file alone. (It fails if a backtrace was asked for before:
             // then it is there, and looks beside every module.)
-            let beside = std::env::current_exe().ok().and_then(|p| Some(p.parent()?.to_path_buf())).unwrap_or_default();
-            let beside: Vec<u16> = std::os::windows::ffi::OsStrExt::encode_wide(beside.as_os_str()).chain([0]).collect();
+            let beside = std::env::current_exe()
+                .ok()
+                .and_then(|p| Some(p.parent()?.to_path_buf()))
+                .unwrap_or_default();
+            let beside: Vec<u16> = std::os::windows::ffi::OsStrExt::encode_wide(beside.as_os_str())
+                .chain([0])
+                .collect();
             initialize(process, beside.as_ptr(), 1);
             Some(Symbols { from_address, process })
         }
@@ -152,23 +170,21 @@ impl Symbols {
 
 impl Names {
     pub(super) fn new() -> Names {
-        Names {
-            known: HashMap::new(),
-            symbols: Symbols::load(),
-        }
+        Names { known: HashMap::new(), symbols: Symbols::load() }
     }
 
     /// The module `address` lies in, and where in it; whether it is ours.
     fn module(address: usize) -> (String, usize, bool) {
         use windows_sys::Win32::System::LibraryLoader::{
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, GetModuleFileNameW,
-            GetModuleHandleExW, GetModuleHandleW,
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            GetModuleFileNameW, GetModuleHandleExW, GetModuleHandleW,
         };
         let mut module = std::ptr::null_mut();
         let mut path = [0u16; 260];
         // SAFETY: an address, no name; plain queries.
         unsafe {
-            let flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+            let flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
             if GetModuleHandleExW(flags, address as *const u16, &mut module) == 0 {
                 return ("?".into(), address, false);
             }
@@ -200,8 +216,13 @@ impl Names {
         let mut parts: Vec<String> = Vec::new();
         for &address in stack.iter().take_while(|a| **a != 0) {
             let name = self.of(address);
-            let plain = name.trim_start_matches('<').trim_start_matches("impl$").trim_start_matches(|c: char| c.is_ascii_digit());
-            let skipped = ["std::", "core::", "alloc::", "windows_core::", "windows::"].iter().any(|p| plain.starts_with(p))
+            let plain = name
+                .trim_start_matches('<')
+                .trim_start_matches("impl$")
+                .trim_start_matches(|c: char| c.is_ascii_digit());
+            let skipped = ["std::", "core::", "alloc::", "windows_core::", "windows::"]
+                .iter()
+                .any(|p| plain.starts_with(p))
                 || ["timeline::hooks::", "timeline::record::"].iter().any(|p| name.contains(p))
                 || ["KERNEL", "ntdll", "kernel"].iter().any(|p| name.starts_with(p));
             if !skipped {
@@ -276,7 +297,9 @@ impl Trace {
         };
         for (i, e) in events.iter().enumerate() {
             match e.kind {
-                Kind::Span | Kind::Calls | Kind::Kernel => trace.spans.entry(e.thread).or_default().push(i),
+                Kind::Span | Kind::Calls | Kind::Kernel => {
+                    trace.spans.entry(e.thread).or_default().push(i)
+                }
                 Kind::Wait => trace.waits.entry(e.thread).or_default().push(Wait {
                     t0: e.t0,
                     t1: e.t1,
@@ -287,7 +310,11 @@ impl Trace {
                 Kind::Wake => trace.wakes.entry(e.a).or_default().push((e.t0, e.thread)),
                 Kind::Sent => {
                     let at = e.b & !COMPUTE;
-                    let on = (at as usize).checked_sub(1).and_then(|at| stamps.get(at)).copied().unwrap_or((0, 0));
+                    let on = (at as usize)
+                        .checked_sub(1)
+                        .and_then(|at| stamps.get(at))
+                        .copied()
+                        .unwrap_or((0, 0));
                     trace.runs.push(Run {
                         fence: e.a,
                         t0: e.t0,
@@ -314,7 +341,12 @@ impl Trace {
     fn waker(&self, thread: u32, w: &Wait) -> Option<(u32, u64)> {
         let wakes = self.wakes.get(&w.object)?;
         let end = wakes.partition_point(|k| k.0 <= w.t1);
-        wakes[..end].iter().rev().take_while(|k| k.0 >= w.t0).find(|k| k.1 != thread).map(|k| (k.1, k.0))
+        wakes[..end]
+            .iter()
+            .rev()
+            .take_while(|k| k.0 >= w.t0)
+            .find(|k| k.1 != thread)
+            .map(|k| (k.1, k.0))
     }
 
     /// What `thread` was doing in `[from, to)`, the innermost span counting;
@@ -338,7 +370,10 @@ impl Trace {
         let mut parts: Vec<Part> = Vec::new();
         for pair in edges.windows(2) {
             let (a, b) = (pair[0], pair[1]);
-            let inner = touching.iter().filter(|e| e.t0 <= a && e.t1 >= b).max_by_key(|e| (e.t0, std::cmp::Reverse(e.t1)));
+            let inner = touching
+                .iter()
+                .filter(|e| e.t0 <= a && e.t1 >= b)
+                .max_by_key(|e| (e.t0, std::cmp::Reverse(e.t1)));
             let cause = match inner {
                 Some(e) if e.kind == Kind::Calls => {
                     // Of a run of list calls, the part that was ours.
@@ -379,7 +414,10 @@ impl Trace {
                 break;
             }
             let waits = self.waits.get(&thread).map_or(&[][..], |w| w);
-            let last = waits[..waits.partition_point(|w| w.t1 <= t)].last().filter(|w| w.t1 > until).copied();
+            let last = waits[..waits.partition_point(|w| w.t1 <= t)]
+                .last()
+                .filter(|w| w.t1 > until)
+                .copied();
             let Some(w) = last else {
                 self.doing(thread, until, t, &mut out);
                 break;
@@ -412,12 +450,7 @@ impl Trace {
                         COPY_QUEUE => "the card's copy queue".into(),
                         _ => "the card (no times of it)".into(),
                     };
-                    out.push(Part {
-                        from: w.t0.max(until),
-                        to: w.t1,
-                        thread,
-                        cause,
-                    });
+                    out.push(Part { from: w.t0.max(until), to: w.t1, thread, cause });
                     t = w.t0;
                 }
             }
@@ -482,7 +515,11 @@ fn ms(ticks: u64) -> f64 {
 fn by_cause(parts: &[Part], label: &dyn Fn(u32) -> String) -> Vec<(String, u64)> {
     let mut sums: BTreeMap<String, u64> = BTreeMap::new();
     for p in parts {
-        let cause = if p.cause == OUTSIDE { format!("{} on {}", p.cause, label(p.thread)) } else { p.cause.clone() };
+        let cause = if p.cause == OUTSIDE {
+            format!("{} on {}", p.cause, label(p.thread))
+        } else {
+            p.cause.clone()
+        };
         *sums.entry(cause).or_default() += p.to - p.from;
     }
     let mut sums: Vec<(String, u64)> = sums.into_iter().collect();
@@ -491,7 +528,13 @@ fn by_cause(parts: &[Part], label: &dyn Fn(u32) -> String) -> Vec<(String, u64)>
 }
 
 /// The summary.
-pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]], before: &Threads, after: &Threads) -> String {
+pub(super) fn summary(
+    trace: &Trace,
+    names: &mut Names,
+    stacks: &[[usize; DEPTH]],
+    before: &Threads,
+    after: &Threads,
+) -> String {
     let mut text = String::new();
     let Some((&(start, _), &(stop, _))) = trace.frames.first().zip(trace.frames.last()) else {
         return "no frames\n".into();
@@ -508,13 +551,25 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
         0 => "the card".to_string(),
         id => labels.get(&id).cloned().unwrap_or_else(|| id.to_string()),
     };
-    let _ = writeln!(text, "{} frames in {:.1} ms ({:.1} ms a frame); {} events", frames, ms(stop - start), ms(stop - start) / frames, trace.events.len());
+    let _ = writeln!(
+        text,
+        "{} frames in {:.1} ms ({:.1} ms a frame); {} events",
+        frames,
+        ms(stop - start),
+        ms(stop - start) / frames,
+        trace.events.len()
+    );
 
     // The chains.
     let mut all: Vec<Part> = Vec::new();
     for pair in trace.frames.windows(2) {
         let chain = trace.chain(pair[1].1, pair[1].0, pair[0].0);
-        let _ = writeln!(text, "\nframe of {:.1} ms, present on {}: the chain it came out of, by cause", ms(pair[1].0 - pair[0].0), label(pair[1].1));
+        let _ = writeln!(
+            text,
+            "\nframe of {:.1} ms, present on {}: the chain it came out of, by cause",
+            ms(pair[1].0 - pair[0].0),
+            label(pair[1].1)
+        );
         for (cause, sum) in by_cause(&chain, &label).into_iter().take(24) {
             let _ = writeln!(text, "  {:7.2} ms  {cause}", ms(sum));
         }
@@ -535,13 +590,24 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     for (thread, sum) in by_thread {
         let _ = writeln!(text, "  {:7.2} ms  {}", ms(sum) / frames, label(thread));
     }
-    let _ = writeln!(text, "\nthat chain, oldest first (parts under 0.15 ms left out; ms since the first present)");
+    let _ = writeln!(
+        text,
+        "\nthat chain, oldest first (parts under 0.15 ms left out; ms since the first present)"
+    );
     for p in whole.iter().rev().filter(|p| ms(p.to - p.from) >= 0.15) {
-        let _ = writeln!(text, "  {:8.2} +{:6.2}  {:32} {}", ms(p.from - start), ms(p.to - p.from), label(p.thread), p.cause);
+        let _ = writeln!(
+            text,
+            "  {:8.2} +{:6.2}  {:32} {}",
+            ms(p.from - start),
+            ms(p.to - p.from),
+            label(p.thread),
+            p.cause
+        );
     }
 
     // The card.
-    let runs: Vec<&Run> = trace.runs.iter().filter(|r| r.on != (0, 0) && r.on.1 > start && r.on.0 < stop).collect();
+    let runs: Vec<&Run> =
+        trace.runs.iter().filter(|r| r.on != (0, 0) && r.on.1 > start && r.on.0 < stop).collect();
     let (mut busy, mut reach) = (0, start);
     let mut idle: BTreeMap<String, u64> = BTreeMap::new();
     let mut idle_all = 0;
@@ -551,7 +617,11 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
             idle_all += a - reach;
             if r.t1 > reach {
                 for p in trace.chain(r.thread, r.t1.min(a), reach) {
-                    let cause = if p.cause == OUTSIDE { format!("{} on {}", p.cause, label(p.thread)) } else { p.cause };
+                    let cause = if p.cause == OUTSIDE {
+                        format!("{} on {}", p.cause, label(p.thread))
+                    } else {
+                        p.cause
+                    };
                     *idle.entry(cause).or_default() += p.to - p.from;
                 }
             }
@@ -575,7 +645,10 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     // The most a host queue of their own could run beside the rest
     // (`crate::host::two_queues`).
     let compute: Vec<&&Run> = runs.iter().filter(|r| r.compute).collect();
-    let running: u64 = compute.iter().map(|r| r.on.1.clamp(start, stop).saturating_sub(r.on.0.clamp(start, stop))).sum();
+    let running: u64 = compute
+        .iter()
+        .map(|r| r.on.1.clamp(start, stop).saturating_sub(r.on.0.clamp(start, stop)))
+        .sum();
     let _ = writeln!(
         text,
         "of the card's running, the submissions of the title's compute queues: {:.2} ms in {:.1} (what a host queue of their own \
@@ -585,47 +658,75 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     );
 
     // Threads.
-    let rate = (after.cycles.saturating_sub(before.cycles)) as f64 / ms(after.ticks.saturating_sub(before.ticks)).max(1e-9);
+    let rate = (after.cycles.saturating_sub(before.cycles)) as f64
+        / ms(after.ticks.saturating_sub(before.ticks)).max(1e-9);
     let mut threads: Vec<(u32, f64, u64)> = after
         .all
         .iter()
         .map(|(&id, t)| {
-            let ran = t.0.saturating_sub(before.all.get(&id).map_or(0, |b| b.0)) as f64 / rate.max(1e-9);
+            let ran =
+                t.0.saturating_sub(before.all.get(&id).map_or(0, |b| b.0)) as f64 / rate.max(1e-9);
             let waits = trace.waits.get(&id).map_or(&[][..], |w| w);
             let waited = waits.iter().map(|w| w.t1.min(stop).saturating_sub(w.t0.max(start))).sum();
             (id, ran, waited)
         })
         .collect();
     threads.sort_by(|a, b| b.1.total_cmp(&a.1));
-    let _ = writeln!(text, "\nthreads, per frame: running, waiting in what is wrapped, outermost spans of ours");
+    let _ = writeln!(
+        text,
+        "\nthreads, per frame: running, waiting in what is wrapped, outermost spans of ours"
+    );
     for (id, ran, waited) in threads.into_iter().filter(|t| t.1 / frames >= 0.2).take(60) {
         let mut sums: BTreeMap<&str, u64> = BTreeMap::new();
         let mut reach = 0;
         for &i in trace.spans.get(&id).map_or(&[][..], |s| s) {
             let e = &trace.events[i];
             if e.t1 > reach {
-                *sums.entry(e.name).or_default() += e.t1.min(stop).saturating_sub(e.t0.max(reach).max(start));
+                *sums.entry(e.name).or_default() +=
+                    e.t1.min(stop).saturating_sub(e.t0.max(reach).max(start));
                 reach = e.t1;
             }
         }
         let mut sums: Vec<(&str, u64)> = sums.into_iter().collect();
         sums.sort_by_key(|s| std::cmp::Reverse(s.1));
-        let spans: Vec<String> = sums.iter().take(5).map(|(name, sum)| format!("{name} {:.1}", ms(*sum) / frames)).collect();
-        let _ = writeln!(text, "  {:6.1} ran {:6.1} waited  {:36} {}", ran / frames, ms(waited) / frames, label(id), spans.join(", "));
+        let spans: Vec<String> = sums
+            .iter()
+            .take(5)
+            .map(|(name, sum)| format!("{name} {:.1}", ms(*sum) / frames))
+            .collect();
+        let _ = writeln!(
+            text,
+            "  {:6.1} ran {:6.1} waited  {:36} {}",
+            ran / frames,
+            ms(waited) / frames,
+            label(id),
+            spans.join(", ")
+        );
     }
 
     // Spans, all threads, each by name with what lies in it.
     let mut sums: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
-    for e in trace.events.iter().filter(|e| matches!(e.kind, Kind::Span | Kind::Kernel | Kind::Sent) && e.t1 > start && e.t0 < stop) {
+    for e in trace.events.iter().filter(|e| {
+        matches!(e.kind, Kind::Span | Kind::Kernel | Kind::Sent) && e.t1 > start && e.t0 < stop
+    }) {
         let s = sums.entry(e.name).or_default();
         let took = e.t1.min(stop) - e.t0.max(start);
         *s = (s.0 + took, s.1 + 1, s.2.max(took));
     }
     let mut sums: Vec<_> = sums.into_iter().collect();
     sums.sort_by_key(|s| std::cmp::Reverse(s.1.0));
-    let _ = writeln!(text, "\nspans and kernel calls, all threads, per frame (a span counts what lies in it)");
+    let _ = writeln!(
+        text,
+        "\nspans and kernel calls, all threads, per frame (a span counts what lies in it)"
+    );
     for (name, (sum, n, most)) in sums.into_iter().take(80) {
-        let _ = writeln!(text, "  {:8.2} ms in {:8.1}, longest {:6.2}  {name}", ms(sum) / frames, n as f64 / frames, ms(most));
+        let _ = writeln!(
+            text,
+            "  {:8.2} ms in {:8.1}, longest {:6.2}  {name}",
+            ms(sum) / frames,
+            n as f64 / frames,
+            ms(most)
+        );
     }
 
     // Waits: who, where, for whom.
@@ -633,7 +734,10 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     for (&thread, waits) in &trace.waits {
         for w in waits.iter().filter(|w| w.t1 > start && w.t0 < stop && ms(w.t1 - w.t0) >= 0.05) {
             let e = &trace.events[w.event];
-            let site = (e.stack as usize).checked_sub(1).and_then(|s| stacks.get(s)).map_or(String::new(), |s| names.site(s));
+            let site = (e.stack as usize)
+                .checked_sub(1)
+                .and_then(|s| stacks.get(s))
+                .map_or(String::new(), |s| names.site(s));
             let by = match (w.fence, self_waker(trace, thread, w)) {
                 (COPY_QUEUE, _) => "the card's copy queue".to_string(),
                 (0, Some((other, _))) => label(other),
@@ -647,7 +751,8 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     }
     let mut groups: Vec<_> = groups.into_iter().collect();
     groups.sort_by_key(|g| std::cmp::Reverse(g.1.0));
-    let _ = writeln!(text, "\nwaits of 50 us or more, per frame: who, what and where, who ended them");
+    let _ =
+        writeln!(text, "\nwaits of 50 us or more, per frame: who, what and where, who ended them");
     for ((thread, what, by), (sum, n, most)) in groups.into_iter().take(150) {
         let _ = writeln!(
             text,
@@ -661,8 +766,13 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
 
     // Long list calls.
     let mut calls: HashMap<String, (u64, u64)> = HashMap::new();
-    for e in trace.events.iter().filter(|e| e.name == "a long list call" && e.t1 > start && e.t0 < stop) {
-        let site = (e.stack as usize).checked_sub(1).and_then(|s| stacks.get(s)).map_or(String::new(), |s| names.site(s));
+    for e in
+        trace.events.iter().filter(|e| e.name == "a long list call" && e.t1 > start && e.t0 < stop)
+    {
+        let site = (e.stack as usize)
+            .checked_sub(1)
+            .and_then(|s| stacks.get(s))
+            .map_or(String::new(), |s| names.site(s));
         let c = calls.entry(site).or_default();
         *c = (c.0 + (e.t1 - e.t0), c.1 + 1);
     }
@@ -670,7 +780,8 @@ pub(super) fn summary(trace: &Trace, names: &mut Names, stacks: &[[usize; DEPTH]
     calls.sort_by_key(|c| std::cmp::Reverse(c.1.0));
     let _ = writeln!(text, "\nlist calls of 50 us or more, per frame");
     for (site, (sum, n)) in calls.into_iter().take(25) {
-        let _ = writeln!(text, "  {:7.2} ms in {:7.1}  {site}", ms(sum) / frames, n as f64 / frames);
+        let _ =
+            writeln!(text, "  {:7.2} ms in {:7.1}  {site}", ms(sum) / frames, n as f64 / frames);
     }
     text
 }
@@ -700,7 +811,10 @@ pub(super) fn chrome(
 ) -> std::io::Result<()> {
     let start = trace.events.first().map_or(0, |e| e.t0);
     let us = |t: u64| t.saturating_sub(start) as f64 * 1e6 / frequency() as f64;
-    write!(out, "{{\"traceEvents\":[\n{{\"ph\":\"M\",\"pid\":1,\"tid\":0,\"name\":\"thread_name\",\"args\":{{\"name\":\"the card\"}}}}")?;
+    write!(
+        out,
+        "{{\"traceEvents\":[\n{{\"ph\":\"M\",\"pid\":1,\"tid\":0,\"name\":\"thread_name\",\"args\":{{\"name\":\"the card\"}}}}"
+    )?;
     for (id, (_, name, begun)) in &threads.all {
         let name = if name.is_empty() { names.of(*begun + 1) } else { name.clone() };
         write!(
@@ -722,8 +836,12 @@ pub(super) fn chrome(
                 e.b
             )?,
             Kind::Sample => {
-                let stack = (e.stack as usize).checked_sub(1).and_then(|s| stacks.get(s)).map_or(&[][..], |s| &s[..]);
-                let stack: Vec<String> = stack.iter().take_while(|a| **a != 0).map(|a| format!("{a:#x}")).collect();
+                let stack = (e.stack as usize)
+                    .checked_sub(1)
+                    .and_then(|s| stacks.get(s))
+                    .map_or(&[][..], |s| &s[..]);
+                let stack: Vec<String> =
+                    stack.iter().take_while(|a| **a != 0).map(|a| format!("{a:#x}")).collect();
                 write!(
                     out,
                     ",\n{{\"ph\":\"i\",\"s\":\"t\",\"pid\":{pid},\"tid\":{tid},\"ts\":{ts:.1},\"cat\":\"sample\",\"name\":\"{}\",\"args\":{{\"at\":\"{:#x}\",\"stack\":\"{}\"}}}}",
@@ -732,9 +850,15 @@ pub(super) fn chrome(
                     stack.join(" ")
                 )?;
             }
-            Kind::Frame => write!(out, ",\n{{\"ph\":\"i\",\"s\":\"g\",\"pid\":{pid},\"tid\":{tid},\"ts\":{ts:.1},\"name\":\"a frame ends\"}}")?,
+            Kind::Frame => write!(
+                out,
+                ",\n{{\"ph\":\"i\",\"s\":\"g\",\"pid\":{pid},\"tid\":{tid},\"ts\":{ts:.1},\"name\":\"a frame ends\"}}"
+            )?,
             Kind::Wait => {
-                let site = (e.stack as usize).checked_sub(1).and_then(|s| stacks.get(s)).map_or(String::new(), |s| names.site(s));
+                let site = (e.stack as usize)
+                    .checked_sub(1)
+                    .and_then(|s| stacks.get(s))
+                    .map_or(String::new(), |s| names.site(s));
                 write!(
                     out,
                     ",\n{{\"ph\":\"X\",\"pid\":{pid},\"tid\":{tid},\"ts\":{ts:.1},\"dur\":{dur:.1},\"cat\":\"wait\",\"cname\":\"grey\",\
@@ -786,7 +910,13 @@ pub(super) fn chrome(
 }
 
 /// Writes both files.
-pub(super) fn write(file: &std::path::Path, data: Data, before: &Threads, after: &Threads, stamps: Vec<(u64, u64)>) {
+pub(super) fn write(
+    file: &std::path::Path,
+    data: Data,
+    before: &Threads,
+    after: &Threads,
+    stamps: Vec<(u64, u64)>,
+) {
     let mut names = Names::new();
     let (events, lost) = (data.events.len(), data.lost);
     let trace = Trace::new(data.events, &stamps);
@@ -801,8 +931,12 @@ pub(super) fn write(file: &std::path::Path, data: Data, before: &Threads, after:
         std::io::Write::flush(&mut out)
     });
     match written {
-        Ok(()) => tracing::info!(file = %file.display(), summary = %beside.display(), events, lost, "the timeline is written"),
-        Err(e) => tracing::warn!(error = %e, file = %file.display(), "the timeline could not be written"),
+        Ok(()) => {
+            tracing::info!(file = %file.display(), summary = %beside.display(), events, lost, "the timeline is written")
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, file = %file.display(), "the timeline could not be written")
+        }
     }
 }
 
@@ -811,17 +945,7 @@ mod tests {
     use super::*;
 
     fn event(kind: Kind, name: &'static str, thread: u32, t: (u64, u64), a: u64, b: u64) -> Event {
-        Event {
-            t0: t.0,
-            t1: t.1,
-            a,
-            b,
-            name,
-            thread,
-            stack: 0,
-            cpu: 0,
-            kind,
-        }
+        Event { t0: t.0, t1: t.1, a, b, name, thread, stack: 0, cpu: 0, kind }
     }
 
     fn causes(parts: &[Part]) -> Vec<(u32, u64, u64, &str)> {
@@ -953,7 +1077,11 @@ mod tests {
         assert_eq!(data.lost, 0);
         let trace = Trace::new(data.events, &[]);
         let chain = trace.chain(me, last, first);
-        let work: u64 = chain.iter().filter(|p| p.thread == other && p.cause == "the work of a test").map(|p| p.to - p.from).sum();
+        let work: u64 = chain
+            .iter()
+            .filter(|p| p.thread == other && p.cause == "the work of a test")
+            .map(|p| p.to - p.from)
+            .sum();
         assert!(ms(work) >= 20.0, "{chain:?}");
         let contended = trace.waits[&second]
             .iter()

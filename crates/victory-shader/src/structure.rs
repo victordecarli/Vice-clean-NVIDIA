@@ -1,4 +1,4 @@
-//! Control-flow structurisation (decision 0003): the program as one lane
+//! Control-flow structurisation: the program as one lane
 //! runs it, without EXEC.
 //!
 //! Lane masks (EXEC, compare and carry results, the SGPRs they are saved
@@ -115,10 +115,7 @@ pub struct Meets {
 impl Bools {
     fn new() -> Self {
         Bools {
-            nodes: vec![
-                (TERMINAL, Bool::FALSE, Bool::FALSE),
-                (TERMINAL, Bool::TRUE, Bool::TRUE),
-            ],
+            nodes: vec![(TERMINAL, Bool::FALSE, Bool::FALSE), (TERMINAL, Bool::TRUE, Bool::TRUE)],
             unique: Map::default(),
             memo: Map::default(),
             atoms: Vec::new(),
@@ -249,10 +246,7 @@ impl Bools {
 
     /// [`Self::meet_seen`] with `budget` case splits.
     fn meet_within(&self, all: &[(Bool, bool)], mut budget: usize, seen: &mut Meets) -> bool {
-        let mut work = all
-            .iter()
-            .map(|&(b, holds)| b.0 << 1 | u32::from(holds))
-            .collect();
+        let mut work = all.iter().map(|&(b, holds)| b.0 << 1 | u32::from(holds)).collect();
         self.meet_in(0, &mut work, &mut budget, seen)
     }
 
@@ -313,7 +307,11 @@ impl Bools {
         let before = *budget;
         *budget -= 1;
         let top = |code: u32| self.nodes[(code >> 1) as usize].0;
-        let v = work[at..].iter().map(|&c| top(c)).min().expect("not empty");
+        // Not empty (`kept == at` returned above); were it, every lane would meet it.
+        let Some(v) = work[at..].iter().map(|&c| top(c)).min() else {
+            work.truncate(at);
+            return true;
+        };
         let mut found = false;
         for value in [false, true] {
             for i in at..end {
@@ -349,11 +347,7 @@ impl Bools {
         }
         let lo = self.forget(lo, from, memo);
         let hi = self.forget(hi, from, memo);
-        let r = if self.born[v as usize] >= from {
-            self.or(lo, hi)
-        } else {
-            self.mk(v, lo, hi)
-        };
+        let r = if self.born[v as usize] >= from { self.or(lo, hi) } else { self.mk(v, lo, hi) };
         memo.insert(b, r);
         r
     }
@@ -642,11 +636,7 @@ impl<'a> Lanes<'a> {
         let p = self.p;
         let input = |reg| p.inputs.iter().find(|i| i.0 == reg).map(|i| i.1);
         if let Some(lo) = input(Reg::S(EXEC)) {
-            let hi = if p.wave64 {
-                input(Reg::S(EXEC + 1)).unwrap_or(lo)
-            } else {
-                lo
-            };
+            let hi = if p.wave64 { input(Reg::S(EXEC + 1)).unwrap_or(lo) } else { lo };
             self.masks.insert((lo, hi), Bool::TRUE);
             self.active.insert(lo);
         }
@@ -877,11 +867,7 @@ impl<'a> Lanes<'a> {
 
     fn key(&self, value: impl Fn(Reg) -> Option<Value>, code: u8) -> Option<Key> {
         let lo = value(Reg::S(code))?;
-        let hi = if self.p.wave64 {
-            value(Reg::S(code + 1))?
-        } else {
-            lo
-        };
+        let hi = if self.p.wave64 { value(Reg::S(code + 1))? } else { lo };
         Some((lo, hi))
     }
 
@@ -915,10 +901,9 @@ impl<'a> Lanes<'a> {
                 let (lo, hi) = (self.defs.get(&k.0).copied(), self.defs.get(&k.1).copied());
                 let def = |d: Option<(usize, usize)>| d.map(|(b, i)| &p.blocks[b].insts[i]);
                 let m = match (lo, hi) {
-                    (Some(at), Some(hi)) if at == hi => def(lo)
-                        .and_then(|i| self.sop(i))
-                        .and_then(|r| r.dst)
-                        .map(|d| d.1),
+                    (Some(at), Some(hi)) if at == hi => {
+                        def(lo).and_then(|i| self.sop(i)).and_then(|r| r.dst).map(|d| d.1)
+                    }
                     _ => None,
                 };
                 // What an EXEC write the pass does not follow leaves there.
@@ -941,11 +926,7 @@ impl<'a> Lanes<'a> {
                 (m, derived)
             }
         };
-        let cache = if derived {
-            &mut self.masks
-        } else {
-            &mut self.other
-        };
+        let cache = if derived { &mut self.masks } else { &mut self.other };
         cache.insert(k, m);
         (m, derived)
     }
@@ -966,9 +947,8 @@ impl<'a> Lanes<'a> {
         let arg = |phi: Option<(usize, usize)>, own: Value, n: usize| {
             phi.map_or(own, |(_, i)| target.phis[i].args[n])
         };
-        let args: Vec<Key> = (0..target.preds.len())
-            .map(|n| (arg(lo, k.0, n), arg(hi, k.1, n)))
-            .collect();
+        let args: Vec<Key> =
+            (0..target.preds.len()).map(|n| (arg(lo, k.0, n), arg(hi, k.1, n))).collect();
         let id = lo.map_or(k.1, |_| k.0);
         let mut derived = self.derived_phis.contains(&id);
         // (edge condition, mask) per forward edge; back edges come later.
@@ -998,25 +978,14 @@ impl<'a> Lanes<'a> {
                     b.implies(e, m)
                 });
                 if holds {
-                    self.joins.push(Join {
-                        block,
-                        id,
-                        value,
-                        derived,
-                        args,
-                    });
+                    self.joins.push(Join { block, id, value, derived, args });
                     let m = if value { Bool::TRUE } else { Bool::FALSE };
                     return Some((m, derived));
                 }
             }
         }
         if self.phi_join_ids.insert(id) {
-            self.phi_joins.push(PhiJoin {
-                block,
-                id,
-                derived,
-                args,
-            });
+            self.phi_joins.push(PhiJoin { block, id, derived, args });
         }
         let born = self.index[block];
         Some((self.b.atom(Atom::Phi(id), born), derived))
@@ -1038,11 +1007,7 @@ impl<'a> Lanes<'a> {
                 self.mask(k)
             }
             Operand::Const(c @ 128..=208) => {
-                let v = if c <= 192 {
-                    i64::from(c) - 128
-                } else {
-                    192 - i64::from(c)
-                };
+                let v = if c <= 192 { i64::from(c) - 128 } else { 192 - i64::from(c) };
                 (constant(&mut self.b, v as u64), false)
             }
             Operand::Literal(x) => (constant(&mut self.b, u64::from(x)), false),
@@ -1228,19 +1193,13 @@ impl<'a> Lanes<'a> {
                 if takes_mask
                     && let (Some(rest), Some(scc)) =
                         (name.strip_prefix("s_cmp_"), inst.write(Reg::Scc))
-                    && rest
-                        .strip_suffix(width)
-                        .is_some_and(|r| r == "eq_u" || r == "lg_u")
+                    && rest.strip_suffix(width).is_some_and(|r| r == "eq_u" || r == "lg_u")
                     && let [a, c] = &src[..]
                     && let (Some((a, _)), Some((c, _))) =
                         (self.operand(inst, a), self.operand(inst, c))
                 {
                     let ne = self.b.xor(a, c);
-                    let m = if rest.starts_with("eq") {
-                        self.b.not(ne)
-                    } else {
-                        ne
-                    };
+                    let m = if rest.starts_with("eq") { self.b.not(ne) } else { ne };
                     self.scc_lane.insert(scc, m);
                     if rest.starts_with("eq") {
                         self.scc_every.insert(scc);
@@ -1345,11 +1304,7 @@ impl<'a> Lanes<'a> {
                     None => Bool::FALSE,
                 };
                 let any = self.b.and(vcc, exec);
-                if n.ends_with("nz") {
-                    any
-                } else {
-                    self.b.not(any)
-                }
+                if n.ends_with("nz") { any } else { self.b.not(any) }
             }
             n => {
                 let Some(scc) = inst.read(Reg::Scc) else {
@@ -1362,11 +1317,7 @@ impl<'a> Lanes<'a> {
                         self.b.atom(Atom::Uniform(scc), born)
                     }
                 };
-                if n == "s_cbranch_scc1" {
-                    set
-                } else {
-                    self.b.not(set)
-                }
+                if n == "s_cbranch_scc1" { set } else { self.b.not(set) }
             }
         }
     }
@@ -1404,17 +1355,11 @@ impl<'a> Lanes<'a> {
                 return Ok(cond);
             }
         }
-        Err(ShaderError::Isa {
-            offset: 0,
-            reason: "lane conditions do not settle",
-        })
+        Err(ShaderError::Isa { offset: 0, reason: "lane conditions do not settle" })
     }
 }
 
-const TOO_LARGE: ShaderError = ShaderError::Isa {
-    offset: 0,
-    reason: "lane conditions too large",
-};
+const TOO_LARGE: ShaderError = ShaderError::Isa { offset: 0, reason: "lane conditions too large" };
 
 /// `ir::build` splits irreducible loops; checked again because everything
 /// here assumes a reducible graph.
@@ -1501,19 +1446,16 @@ mod tests {
         let mut seen = Meets::default();
         let (mut none, mut some, mut gave_up) = (0, 0, 0);
         for _ in 0..1500 {
-            let all: Vec<(Bool, bool)> = (0..2 + random(4))
-                .map(|_| (f[random(f.len())], random(2) == 0))
-                .collect();
+            let all: Vec<(Bool, bool)> =
+                (0..2 + random(4)).map(|_| (f[random(f.len())], random(2) == 0)).collect();
             for budget in [0, 1, 2, 3, 5, 9, 20, 60, 250, 1000, MAX_MEET] {
                 let mut left = budget;
                 let anew = meet_anew(&b, all.clone(), &mut left);
                 for fresh in [false, true] {
                     let mut empty = Meets::default();
                     let seen = if fresh { &mut empty } else { &mut seen };
-                    let mut work = all
-                        .iter()
-                        .map(|&(x, holds)| x.0 << 1 | u32::from(holds))
-                        .collect();
+                    let mut work =
+                        all.iter().map(|&(x, holds)| x.0 << 1 | u32::from(holds)).collect();
                     let mut mine = budget;
                     let found = b.meet_in(0, &mut work, &mut mine, seen);
                     assert_eq!(found, anew, "{all:?} within {budget}");
@@ -1533,10 +1475,7 @@ mod tests {
             }
         }
         // All three outcomes came up, and searches were remembered.
-        assert!(
-            none > 100 && some > 100 && gave_up > 100,
-            "{none} {some} {gave_up}"
-        );
+        assert!(none > 100 && some > 100 && gave_up > 100, "{none} {some} {gave_up}");
         assert!(seen.none.len() > 100);
     }
 
@@ -1555,20 +1494,12 @@ mod tests {
             false,
         );
         let s = structure(&p).unwrap();
-        let LaneExit::Branch {
-            when,
-            taken: 2,
-            not_taken: 1,
-        } = s.exits[0]
-        else {
+        let LaneExit::Branch { when, taken: 2, not_taken: 1 } = s.exits[0] else {
             panic!("{:?}", s.exits)
         };
         // Skipped exactly where the compare fails.
         let cmp = p.blocks[0].insts[0].write(Reg::S(VCC)).unwrap();
-        assert_eq!(
-            s.bools.node(when),
-            Some((Atom::Lane(cmp), Bool::TRUE, Bool::FALSE))
-        );
+        assert_eq!(s.bools.node(when), Some((Atom::Lane(cmp), Bool::TRUE, Bool::FALSE)));
         assert_eq!(guarded(&s), 0, "{:?}", s.guards);
     }
 
@@ -1637,19 +1568,11 @@ mod tests {
         );
         let s = structure(&p).unwrap();
         assert_eq!(guarded(&s), 0, "{:?}", s.guards);
-        let LaneExit::Branch {
-            when,
-            taken: 1,
-            not_taken: 2,
-        } = s.exits[1]
-        else {
+        let LaneExit::Branch { when, taken: 1, not_taken: 2 } = s.exits[1] else {
             panic!("{:?}", s.exits)
         };
         // Back while the lane's compare fails.
-        assert!(matches!(
-            s.bools.node(when),
-            Some((Atom::Lane(_), Bool::TRUE, Bool::FALSE))
-        ));
+        assert!(matches!(s.bools.node(when), Some((Atom::Lane(_), Bool::TRUE, Bool::FALSE))));
     }
 
     /// `s_cselect` on the SCC a lane loop ended with (the blend-shape skinning
@@ -1697,9 +1620,7 @@ mod tests {
             true,
         );
         let s = structure(&p).unwrap();
-        let LaneExit::Branch { when, .. } = s.exits[0] else {
-            panic!()
-        };
+        let LaneExit::Branch { when, .. } = s.exits[0] else { panic!() };
         assert!(matches!(s.bools.support(when)[..], [Atom::Uniform(_)]));
         assert_eq!(guarded(&s), 0);
     }
@@ -1807,9 +1728,7 @@ mod tests {
         assert_eq!(edges.len(), 2);
         assert!(edges.contains(&Bool::FALSE), "{edges:?}");
         assert!(
-            edges
-                .iter()
-                .any(|&e| matches!(s.bools.support(e)[..], [Atom::Lane(_)])),
+            edges.iter().any(|&e| matches!(s.bools.support(e)[..], [Atom::Lane(_)])),
             "{edges:?}"
         );
     }
@@ -1881,9 +1800,7 @@ mod tests {
         assert_eq!(edges.len(), 2);
         assert!(edges.contains(&Bool::FALSE), "{edges:?}");
         assert!(
-            edges
-                .iter()
-                .any(|&e| matches!(s.bools.support(e)[..], [Atom::Lane(_)])),
+            edges.iter().any(|&e| matches!(s.bools.support(e)[..], [Atom::Lane(_)])),
             "{edges:?}"
         );
     }
