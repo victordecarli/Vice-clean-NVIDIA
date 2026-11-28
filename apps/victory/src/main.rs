@@ -126,6 +126,10 @@ enum Command {
         /// `VICTORY_VIEW_LIMIT` to what the run's log says of the host.
         #[arg(long)]
         warm: Option<PathBuf>,
+        /// Also write the counts per kind of program as JSON to this file
+        /// (read by `cargo xtask progress --record`).
+        #[arg(long)]
+        json: Option<PathBuf>,
     },
     /// Translate every shader found (as `translate` finds them) into the
     /// shader cache, so that no run has to: a few minutes, once per change
@@ -305,7 +309,7 @@ fn main() -> Result<()> {
         Command::ShaderInfo { paths, verbose, disasm } => {
             shader::run(paths, verbose || disasm, disasm)
         }
-        Command::Translate { paths, validate, pipelines, list, jobs, warm } => {
+        Command::Translate { paths, validate, pipelines, list, jobs, warm, json } => {
             // `VICTORY_VIEW_LIMIT=<null slot>`: translate as on a host whose view heap is capped
             if let Some(n) = std::env::var("VICTORY_VIEW_LIMIT").ok().and_then(|v| v.parse().ok()) {
                 victory_shader::emit::set_view_heap_limit(n);
@@ -317,7 +321,7 @@ fn main() -> Result<()> {
             if let Some(file) = warm {
                 return translate::warm(paths, &file, jobs);
             }
-            translate::run(paths, validate, pipelines, list, jobs)
+            translate::run(paths, validate, pipelines, list, jobs, json)
         }
         Command::Shaders { paths, jobs } => translate::precompile(paths, jobs),
         #[cfg(windows)]

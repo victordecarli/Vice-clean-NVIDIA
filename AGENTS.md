@@ -27,7 +27,7 @@ out and the gotchas local to it. This file still applies there.
 | `victory-gpu` | D3D12.X objects, command lists, GPU memory → host D3D12 | shader translation logic | compiles, with dead-code warnings |
 | `victory-hle` | console API implementations called by title code | format decoders (call `victory-formats`) | **no** (see Pitfalls) |
 | `apps/victory` | CLI: play, run, translate, census and the cache and download commands | library logic that other crates need | no (depends on `victory-hle`) |
-| `xtask` | asset-policy check, citation check, Windows-target clippy (`wincheck`), code metrics (`audit-metrics`), git hooks | product code | yes |
+| `xtask` | asset-policy check, citation check, Windows-target clippy (`wincheck`), code metrics (`audit-metrics`), the README's shader progress block (`progress`), git hooks | product code | yes |
 
 Dependency direction (enforced by review, keep it acyclic and downward):
 
@@ -110,6 +110,15 @@ per-crate counts (text counts always; with `--lints`, clippy's counts
 outside tests, using `wincheck`'s setup), and grades each crate by the
 written rules in `xtask/src/audit/grade.rs`, giving a reason for each
 level. The JSON format is documented in `xtask/src/audit.rs`.
+
+`cargo xtask progress` writes the shader progress block of `README.md`
+from `docs/progress/shaders.json`; never edit the block by hand. To
+measure again, on Windows with your game files, run
+`VICTORY_HOST_WAVE=32 victory translate --validate --json <file>` (the
+block is measured for a 32-lane GPU) and then
+`cargo xtask progress --record <file>`. The
+`readme_progress_matches_the_measurement` test, part of `cargo test`,
+fails when the block and the file disagree.
 
 Claude Code sessions run `.claude/hooks/check_edit.ps1` before every file
 edit and shell command (configured in `.claude/settings.json`; needs
@@ -204,9 +213,9 @@ that code, and update this row in the same commit.
 | Portable code calls a `cfg(windows)` item; Windows CI passes, every other host fails to build | `victory-gpu` `resource::view_format` called `host_resource`, `ValueWait::holds` called `texture` and `host`, and `victory-loader` declared `crash` for every target (all fixed by gating them); still here: `victory-hle` does not build off Windows | Gate the caller too, or give the item a non-Windows body. Run the Linux commands above. |
 | Tests assume the test binary is a PE image | `victory-loader` `prepare.rs` tests and four `victory-pe` `image.rs` tests reading `current_exe()`, failing the `portable` job on its first run (fixed: gated `cfg(windows)`) | Gate with `#[cfg(windows)]` and a comment saying why, or build a synthetic image (`synthetic_image` in `crates/victory-pe/src/image.rs`). |
 | Safe signature, raw-pointer dereference inside | still here: 41 module-level `not_unsafe_ptr_arg_deref` allows over FFI code in `victory-gpu` and `crates/victory-hle/src/modules` | `unsafe extern "system" fn` with a `# Safety` section; a caller passes its own contract on in an `unsafe` block. Remove one module's allow per change (`/ratchet-ffi`). |
-| Swallowed I/O errors | still here: `apps/victory/src/translate.rs` drops dump writes with `let _ = std::fs::write(...)` (three places); `.filter_map(Result::ok)` over `walkdir` in `apps/victory/src/translate.rs`, `apps/victory/src/shader.rs`, `apps/victory/src/replay.rs` and the non-git fallback of `xtask/src/policy.rs` | `if let Err(e) = ... { tracing::warn!(...) }`; count and report skipped entries. |
+| Swallowed I/O errors | `translate`'s `run` in `apps/victory/src/translate.rs` skipped entries it could not read (fixed: each is named and counted, and `--json` says the run is incomplete); still here: the same file drops dump writes with `let _ = std::fs::write(...)` (three places) and its warming and precompiling walks use `.filter_map(Result::ok)` over `walkdir`, as do `apps/victory/src/shader.rs`, `apps/victory/src/replay.rs` and the non-git fallback of `xtask/src/policy.rs` | `if let Err(e) = ... { tracing::warn!(...) }`; count and report skipped entries. |
 | Hand-written field-by-field merge | still here: `Tally::merge` in `apps/victory/src/translate.rs` adds each field by name, so a new field can be left out of the sum; `encode` in `crates/victory-gpu/src/shader_cache.rs` writes `HostShader` the same way | `let Tally { a, b, c } = other;` naming every field, never `..`, so a new field fails to compile until merged. |
-| `_ =>` standing for "vertex/pixel" | still here: `counter()` in `apps/victory/src/translate.rs` treats every `HwStage` (8 variants) other than `Cs`/`Ms` as one group | Name the variants: `HwStage::Ls \| HwStage::Hs \| ... =>`. |
+| `_ =>` standing for "vertex/pixel" | `counter()` in `apps/victory/src/translate.rs` treated every `HwStage` (8 variants) other than `Cs`/`Ms` as one group (fixed: it lists them) | Name the variants: `HwStage::Ls \| HwStage::Hs \| ... =>`. |
 | Panic reachable from title code | `crates/victory-shader/src/emit/bitcode.rs` `panic!`ed on internal invariants, reached from `victory-gpu` pipeline creation (fixed: builder and writer invariants are recorded on the `Module` and reported by `write` as `ShaderError::Internal`); `Stage::translated` in `crates/victory-gpu/src/pipeline/host.rs` used `expect` (fixed: a `Stage` now holds its translation from construction); still here: `host!` in `crates/victory-hle/src/modules/files.rs` panics if a host export is missing | Return `Result` and map it to the API's failure (`E_FAIL`, a dropped draw) with a log line. |
 | Giant functions and files | still here: `crates/victory-shader/src/emit/lower.rs` is about 13,400 lines, and clippy counts 107 functions over 100 lines outside tests (see the lint ratchet) | New logic goes in a new, focused module; extract before extending. |
 | Docs promise what the code does not do (or deny what it does) | `crates/victory-formats/src/lib.rs` called BCPack and XMA2 "Planned" beside the modules implementing them; module docs cited numbered decision records the repository never held (both fixed) | Update the doc in the same commit as the code; cite only what exists. |

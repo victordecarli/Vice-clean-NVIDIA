@@ -8,6 +8,7 @@
 mod audit;
 mod citations;
 mod policy;
+mod progress;
 mod wincheck;
 
 use std::path::{Path, PathBuf};
@@ -57,6 +58,17 @@ enum Cmd {
         #[arg(long)]
         lints: bool,
     },
+    /// Rewrite README.md's shader progress block from
+    /// docs/progress/shaders.json (the format is in xtask/src/progress.rs).
+    Progress {
+        /// First store this `victory translate --json` summary as the
+        /// measurement, with the current commit.
+        #[arg(long)]
+        record: Option<PathBuf>,
+        /// Change nothing; fail if the block differs from the measurement.
+        #[arg(long, conflicts_with = "record")]
+        check: bool,
+    },
     /// Point git at .githooks/ so every commit runs the policy check.
     InstallHooks,
 }
@@ -68,6 +80,7 @@ fn main() -> Result<()> {
         Cmd::Citations { docs } => citations::run(&root, &docs),
         Cmd::Wincheck => wincheck::run(&root),
         Cmd::AuditMetrics { json, lints } => audit::run(&root, json, lints),
+        Cmd::Progress { record, check } => progress::run(&root, record.as_deref(), check),
         Cmd::InstallHooks => {
             let status = Command::new("git")
                 .args(["config", "core.hooksPath", ".githooks"])
