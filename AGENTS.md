@@ -50,17 +50,24 @@ Dependency direction (enforced by review, keep it acyclic and downward):
 To debug a run, read its log before reading code.
 
 - `victory play` (and `victory` started with no command) writes one log
-  per start, `victory-nvidia-play-<local time>-<pid>.log` under
+  per start, `victory-nvidia-play-<local time>-<pid>.jsonl` under
   `%LOCALAPPDATA%\victory\logs` (the ten newest are kept), and prints its
-  path at start. Its first lines are the console model, the switches and
-  the mods of that start; every later line is what the console window
-  showed, without colours (`log_file` and the setup after it in
+  path at start (`log_file` and the setup after it in
   `apps/victory/src/play.rs`).
 - Any other command writes a file only when `VICTORY_LOG_FILE=<path>` is
-  set (`crates/victory-core/src/logging.rs`); `victory play` sets it for
-  the title process it starts.
-- Filter with `VICTORY_LOG` (or `RUST_LOG`). Debug and trace lines exist
-  only in builds with the `diagnostics` feature.
+  set (`crates/victory-core/src/logging.rs`); `victory play` sets it
+  before the title starts in its process.
+- The file is JSONL: one JSON object per event, its fields beside
+  `timestamp` (UTC), `level`, `target`, `threadId` and `threadName`. The
+  first line is `run_start` (the console model, the build, every switch
+  and the mods of that start); a crash is the last line (`"message":"crash"`,
+  the report in `report`). The console window stays text.
+- Events with the target `victory::summary` (`logging::SUMMARY`) are
+  logged whatever the filter; use it for what every report needs. Filter
+  the rest with `VICTORY_LOG` (or `RUST_LOG`); a filter that does not
+  parse is reported and replaced by `info`. Debug and trace lines exist
+  only in builds with the `diagnostics` feature. For example:
+  `jq -c 'select(.level == "WARN")' victory-nvidia-play-*.jsonl`.
 - A log holds names and hashes from the title, so it is game-derived data
   (hard rule 1): never copy one into the repository.
 

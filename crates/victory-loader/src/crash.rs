@@ -77,8 +77,21 @@ pub fn log_crash(text: &str) {
     append_to_log(&text);
 }
 
+#[allow(
+    clippy::print_stderr,
+    reason = "mid-crash, the subscriber may be held by the faulting thread; the console is the last resort"
+)]
+fn not_in_run_log(e: &std::io::Error) {
+    eprintln!("VIctory: crash not written to the log file: {e}");
+}
+
+/// Appends `text` to the log file (`VICTORY_LOG_FILE`, if the process has
+/// one) as its last line, and to the crash log (if one was set).
 fn append_to_log(text: &str) {
     use std::io::Write;
+    if let Err(e) = victory_core::logging::append_crash(text) {
+        not_in_run_log(&e);
+    }
     let Some(file) = LOG.get() else { return };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

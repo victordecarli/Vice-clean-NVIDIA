@@ -143,12 +143,14 @@ mod tests {
     use super::*;
 
     /// In a child process of the next test: calls an unimplemented import
-    /// that traps, with the crash log where `VICTORY_TRAP_LOG` says.
+    /// that traps, with the crash log where `VICTORY_TRAP_LOG` says and the
+    /// log file where `VICTORY_LOG_FILE` says.
     #[test]
     fn trap_child() {
         let Some(log) = std::env::var_os("VICTORY_TRAP_LOG") else {
             return;
         };
+        victory_core::logging::init("info");
         crate::log_crashes_to(log.into());
         let site = Box::leak(Box::new(ImportSite {
             dll: "probe.dll".into(),
@@ -166,11 +168,16 @@ mod tests {
         let out = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "thunks::tests::trap_child", "--nocapture"])
             .env("VICTORY_TRAP_LOG", &log)
+            .env("VICTORY_LOG_FILE", dir.path().join("start.jsonl"))
             .output()
             .unwrap();
         assert!(!out.status.success(), "the trap ends the process");
         let text = std::fs::read_to_string(&log).unwrap_or_default();
         let named = text.contains("VIctory: unimplemented import probe.dll!Missing called");
         assert!(named, "crash log: {text:?}");
+        let run = std::fs::read_to_string(dir.path().join("start.jsonl")).unwrap_or_default();
+        let last = run.lines().last().unwrap_or_default();
+        assert!(last.contains(r#""message":"crash""#), "the log file ends with the crash: {run}");
+        assert!(last.contains("unimplemented import probe.dll!Missing called"), "{last}");
     }
 }
